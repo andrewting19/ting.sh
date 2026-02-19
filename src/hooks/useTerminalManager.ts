@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useMemo } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { FitAddon } from '@xterm/addon-fit'
@@ -137,5 +137,13 @@ export function useTerminalManager(callbacks: Callbacks) {
     if (activeIdRef.current === sessionId) activeIdRef.current = null
   }, [])
 
-  return { ensureTerminal, setActive, write, reset, focus, getDimensions, destroy }
+  // useMemo so the returned object has a stable reference across renders.
+  // All seven functions are useCallback([]) so their refs never change,
+  // which means this memo never re-computes. Without this, effects in
+  // App.tsx that list `tm` as a dep would re-fire on every render and
+  // send spurious attach/list requests in an infinite loop.
+  return useMemo(
+    () => ({ ensureTerminal, setActive, write, reset, focus, getDimensions, destroy }),
+    [ensureTerminal, setActive, write, reset, focus, getDimensions, destroy]
+  )
 }
