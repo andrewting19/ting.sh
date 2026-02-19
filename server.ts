@@ -24,8 +24,10 @@ interface WSData {
 const g = globalThis as typeof globalThis & {
   __wt_sessions?: Map<string, Session>;
   __wt_cwd_poll?: ReturnType<typeof setInterval>;
+  __wt_session_counter?: number;
 };
 if (!g.__wt_sessions) g.__wt_sessions = new Map();
+if (!g.__wt_session_counter) g.__wt_session_counter = 0;
 const sessions = g.__wt_sessions;
 
 // Platform-aware CWD reader.
@@ -82,7 +84,7 @@ function createSession(name: string, cols: number, rows: number): Session {
   const id = randomUUID();
   const session: Session = {
     id,
-    name: name?.trim() || `session ${sessions.size + 1}`,
+    name: name?.trim() || `session ${++g.__wt_session_counter!}`,
     proc: null as any,
     buffer: Buffer.alloc(0),
     clients: new Set(),
@@ -193,8 +195,10 @@ const server = Bun.serve<WSData>({
           const s = createSession(data.name ?? "", data.cols ?? 80, data.rows ?? 24);
           ws.data.sessionId = s.id;
           s.clients.add(ws);
-          ws.send(JSON.stringify({ type: "ready", id: s.id, name: s.name, fresh: true }));
+          // sessions before ready — client needs the new session in its list so
+          // the container div exists in the DOM when the ready handler fires.
           broadcastSessions();
+          ws.send(JSON.stringify({ type: "ready", id: s.id, name: s.name, fresh: true }));
           break;
         }
 
