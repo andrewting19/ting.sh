@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { readlinkSync } from "fs";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
 const SHELL = process.env.SHELL ?? "zsh";
@@ -11,6 +12,8 @@ interface Session {
   buffer: Buffer;
   clients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
+  cwd: string;
+  cwdTimer: ReturnType<typeof setTimeout> | null;
 }
 
 interface WSData {
@@ -18,12 +21,53 @@ interface WSData {
 }
 
 // Persist sessions across Bun --hot reloads (globalThis survives module re-evaluation)
-const g = globalThis as typeof globalThis & { __wt_sessions?: Map<string, Session> };
+const g = globalThis as typeof globalThis & {
+  __wt_sessions?: Map<string, Session>;
+  __wt_cwd_poll?: ReturnType<typeof setInterval>;
+};
 if (!g.__wt_sessions) g.__wt_sessions = new Map();
 const sessions = g.__wt_sessions;
 
+// Platform-aware CWD reader.
+// Linux: single readlink syscall on /proc/<pid>/cwd — essentially free.
+// macOS: lsof for the specific pid — ~10-50ms, fine since we only call it
+//        after the user presses Enter (not on a tight poll).
+async function getCwd(pid: number): Promise<string | null> {
+  try {
+    if (process.platform === "linux") {
+      return readlinkSync(`/proc/${pid}/cwd`);
+    }
+    if (process.platform === "darwin") {
+      const proc = Bun.spawn(
+        ["lsof", "-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+        { stdout: "pipe", stderr: "pipe" }
+      );
+      const text = await new Response(proc.stdout).text();
+      const match = text.match(/^n(.+)$/m);
+      return match ? match[1].trim() : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Schedule a CWD refresh for a session 200ms after the last Enter keypress.
+// Debounced so rapid keypresses collapse into one read.
+function scheduleCwdRefresh(session: Session) {
+  if (session.cwdTimer) clearTimeout(session.cwdTimer);
+  session.cwdTimer = setTimeout(async () => {
+    session.cwdTimer = null;
+    const cwd = await getCwd(session.proc.pid);
+    if (cwd && cwd !== session.cwd) {
+      session.cwd = cwd;
+      broadcastSessions();
+    }
+  }, 200);
+}
+
 function sessionInfo(s: Session) {
-  return { id: s.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size };
+  return { id: s.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size, cwd: s.cwd };
 }
 
 function broadcastSessions() {
@@ -43,6 +87,8 @@ function createSession(name: string, cols: number, rows: number): Session {
     buffer: Buffer.alloc(0),
     clients: new Set(),
     createdAt: Date.now(),
+    cwd: "",
+    cwdTimer: null,
   };
 
   const proc = Bun.spawn([SHELL], {
@@ -62,6 +108,7 @@ function createSession(name: string, cols: number, rows: number): Session {
         for (const ws of session.clients) ws.sendBinary(data);
       },
       exit() {
+        if (session.cwdTimer) clearTimeout(session.cwdTimer);
         sessions.delete(id);
         const msg = JSON.stringify({ type: "session-exit", id });
         for (const ws of session.clients) ws.send(msg);
@@ -72,8 +119,30 @@ function createSession(name: string, cols: number, rows: number): Session {
 
   session.proc = proc;
   sessions.set(id, session);
+
+  // Read initial CWD once the shell has started
+  getCwd(proc.pid).then((cwd) => {
+    if (cwd) { session.cwd = cwd; broadcastSessions(); }
+  });
+
   return session;
 }
+
+// Slow background poll as a fallback for script-driven `cd`s (e.g. sourcing a
+// file, running a script that changes directory). The Enter-key debounce handles
+// the common interactive case; this catches anything that slips through.
+// Re-registered on --hot reloads to avoid duplicate intervals.
+if (g.__wt_cwd_poll) clearInterval(g.__wt_cwd_poll);
+g.__wt_cwd_poll = setInterval(async () => {
+  let changed = false;
+  await Promise.all(
+    [...sessions.values()].map(async (s) => {
+      const cwd = await getCwd(s.proc.pid);
+      if (cwd && cwd !== s.cwd) { s.cwd = cwd; changed = true; }
+    })
+  );
+  if (changed) broadcastSessions();
+}, 30_000);
 
 const server = Bun.serve<WSData>({
   port: PORT,
@@ -156,6 +225,8 @@ const server = Bun.serve<WSData>({
         case "input": {
           if (!session) return;
           session.proc.terminal?.write(data.data);
+          // Enter key — schedule a CWD refresh after the command has time to run
+          if (data.data === "\r") scheduleCwdRefresh(session);
           break;
         }
 
@@ -176,6 +247,7 @@ const server = Bun.serve<WSData>({
         case "kill": {
           const s = sessions.get(data.id);
           if (!s) return;
+          if (s.cwdTimer) clearTimeout(s.cwdTimer);
           sessions.delete(data.id);
           const exitMsg = JSON.stringify({ type: "session-exit", id: data.id });
           for (const c of s.clients) c.send(exitMsg);
