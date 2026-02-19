@@ -43,6 +43,7 @@ Working:
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
 - Inline session rename (double-click) — persisted on server, survives reconnects
+- Live CWD display as subtitle in sidebar — updates on Enter keypress, 30s fallback poll. Linux: `/proc/<pid>/cwd`, macOS: `lsof`. No shell config needed.
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
 - Resize handling, mobile sidebar
 

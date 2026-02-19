@@ -27,6 +27,9 @@
 2. **Copy-on-select** — xterm.js `copyOnSelect` option
 3. **URL routing** — `/?s=<id>` to link/bookmark directly to a session
 
+## Completed features (recent)
+- [x] Live CWD subtitle in sidebar (Enter-key triggered + 30s fallback poll)
+
 ## Backlog
 
 - [ ] Multi-machine dashboard — each Tailscale machine runs its own server, one page lists all. User configures machine list with Tailscale IPs/ports.
