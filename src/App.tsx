@@ -27,6 +27,10 @@ export function App() {
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceRef = useRef<string | null>(null)
 
+  // Track sessions killed this WS connection to avoid attaching to dead ones
+  // during cascading kills (e.g. killAllSessions sends bulk kill messages)
+  const killedSessionIds = useRef<Set<string>>(new Set())
+
   // URL hash routing: only do the initial hash navigation once, after the
   // first non-empty sessions list arrives from the server.
   const hasHandledInitialHashRef = useRef(false)
@@ -92,6 +96,7 @@ export function App() {
   // On (re)connect: request session list and re-attach current session
   useEffect(() => {
     if (status !== 'connected') return
+    killedSessionIds.current.clear()
     send({ type: 'list' })
     const id = currentIdRef.current
     if (id) {
@@ -187,6 +192,12 @@ export function App() {
         attachingIdRef.current = null
         // Update sync ref immediately so binary routing is correct
         currentIdRef.current = id
+        // Prime the terminal immediately so it buffers incoming binary before
+        // React re-renders and the container div is available for ensureTerminal.
+        // Without this, shell startup output (prompt) is dropped when there was
+        // no previous session to route binary to (e.g. first session after
+        // killAllSessions in tests, or fresh page load).
+        tm.primeTerminal(id)
         setCurrentId(id)
         // Update hash — use name from payload (sessions state may not have
         // updated yet since setSessions is async)
@@ -210,25 +221,26 @@ export function App() {
 
       case 'session-exit': {
         const id = m.id as string
+        killedSessionIds.current.add(id)
         tm.destroy(id)
         setSessions(s => s.filter(s => s.id !== id))
-
         if (currentIdRef.current === id) {
-          // Find the session that takes this slot: same index in order, or
-          // the new last item if it was at the end, or nothing if list empties.
-          const order = sessionOrderRef.current
-          const remaining = order.filter(
-            sid => sid !== id && sessionsRef.current.some(s => s.id === sid)
-          )
-          const deadIdx = order.indexOf(id)
-          const nextId = remaining[deadIdx] ?? remaining[remaining.length - 1] ?? null
-
-          if (nextId) {
-            attachSession(nextId)
-          } else {
-            currentIdRef.current = null
-            setCurrentId(null)
-            history.replaceState(null, '', location.pathname)
+          currentIdRef.current = null
+          setCurrentId(null)
+          history.replaceState(null, '', location.pathname)
+          // Auto-attach to nearest surviving session
+          const remaining = sessionsRef.current.filter(s => !killedSessionIds.current.has(s.id))
+          if (remaining.length > 0) {
+            const order = sessionOrderRef.current
+            const killedIdx = order.indexOf(id)
+            const ordered = [...remaining].sort((a, b) => {
+              const ai = order.indexOf(a.id)
+              const bi = order.indexOf(b.id)
+              return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+            })
+            // Prefer the session that was right after the killed one; fall back to last
+            const next = ordered.find(s => order.indexOf(s.id) > killedIdx) ?? ordered[ordered.length - 1]
+            attachSession(next.id)
           }
         }
         break

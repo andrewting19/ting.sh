@@ -9,6 +9,10 @@ interface TerminalEntry {
   fitAddon: FitAddon
   webglAddon: WebglAddon | null
   ro: ResizeObserver
+  // False until term.open(container) is called. A terminal can be primed
+  // (created without a container) so it buffers incoming binary before the
+  // container div exists in the DOM.
+  opened: boolean
 }
 
 interface Callbacks {
@@ -62,9 +66,49 @@ export function useTerminalManager(callbacks: Callbacks) {
   const cbRef = useRef(callbacks)
   cbRef.current = callbacks
 
-  const ensureTerminal = useCallback((sessionId: string, container: HTMLElement) => {
+  // Create a Terminal instance without opening it (no container yet).
+  // xterm.js processes write() calls into its internal VT buffer even before
+  // open() is called, so binary that arrives before React re-renders (and
+  // the container div appears) is captured rather than dropped.
+  // Called from the 'ready' handler in App.tsx for 'create' flows.
+  const primeTerminal = useCallback((sessionId: string) => {
     if (entriesRef.current.has(sessionId)) return
 
+    const term = new Terminal(TERMINAL_OPTIONS)
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+
+    term.onData((data) => {
+      if (activeIdRef.current === sessionId) cbRef.current.onData(sessionId, data)
+    })
+
+    // Stub RO — replaced with the real one when open() is called in ensureTerminal
+    const ro = new ResizeObserver(() => {})
+    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: false })
+  }, [])
+
+  const ensureTerminal = useCallback((sessionId: string, container: HTMLElement) => {
+    const existing = entriesRef.current.get(sessionId)
+
+    if (existing) {
+      if (!existing.opened) {
+        // Terminal was primed (buffering data); now we have a container — open it.
+        existing.term.open(container)
+        existing.fitAddon.fit()
+        existing.opened = true
+        // Replace stub RO with real one that reacts to container size changes
+        existing.ro.disconnect()
+        const ro = new ResizeObserver(() => {
+          existing.fitAddon.fit()
+          cbRef.current.onResize(sessionId, existing.term.cols, existing.term.rows)
+        })
+        ro.observe(container)
+        existing.ro = ro
+      }
+      return
+    }
+
+    // No prior entry — create and open in one shot
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -81,7 +125,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro })
+    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true })
   }, [])
 
   // Switch the WebGL renderer to the newly active terminal.
@@ -103,7 +147,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     // Load WebGL on newly active terminal (skip on mobile — fails silently on iOS Safari)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     const entry = entriesRef.current.get(sessionId)
-    if (entry && !entry.webglAddon && !isMobile) {
+    if (entry && entry.opened && !entry.webglAddon && !isMobile) {
       try {
         const webgl = new WebglAddon()
         webgl.onContextLoss(() => { webgl.dispose(); entry.webglAddon = null })
@@ -115,7 +159,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
 
     // Re-fit in case the container was invisible when last resized
-    entry?.fitAddon.fit()
+    if (entry?.opened) entry.fitAddon.fit()
   }, [])
 
   const write = useCallback((sessionId: string, data: Uint8Array) => {
@@ -146,12 +190,11 @@ export function useTerminalManager(callbacks: Callbacks) {
   }, [])
 
   // useMemo so the returned object has a stable reference across renders.
-  // All seven functions are useCallback([]) so their refs never change,
-  // which means this memo never re-computes. Without this, effects in
-  // App.tsx that list `tm` as a dep would re-fire on every render and
-  // send spurious attach/list requests in an infinite loop.
+  // All functions are useCallback([]) so their refs never change, which means
+  // this memo never re-computes. Without this, effects in App.tsx that list
+  // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ ensureTerminal, setActive, write, reset, focus, getDimensions, destroy }),
-    [ensureTerminal, setActive, write, reset, focus, getDimensions, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, focus, getDimensions, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, reset, focus, getDimensions, destroy]
   )
 }
