@@ -19,6 +19,7 @@
 - [x] Session rename — double-click or right-click → context menu, persisted server-side
 - [x] Right-click context menu — Rename / Duplicate / Kill
 - [x] Duplicate session — spawns in same CWD, inserted directly after source in list
+- [x] Rename UX polish — CWD subtitle stays visible, no height jump (box-shadow not border)
 - [x] Champion names for auto-generated session names (all 172, as of Feb 2026)
 - [x] Live CWD subtitle in sidebar (Enter-key triggered + 30s fallback poll)
 - [x] Client-side session ordering persisted to localStorage
