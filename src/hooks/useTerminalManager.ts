@@ -54,18 +54,29 @@ const TERMINAL_OPTIONS = {
   },
 }
 
-// xterm.js registers touchmove with {passive:false} and manually drives
-// scrollTop — this blocks iOS Safari's compositor-thread scroll and provides
-// no momentum after touchend. We add our own touchend-based momentum
-// animation on top: track velocity during touchmove (passive, no conflict)
-// and on touchend run a deceleration loop directly on the viewport element.
-function attachMomentumScroll(container: HTMLElement): (() => void) | null {
+// iOS Safari momentum scroll for xterm.js.
+//
+// Problem: xterm.js registers touchmove with {passive:false} and touchstart
+// with {passive:true} on the .xterm element, and calls cancel() → stopPropagation()
+// in both handlers. Bubble-phase listeners on ancestor elements never fire.
+// xterm.js drives scrollTop manually during the gesture — fine — but does
+// nothing on touchend, so momentum/inertia is completely absent.
+//
+// Fix: capture-phase listeners on the container fire top-down BEFORE xterm.js's
+// bubble-phase handlers, so stopPropagation() in xterm.js never affects us.
+// We do NOT call stopPropagation() ourselves — xterm.js keeps handling the
+// live scroll exactly as before. We only observe touch position to compute
+// velocity, then on touchend (which xterm.js has no handler for) we run a
+// deceleration animation on viewport.scrollTop.
+//
+// This means: zero interference with tap-to-focus, context menu, keyboard,
+// or any other xterm.js interaction. We purely add momentum on top.
+function attachIOSScroll(container: HTMLElement): (() => void) | null {
   if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) return null
 
   const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
   if (!viewport) return null
 
-  // Ring buffer of recent touch samples for velocity estimation
   const samples: { y: number; t: number }[] = []
   let rafId: number | null = null
 
@@ -73,51 +84,58 @@ function attachMomentumScroll(container: HTMLElement): (() => void) | null {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
   }
 
-  const onTouchStart = () => {
+  const onTouchStart = (e: TouchEvent) => {
+    // Don't stopPropagation — xterm.js must keep getting events for normal operation.
+    // Cancel any in-flight momentum so new gesture starts clean.
     cancelMomentum()
     samples.length = 0
+    samples.push({ y: e.touches[0].pageY, t: performance.now() })
   }
 
   const onTouchMove = (e: TouchEvent) => {
+    // Just observe. xterm.js drives scrollTop during the gesture.
+    if (e.touches.length !== 1) return
     samples.push({ y: e.touches[0].pageY, t: performance.now() })
     if (samples.length > 8) samples.shift()
   }
 
   const onTouchEnd = () => {
+    // xterm.js has no touchend handler, so this always fires.
     if (samples.length < 2) return
-
-    // Use last two samples for velocity; ignore stale samples (>100ms old)
     const last = samples[samples.length - 1]
     const prev = samples[samples.length - 2]
     const dt = last.t - prev.t
+    // Ignore stale sample (finger was stationary before lifting)
     if (dt <= 0 || dt > 100) return
 
-    // px/ms, positive = scroll down (matches xterm.js convention)
-    let velocity = (prev.y - last.y) / dt
-    if (Math.abs(velocity) < 0.15) return
+    let velocity = (prev.y - last.y) / dt  // px/ms; positive = scroll down
+    if (Math.abs(velocity) < 0.1) return
 
     let prevFrame = performance.now()
     const animate = (now: number) => {
-      const elapsed = Math.min(now - prevFrame, 32) // cap at 2 frames
+      const elapsed = Math.min(now - prevFrame, 32)  // cap at 2 dropped frames
       prevFrame = now
       if (Math.abs(velocity) < 0.05) { rafId = null; return }
       viewport.scrollTop += velocity * elapsed
-      // Friction decay normalised to 60 fps (≈ iOS feel)
-      velocity *= Math.pow(0.94, elapsed / 16.67)
+      velocity *= Math.pow(0.94, elapsed / 16.67)  // friction, normalised to 60fps
       rafId = requestAnimationFrame(animate)
     }
     rafId = requestAnimationFrame(animate)
   }
 
-  container.addEventListener('touchstart', onTouchStart, { passive: true })
-  container.addEventListener('touchmove', onTouchMove, { passive: true })
-  container.addEventListener('touchend', onTouchEnd, { passive: true })
+  // capture:true — fires in the capture (top-down) phase, before xterm.js's
+  // bubble handlers on .xterm. xterm.js's stopPropagation() in bubble never
+  // affects us. passive:true — we never call preventDefault().
+  const opts = { capture: true, passive: true } as const
+  container.addEventListener('touchstart', onTouchStart, opts)
+  container.addEventListener('touchmove', onTouchMove, opts)
+  container.addEventListener('touchend', onTouchEnd, opts)
 
   return () => {
     cancelMomentum()
-    container.removeEventListener('touchstart', onTouchStart)
-    container.removeEventListener('touchmove', onTouchMove)
-    container.removeEventListener('touchend', onTouchEnd)
+    container.removeEventListener('touchstart', onTouchStart, opts)
+    container.removeEventListener('touchmove', onTouchMove, opts)
+    container.removeEventListener('touchend', onTouchEnd, opts)
   }
 }
 
@@ -165,7 +183,7 @@ export function useTerminalManager(callbacks: Callbacks) {
         existing.term.open(container)
         existing.fitAddon.fit()
         existing.opened = true
-        existing.momentumCleanup = attachMomentumScroll(container)
+        existing.momentumCleanup = attachIOSScroll(container)
         // Replace stub RO with real one that reacts to container size changes
         existing.ro.disconnect()
         const ro = new ResizeObserver(() => {
@@ -195,7 +213,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachMomentumScroll(container) })
+    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
   }, [])
 
   // Switch the WebGL renderer to the newly active terminal.
