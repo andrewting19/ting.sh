@@ -154,8 +154,10 @@ export function App() {
         if (s) attachSession(s.id)
       }
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    // Capture phase (true) so we intercept before xterm.js, which consumes
+    // certain Alt combos (e.g. Alt+W = readline cut-word) and stops propagation.
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleMessage(msg: unknown) {

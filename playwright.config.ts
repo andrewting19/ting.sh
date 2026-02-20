@@ -2,6 +2,9 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  // .pw.ts extension keeps Playwright tests invisible to bun's test runner,
+  // which scans *.spec.ts / *.test.ts. bun test runs tests/e2e.test.ts instead.
+  testMatch: '**/*.pw.ts',
   // One worker: the WS server holds shared session state, so parallel
   // tests would race on the same sessions. Fast enough for this suite.
   workers: 1,

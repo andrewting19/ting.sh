@@ -8,6 +8,16 @@ async function getActiveSessionId(page: import('@playwright/test').Page): Promis
   )
 }
 
+/** Returns the decoded URL hash without the leading '#'. */
+async function getHash(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(() => decodeURIComponent(location.hash.slice(1)))
+}
+
+/** Returns the visible name text for a session item. */
+async function getSessionName(page: import('@playwright/test').Page, id: string): Promise<string> {
+  return page.$eval(`[data-session-id="${id}"] .session-name`, el => el.textContent ?? '')
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   // Clean slate: kill any sessions left over from previous test runs
@@ -206,4 +216,162 @@ test('duplicate session — spawns in same CWD, appears after source', async ({ 
   const srcIdx = afterIds.indexOf(id1)
   const newIdx = afterIds.indexOf(newId)
   expect(newIdx).toBe(srcIdx + 1)
+})
+
+test('kill session — cancel in modal keeps session alive', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForTerminal(page, id, 'workspace')
+
+  // Open kill modal via right-click
+  await page.click(`[data-session-id="${id}"]`, { button: 'right' })
+  await page.click('button:has-text("Kill")')
+  await expect(page.locator('.modal')).toBeVisible()
+
+  // Cancel — session must survive
+  await page.click('.modal-cancel')
+  await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible({ timeout: 2000 })
+
+  // Escape key is another cancel path — reopen and escape
+  await page.click(`[data-session-id="${id}"]`, { button: 'right' })
+  await page.click('button:has-text("Kill")')
+  await expect(page.locator('.modal')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible({ timeout: 2000 })
+})
+
+test('Alt+W — opens kill modal for active session', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForTerminal(page, id, 'workspace')
+
+  await page.keyboard.press('Alt+w')
+
+  // Modal should appear targeting this session
+  await expect(page.locator('.modal')).toBeVisible({ timeout: 2000 })
+
+  // Confirm the kill
+  await page.click('.modal-confirm')
+  await expect(page.locator(`[data-session-id="${id}"]`)).toBeHidden({ timeout: 3000 })
+})
+
+test('rename — Escape reverts to original name', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForTerminal(page, id, 'workspace')
+
+  const originalName = await page.locator(`[data-session-id="${id}"] .session-name`).textContent()
+
+  // Enter edit mode and type a different name
+  await page.dblclick(`[data-session-id="${id}"] .session-name`)
+  await page.fill('.session-name-input', 'should-not-persist')
+
+  // Escape should cancel without renaming
+  await page.keyboard.press('Escape')
+
+  await expect(page.locator(`[data-session-id="${id}"] .session-name`))
+    .toHaveText(originalName!, { timeout: 2000 })
+})
+
+test('WS reconnect — session survives network drop', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForTerminal(page, id, 'workspace')
+
+  // Confirm connected before going offline
+  await expect(page.locator('.status-dot.connected')).toBeVisible()
+
+  // Drop the network — WS closes, app switches to reconnecting state.
+  // setOffline lives on BrowserContext, not Page.
+  await page.context().setOffline(true)
+  await expect(page.locator('.status-dot.reconnecting')).toBeVisible({ timeout: 5000 })
+
+  // Restore network — useWS retries every 1500ms, so allow up to 8s
+  await page.context().setOffline(false)
+  await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
+
+  // Session still in sidebar and terminal content replayed from server buffer
+  await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible()
+  await waitForTerminal(page, id, 'workspace')
+})
+
+test('url hash — switching session updates hash to session name', async ({ page }) => {
+  const id1 = await newSession(page)
+  const id2 = await newSession(page)
+  // id2 is active after creation; switch to id1
+  await switchToSession(page, id1)
+  const name1 = await getSessionName(page, id1)
+
+  await page.waitForFunction(
+    (name: string) => decodeURIComponent(location.hash.slice(1)) === name,
+    name1,
+    { timeout: 3000 },
+  )
+  expect(await getHash(page)).toBe(name1)
+
+  // Switch back to id2 — hash should follow
+  await switchToSession(page, id2)
+  const name2 = await getSessionName(page, id2)
+  await page.waitForFunction(
+    (name: string) => decodeURIComponent(location.hash.slice(1)) === name,
+    name2,
+    { timeout: 3000 },
+  )
+  expect(await getHash(page)).toBe(name2)
+})
+
+test('url hash — loading /#name attaches to correct session', async ({ page }) => {
+  const id = await newSession(page)
+  const name = await getSessionName(page, id)
+
+  // Reload with the hash — simulates opening a bookmark
+  await page.goto(`/#${encodeURIComponent(name)}`)
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+
+  await page.waitForFunction(
+    (expectedName: string) =>
+      document.querySelector('.session-item.active .session-name')?.textContent === expectedName,
+    name,
+    { timeout: 5000 },
+  )
+  expect(await getActiveSessionId(page)).toBe(id)
+})
+
+test('url hash — killing current session clears or updates hash', async ({ page }) => {
+  const id1 = await newSession(page)
+  const id2 = await newSession(page)
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-session-id]').length >= 2,
+    { timeout: 5000 },
+  )
+
+  // Switch to id1 so there is a replacement (id2)
+  await switchToSession(page, id1)
+  await page.waitForFunction(
+    (id: string) => document.querySelector('.session-item.active')?.getAttribute('data-session-id') === id,
+    id1,
+    { timeout: 3000 },
+  )
+
+  // Kill id1 via right-click → Kill → confirm
+  await page.click(`[data-session-id="${id1}"]`, { button: 'right' })
+  await page.click('button:has-text("Kill")')
+  await page.click('.modal-confirm')
+
+  await expect(page.locator(`[data-session-id="${id1}"]`)).toBeHidden({ timeout: 3000 })
+
+  // Hash should now reflect id2 (the replacement), not id1
+  const name1 = await getSessionName(page, id1).catch(() => '')
+  const hash = await getHash(page)
+  expect(hash).not.toBe(name1)
+  // And id2 should be active
+  expect(await getActiveSessionId(page)).toBe(id2)
+})
+
+test('no hash on load — auto-attaches to first session', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForTerminal(page, id, 'workspace')
+
+  // Navigate to base URL (no hash)
+  await page.goto('/')
+  await page.waitForSelector('.session-item.active', { timeout: 8000 })
+
+  // Should auto-attach to the only existing session
+  expect(await getActiveSessionId(page)).toBe(id)
 })
