@@ -205,6 +205,15 @@ export function App() {
     send({ type: 'rename', id, name })
   }
 
+  function reorderSessions(fromId: string, toId: string) {
+    setSessionOrder(prev => {
+      const next = prev.filter(id => id !== fromId)
+      const toIdx = next.indexOf(toId)
+      next.splice(toIdx, 0, fromId)
+      return next
+    })
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -220,6 +229,7 @@ export function App() {
         onKill={(id) => setKillTarget(sessions.find(s => s.id === id) ?? null)}
         onRename={renameSession}
         onDuplicate={duplicateSession}
+        onReorder={reorderSessions}
       />
 
       <main className="main">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import { ContextMenu } from './ContextMenu'
 import type { Session, ConnectionStatus } from '../types'
 
@@ -11,13 +12,16 @@ interface Props {
   onKill: (id: string) => void
   onRename: (id: string, name: string) => void
   onDuplicate: (id: string) => void
+  onReorder: (fromId: string, toId: string) => void
 }
 
 interface CtxMenu { id: string; x: number; y: number }
 
-export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, onRename, onDuplicate }: Props) {
+export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, onRename, onDuplicate, onReorder }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const draggedIdRef = useRef<string | null>(null)
 
   function openContextMenu(e: React.MouseEvent, id: string) {
     e.preventDefault()
@@ -55,12 +59,24 @@ export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, 
               session={s}
               active={s.id === currentId}
               isEditing={editingId === s.id}
+              isDragOver={dragOverId === s.id}
               onAttach={() => onAttach(s.id)}
               onKill={() => onKill(s.id)}
               onStartEdit={() => setEditingId(s.id)}
               onCommitEdit={(name) => { setEditingId(null); if (name !== s.name) onRename(s.id, name) }}
               onCancelEdit={() => setEditingId(null)}
               onContextMenu={(e) => openContextMenu(e, s.id)}
+              onDragStart={() => { draggedIdRef.current = s.id }}
+              onDragOver={(e) => { e.preventDefault(); if (draggedIdRef.current !== s.id) setDragOverId(s.id) }}
+              onDragLeave={() => setDragOverId(null)}
+              onDrop={() => {
+                if (draggedIdRef.current && draggedIdRef.current !== s.id) {
+                  onReorder(draggedIdRef.current, s.id)
+                }
+                draggedIdRef.current = null
+                setDragOverId(null)
+              }}
+              onDragEnd={() => { draggedIdRef.current = null; setDragOverId(null) }}
             />
           ))
         )}
@@ -96,15 +112,21 @@ interface ItemProps {
   session: Session
   active: boolean
   isEditing: boolean
+  isDragOver: boolean
   onAttach: () => void
   onKill: () => void
   onStartEdit: () => void
   onCommitEdit: (name: string) => void
   onCancelEdit: () => void
   onContextMenu: (e: React.MouseEvent) => void
+  onDragStart: () => void
+  onDragOver: (e: DragEvent<HTMLDivElement>) => void
+  onDragLeave: () => void
+  onDrop: () => void
+  onDragEnd: () => void
 }
 
-function SessionItem({ session, active, isEditing, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu }: ItemProps) {
+function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
   const [draft, setDraft] = useState(session.name)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -128,9 +150,15 @@ function SessionItem({ session, active, isEditing, onAttach, onKill, onStartEdit
 
   return (
     <div
-      className={`session-item ${active ? 'active' : ''}`}
+      className={`session-item ${active ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
+      draggable={!isEditing}
       onClick={onAttach}
       onContextMenu={onContextMenu}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
     >
       <div className="session-indicator" />
 
