@@ -18,7 +18,7 @@ export function App() {
   const sessionOrderRef = useRef<string[]>([])
   currentIdRef.current = currentId
   sessionsRef.current = sessions
-  sessionOrderRef.current = sessionOrder
+  // sessionOrderRef.current is assigned after sessionOrder useState below
 
   // Set when we've sent attach/create but haven't received ready yet.
   // Binary scrollback arrives before ready, so we route it here.
@@ -35,6 +35,7 @@ export function App() {
   const [sessionOrder, setSessionOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('wt-session-order') ?? '[]') } catch { return [] }
   })
+  sessionOrderRef.current = sessionOrder
 
   useEffect(() => {
     localStorage.setItem('wt-session-order', JSON.stringify(sessionOrder))
