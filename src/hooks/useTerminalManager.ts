@@ -13,6 +13,8 @@ interface TerminalEntry {
   // (created without a container) so it buffers incoming binary before the
   // container div exists in the DOM.
   opened: boolean
+  // Cleanup fn for iOS momentum scroll listeners; null on non-iOS.
+  momentumCleanup: (() => void) | null
 }
 
 interface Callbacks {
@@ -52,6 +54,73 @@ const TERMINAL_OPTIONS = {
   },
 }
 
+// xterm.js registers touchmove with {passive:false} and manually drives
+// scrollTop — this blocks iOS Safari's compositor-thread scroll and provides
+// no momentum after touchend. We add our own touchend-based momentum
+// animation on top: track velocity during touchmove (passive, no conflict)
+// and on touchend run a deceleration loop directly on the viewport element.
+function attachMomentumScroll(container: HTMLElement): (() => void) | null {
+  if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) return null
+
+  const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
+  if (!viewport) return null
+
+  // Ring buffer of recent touch samples for velocity estimation
+  const samples: { y: number; t: number }[] = []
+  let rafId: number | null = null
+
+  const cancelMomentum = () => {
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+  }
+
+  const onTouchStart = () => {
+    cancelMomentum()
+    samples.length = 0
+  }
+
+  const onTouchMove = (e: TouchEvent) => {
+    samples.push({ y: e.touches[0].pageY, t: performance.now() })
+    if (samples.length > 8) samples.shift()
+  }
+
+  const onTouchEnd = () => {
+    if (samples.length < 2) return
+
+    // Use last two samples for velocity; ignore stale samples (>100ms old)
+    const last = samples[samples.length - 1]
+    const prev = samples[samples.length - 2]
+    const dt = last.t - prev.t
+    if (dt <= 0 || dt > 100) return
+
+    // px/ms, positive = scroll down (matches xterm.js convention)
+    let velocity = (prev.y - last.y) / dt
+    if (Math.abs(velocity) < 0.15) return
+
+    let prevFrame = performance.now()
+    const animate = (now: number) => {
+      const elapsed = Math.min(now - prevFrame, 32) // cap at 2 frames
+      prevFrame = now
+      if (Math.abs(velocity) < 0.05) { rafId = null; return }
+      viewport.scrollTop += velocity * elapsed
+      // Friction decay normalised to 60 fps (≈ iOS feel)
+      velocity *= Math.pow(0.94, elapsed / 16.67)
+      rafId = requestAnimationFrame(animate)
+    }
+    rafId = requestAnimationFrame(animate)
+  }
+
+  container.addEventListener('touchstart', onTouchStart, { passive: true })
+  container.addEventListener('touchmove', onTouchMove, { passive: true })
+  container.addEventListener('touchend', onTouchEnd, { passive: true })
+
+  return () => {
+    cancelMomentum()
+    container.removeEventListener('touchstart', onTouchStart)
+    container.removeEventListener('touchmove', onTouchMove)
+    container.removeEventListener('touchend', onTouchEnd)
+  }
+}
+
 export function useTerminalManager(callbacks: Callbacks) {
   const entriesRef = useRef<Map<string, TerminalEntry>>(new Map())
 
@@ -84,7 +153,7 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: false })
+    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
   }, [])
 
   const ensureTerminal = useCallback((sessionId: string, container: HTMLElement) => {
@@ -96,6 +165,7 @@ export function useTerminalManager(callbacks: Callbacks) {
         existing.term.open(container)
         existing.fitAddon.fit()
         existing.opened = true
+        existing.momentumCleanup = attachMomentumScroll(container)
         // Replace stub RO with real one that reacts to container size changes
         existing.ro.disconnect()
         const ro = new ResizeObserver(() => {
@@ -125,7 +195,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true })
+    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachMomentumScroll(container) })
   }, [])
 
   // Switch the WebGL renderer to the newly active terminal.
@@ -183,6 +253,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     const entry = entriesRef.current.get(sessionId)
     if (!entry) return
     entry.ro.disconnect()
+    entry.momentumCleanup?.()
     entry.webglAddon?.dispose()
     entry.term.dispose()
     entriesRef.current.delete(sessionId)
