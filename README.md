@@ -39,24 +39,24 @@ Working:
 - PTY sessions persist when browser tab closes — reconnect and resume
 - Scrollback replay on reconnect (10MB buffer per session)
 - WebSocket auto-reconnect with status indicator
-- WebGL renderer on active terminal only (context-loss fallback to canvas)
+- WebGL renderer on active terminal only (canvas fallback; WebGL skipped on mobile)
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
-- Session rename — double-click or right-click context menu, persisted server-side
-- Right-click context menu — Rename, Duplicate, Kill
+- Session rename — double-click or right-click/long-press context menu, persisted server-side
+- Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar
+- Drag-and-drop session reordering in sidebar, persisted to localStorage
 - Champion names for auto-generated sessions (all 172 LoL champions)
 - Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
-- Client-side session ordering persisted to localStorage
-- Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`)
+- Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
-- Resize handling, mobile sidebar
+- Mobile support: hamburger sidebar, touch-friendly session switching, iOS keyboard
 
 Missing / in progress:
-- Drag-and-drop session reordering (ordering infrastructure already in place)
+- Automated E2E test suite (Playwright) — top priority
 - Multi-machine dashboard
 - Auto-update mechanism
-- URL-based direct session linking (`/?s=<id>`)
+- URL-based direct session linking (`#<id>`)
 
 ## Known limitations
 

@@ -184,6 +184,9 @@ html, body, #root {
   color: var(--fg3);
   border: 1px solid transparent;
   transition: background .12s, color .12s;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .session-item.active { background: var(--bg3); color: var(--fg); border-color: var(--border2); }
 @media (hover: hover) {
