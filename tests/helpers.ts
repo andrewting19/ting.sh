@@ -76,12 +76,34 @@ export async function switchToSession(page: Page, sessionId: string): Promise<vo
 /**
  * Kill all sessions via direct WS messages (fast, no UI interaction).
  * Requires window.__wt_send to be exposed (dev mode only).
+ *
+ * Waits for WS connection AND for the initial sessions list to settle before
+ * checking what to kill. Without this, getSessions() returns [] before the
+ * WS delivers the sessions list, causing stale sessions to accumulate across
+ * tests and confusing newSession()'s new-ID detection.
  */
 export async function killAllSessions(page: Page): Promise<void> {
+  // Wait for WS to connect AND for the sessions list to settle. We poll until
+  // .status-dot.connected is present AND two consecutive polls see the same
+  // session count (confirms the server's 'sessions' response has been rendered).
+  await page.waitForFunction(
+    () => {
+      if (!document.querySelector('.status-dot.connected')) return false
+      const count = document.querySelectorAll('[data-session-id]').length
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prev = (window as any).__wt_kill_prev
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__wt_kill_prev = count
+      return prev !== undefined && prev === count
+    },
+    { timeout: 8000 },
+  )
+
   const ids = await getSessions(page)
   if (ids.length === 0) return
 
   await page.evaluate((ids: string[]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const send = (window as any).__wt_send
     if (!send) throw new Error('__wt_send not available — is the app in dev mode?')
     for (const id of ids) send({ type: 'kill', id })
