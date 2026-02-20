@@ -54,30 +54,39 @@ const TERMINAL_OPTIONS = {
   },
 }
 
-// iOS Safari momentum scroll for xterm.js.
+// iOS Safari scroll fix for xterm.js.
 //
-// Problem: xterm.js registers touchmove with {passive:false} and touchstart
-// with {passive:true} on the .xterm element, and calls cancel() → stopPropagation()
-// in both handlers. Bubble-phase listeners on ancestor elements never fire.
-// xterm.js drives scrollTop manually during the gesture — fine — but does
-// nothing on touchend, so momentum/inertia is completely absent.
+// Root cause: xterm.js registers touchstart with {passive:true}, so it can
+// never call preventDefault(). iOS therefore fires synthetic mouse events
+// (mousedown → mouseup → click) after every touch ends. xterm.js has a
+// mousedown handler that activates its selection-tracking state machine.
+// Once selection mode activates mid-gesture, subsequent touches get partially
+// consumed by selection logic instead of the scroll handler — causing the
+// "scroll sometimes stops registering" bug.
 //
-// Fix: capture-phase listeners on the container fire top-down BEFORE xterm.js's
-// bubble-phase handlers, so stopPropagation() in xterm.js never affects us.
-// We do NOT call stopPropagation() ourselves — xterm.js keeps handling the
-// live scroll exactly as before. We only observe touch position to compute
-// velocity, then on touchend (which xterm.js has no handler for) we run a
-// deceleration animation on viewport.scrollTop.
-//
-// This means: zero interference with tap-to-focus, context menu, keyboard,
-// or any other xterm.js interaction. We purely add momentum on top.
+// Fix:
+//   1. Track whether the gesture moved >5px (i.e. is a scroll, not a tap).
+//   2. touchend is non-passive so we CAN call preventDefault():
+//      - Scroll gesture: preventDefault() suppresses the synthetic mousedown
+//        → xterm.js selection mode never activates → reliable scroll +
+//        momentum animation.
+//      - Tap gesture: no preventDefault → synthetic mousedown fires normally
+//        → xterm.js focuses its textarea → iOS keyboard appears.
+//   3. capture:true on all listeners so xterm.js's stopPropagation() calls
+//      in bubble phase never affect us.
+//   4. We never call stopPropagation() — xterm.js keeps all events and
+//      drives the live per-frame scroll itself. We only add momentum after
+//      touchend when xterm.js is idle.
 function attachIOSScroll(container: HTMLElement): (() => void) | null {
   if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) return null
 
   const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
   if (!viewport) return null
 
+  const SCROLL_THRESHOLD_PX = 5
   const samples: { y: number; t: number }[] = []
+  let startY = 0
+  let isScrollGesture = false
   let rafId: number | null = null
 
   const cancelMomentum = () => {
@@ -85,35 +94,41 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   }
 
   const onTouchStart = (e: TouchEvent) => {
-    // Don't stopPropagation — xterm.js must keep getting events for normal operation.
-    // Cancel any in-flight momentum so new gesture starts clean.
     cancelMomentum()
     samples.length = 0
-    samples.push({ y: e.touches[0].pageY, t: performance.now() })
+    isScrollGesture = false
+    startY = e.touches[0].pageY
+    samples.push({ y: startY, t: performance.now() })
   }
 
   const onTouchMove = (e: TouchEvent) => {
-    // Just observe. xterm.js drives scrollTop during the gesture.
     if (e.touches.length !== 1) return
-    samples.push({ y: e.touches[0].pageY, t: performance.now() })
+    const y = e.touches[0].pageY
+    if (!isScrollGesture && Math.abs(y - startY) > SCROLL_THRESHOLD_PX) {
+      isScrollGesture = true
+    }
+    samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
   }
 
-  const onTouchEnd = () => {
-    // xterm.js has no touchend handler, so this always fires.
+  const onTouchEnd = (e: TouchEvent) => {
+    if (!isScrollGesture) return  // tap — let synthetic mousedown through for keyboard/focus
+
+    // Suppress synthetic mousedown so xterm.js selection mode never activates
+    e.preventDefault()
+
     if (samples.length < 2) return
     const last = samples[samples.length - 1]
     const prev = samples[samples.length - 2]
     const dt = last.t - prev.t
-    // Ignore stale sample (finger was stationary before lifting)
-    if (dt <= 0 || dt > 100) return
+    if (dt <= 0 || dt > 100) return  // finger was stationary before lifting
 
     let velocity = (prev.y - last.y) / dt  // px/ms; positive = scroll down
     if (Math.abs(velocity) < 0.1) return
 
     let prevFrame = performance.now()
     const animate = (now: number) => {
-      const elapsed = Math.min(now - prevFrame, 32)  // cap at 2 dropped frames
+      const elapsed = Math.min(now - prevFrame, 32)
       prevFrame = now
       if (Math.abs(velocity) < 0.05) { rafId = null; return }
       viewport.scrollTop += velocity * elapsed
@@ -123,19 +138,25 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     rafId = requestAnimationFrame(animate)
   }
 
-  // capture:true — fires in the capture (top-down) phase, before xterm.js's
-  // bubble handlers on .xterm. xterm.js's stopPropagation() in bubble never
-  // affects us. passive:true — we never call preventDefault().
-  const opts = { capture: true, passive: true } as const
-  container.addEventListener('touchstart', onTouchStart, opts)
-  container.addEventListener('touchmove', onTouchMove, opts)
-  container.addEventListener('touchend', onTouchEnd, opts)
+  const onTouchCancel = () => {
+    cancelMomentum()
+    samples.length = 0
+    isScrollGesture = false
+  }
+
+  const capturePassive = { capture: true, passive: true } as const
+  const captureActive  = { capture: true, passive: false } as const
+  container.addEventListener('touchstart',  onTouchStart,  capturePassive)
+  container.addEventListener('touchmove',   onTouchMove,   capturePassive)
+  container.addEventListener('touchend',    onTouchEnd,    captureActive)   // needs preventDefault
+  container.addEventListener('touchcancel', onTouchCancel, capturePassive)
 
   return () => {
     cancelMomentum()
-    container.removeEventListener('touchstart', onTouchStart, opts)
-    container.removeEventListener('touchmove', onTouchMove, opts)
-    container.removeEventListener('touchend', onTouchEnd, opts)
+    container.removeEventListener('touchstart',  onTouchStart,  capturePassive)
+    container.removeEventListener('touchmove',   onTouchMove,   capturePassive)
+    container.removeEventListener('touchend',    onTouchEnd,    captureActive)
+    container.removeEventListener('touchcancel', onTouchCancel, capturePassive)
   }
 }
 
