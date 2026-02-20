@@ -141,11 +141,12 @@ test('Alt+1 switches to first session', async ({ page }) => {
   // id2 should be active after creation
   expect(await getActiveSessionId(page)).toBe(id2)
 
-  // page.keyboard.press('Alt+1') sends '¡' on macOS so the handler's
-  // /^[1-9]$/ regex never matches. Dispatch the event directly instead.
+  // The handler now checks e.code (physical key) not e.key, so we dispatch
+  // with code: 'Digit1'. page.keyboard.press('Alt+1') would also work here
+  // since Playwright sends the correct code regardless of OS key remapping.
   await page.evaluate(() => {
     document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: '1', altKey: true, bubbles: true, cancelable: true })
+      new KeyboardEvent('keydown', { code: 'Digit1', altKey: true, bubbles: true, cancelable: true })
     )
   })
 

@@ -132,14 +132,16 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === 't') { e.preventDefault(); newSession() }
-      if (e.altKey && e.key === 'w') {
+      // Use e.code (physical key) not e.key — on macOS, Option remaps keys at
+      // the OS level so e.key is '†'/'∑'/'¡' instead of 't'/'w'/'1'.
+      if (e.altKey && e.code === 'KeyT') { e.preventDefault(); newSession() }
+      if (e.altKey && e.code === 'KeyW') {
         e.preventDefault()
         const id = currentIdRef.current
         const s = sessionsRef.current.find(s => s.id === id)
         if (s) setKillTarget(s)
       }
-      if (e.altKey && /^[1-9]$/.test(e.key)) {
+      if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
         e.preventDefault()
         const ordered = [...sessionsRef.current].sort((a, b) => {
           // Use current order from localStorage for shortcut navigation too
@@ -148,7 +150,7 @@ export function App() {
           })()
           return (order.indexOf(a.id) ?? 999) - (order.indexOf(b.id) ?? 999)
         })
-        const s = ordered[parseInt(e.key) - 1]
+        const s = ordered[parseInt(e.code[5]) - 1]
         if (s) attachSession(s.id)
       }
     }
