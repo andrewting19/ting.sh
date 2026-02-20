@@ -50,6 +50,13 @@ const TERMINAL_OPTIONS = {
 
 export function useTerminalManager(callbacks: Callbacks) {
   const entriesRef = useRef<Map<string, TerminalEntry>>(new Map())
+
+  // Expose terminal entries on window in dev mode so Playwright tests can
+  // read terminal buffer content without scraping the canvas.
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__wt_terminals = entriesRef.current
+  }
   const activeIdRef = useRef<string | null>(null)
   // Always-fresh callbacks via ref — no stale closure issues
   const cbRef = useRef(callbacks)

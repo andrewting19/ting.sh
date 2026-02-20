@@ -35,8 +35,11 @@ export function App() {
   }, [sessionOrder])
 
   // Merge server session list into our local order:
-  // keep existing order, drop dead sessions, append new ones at end
+  // keep existing order, drop dead sessions, append new ones at end.
+  // Skip when sessions is empty (initial state before WS connects) to avoid
+  // wiping the localStorage-restored order before we have real data.
   useEffect(() => {
+    if (sessions.length === 0) return
     setSessionOrder(prev => {
       const ids = new Set(sessions.map(s => s.id))
       const kept = prev.filter(id => ids.has(id))
@@ -72,6 +75,12 @@ export function App() {
     },
     onMessage: handleMessage,
   })
+
+  // Expose send on window in dev so Playwright tests can send WS messages
+  // directly (e.g. bulk-kill sessions) without driving the UI.
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as any).__wt_send = send
+  }, [send])
 
   // On (re)connect: request session list and re-attach current session
   useEffect(() => {
@@ -225,6 +234,10 @@ export function App() {
     })
   }
 
+  function reorderSessionToEnd(fromId: string) {
+    setSessionOrder(prev => [...prev.filter(id => id !== fromId), fromId])
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -247,6 +260,7 @@ export function App() {
         onRename={renameSession}
         onDuplicate={duplicateSession}
         onReorder={reorderSessions}
+        onReorderToEnd={reorderSessionToEnd}
       />
 
       <main className="main">
