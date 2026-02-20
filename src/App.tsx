@@ -164,9 +164,12 @@ export function App() {
         if (!hasHandledInitialHashRef.current && list.length > 0) {
           hasHandledInitialHashRef.current = true
           const hashVal = decodeURIComponent(location.hash.slice(1))
-          // Match by name first, fall back to ID (for old bookmarks)
-          const match = list.find(s => s.name === hashVal) ?? list.find(s => s.id === hashVal)
-          if (match) attachSession(match.id)
+          // Match by name first, fall back to ID (for old bookmarks),
+          // then fall back to first session if no hash present
+          const match = list.find(s => s.name === hashVal)
+            ?? list.find(s => s.id === hashVal)
+            ?? list[0]
+          attachSession(match.id)
         }
         break
       }
