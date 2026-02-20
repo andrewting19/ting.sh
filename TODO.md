@@ -25,22 +25,16 @@
 - [x] Client-side session ordering persisted to localStorage
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
+## Completed features (continued)
+- [x] E2E test suite (Playwright) — 18 tests covering all key flows
+- [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
+- [x] Drag-to-end (sentinel drop zone after last session item)
+- [x] URL hash routing — `#<name>` deeplinks to session by name
+- [x] Auto-attach to first session when no hash in URL
+- [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
+- [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
+
 ## Up next (in order)
-
-1. **E2E test suite (Playwright)** — high priority; project is fully AI-vibe-coded so
-   agents need automated regression detection between sessions. Key flows to cover:
-   - Session create, switch, scrollback replay (no duplication), kill, rename
-   - Reconnect behavior (WS drop + rejoin)
-   - Mobile layout (viewport resize, sidebar toggle)
-   Strategy: start `bun run dev` as a fixture, drive browser with Playwright,
-   read terminal content via `term.buffer.active` exposed through a test hook or
-   `page.evaluate`. See `testing.md` (to be created) for architecture.
-
-2. **Long-press context menu on mobile** — touch devices have no right-click;
-   need `pointerdown` + 500ms timeout → open context menu at touch position.
-   Cancel on `pointerup`/`pointermove`. Replaces the hidden kill button on touch.
-
-3. **URL routing** — `#<id>` hash to deeplink / bookmark directly to a session
 
 ## Backlog
 
