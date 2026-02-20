@@ -134,29 +134,29 @@ function SessionItem({ session, active, isEditing, onAttach, onKill, onStartEdit
     >
       <div className="session-indicator" />
 
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          className="session-name-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={onKeyDown}
-          onClick={(e) => e.stopPropagation()}
-          autoFocus
-        />
-      ) : (
-        <div className="session-label">
+      <div className="session-label">
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            className="session-name-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={onKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            autoFocus
+          />
+        ) : (
           <span className="session-name" onDoubleClick={(e) => { e.stopPropagation(); onStartEdit() }}>
             {session.name}
           </span>
-          {session.cwd && (
-            <span className="session-cwd" title={session.cwd}>
-              {session.cwd.split('/').filter(Boolean).pop() ?? '/'}
-            </span>
-          )}
-        </div>
-      )}
+        )}
+        {session.cwd && (
+          <span className="session-cwd" title={session.cwd}>
+            {session.cwd.split('/').filter(Boolean).pop() ?? '/'}
+          </span>
+        )}
+      </div>
 
       {session.clients > 1 && <span className="session-clients">{session.clients}</span>}
 
