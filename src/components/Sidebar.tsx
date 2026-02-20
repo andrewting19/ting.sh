@@ -60,6 +60,7 @@ export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, 
             {sessions.map((s) => (
               <SessionItem
                 key={s.id}
+                data-session-id={s.id}
                 session={s}
                 active={s.id === currentId}
                 isEditing={editingId === s.id}
@@ -130,6 +131,7 @@ interface ItemProps {
   active: boolean
   isEditing: boolean
   isDragOver: boolean
+  'data-session-id': string
   onAttach: () => void
   onKill: () => void
   onStartEdit: () => void
@@ -144,7 +146,7 @@ interface ItemProps {
   onDragEnd: () => void
 }
 
-function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onLongPress, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
+function SessionItem({ session, active, isEditing, isDragOver, 'data-session-id': dataSessionId, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onLongPress, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
   const [draft, setDraft] = useState(session.name)
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -189,6 +191,7 @@ function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill,
   return (
     <div
       className={`session-item ${active ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
+      data-session-id={dataSessionId}
       draggable={!isEditing}
       onClick={() => {
         // Suppress the click that fires right after a long-press completes

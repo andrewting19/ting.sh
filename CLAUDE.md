@@ -28,12 +28,9 @@ In dev, Vite proxies `/ws` to `localhost:7681`. The frontend always connects to 
 
 **Speed of iteration is the priority. Never let tests block commits.**
 
-Run `bun test` only when:
-- End of a session (final sanity check before handing off)
-- You modified any file in `tests/`
-- You touched a core flow that has test coverage (session switch, kill, rename, reconnect, duplicate)
+Run `bun test` at the **end of a session** after all changes are done — not before, not after every commit. Also run if you modified files in `tests/` or touched a core flow (session switch, kill, rename, reconnect, duplicate).
 
-Do NOT run tests after every commit — commit first, iterate fast, test at the end.
+Commit freely during the session. Tests are the final check before handing off.
 
 These three steps keep the repo self-documenting so any future developer (or Claude session) can onboard from the files alone.
 
