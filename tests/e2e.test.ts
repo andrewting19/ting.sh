@@ -10,6 +10,21 @@
  */
 import { test, expect } from 'bun:test'
 
+// Kill any stale processes on the test ports before Playwright starts.
+// Playwright's webServer fails immediately if ports are occupied — this
+// happens when a previous run was interrupted (Ctrl+C / crash) before
+// Playwright's own cleanup hook fired.  We do this here, in the Bun layer,
+// because Playwright starts webServer *before* its own globalSetup hook.
+const TEST_PORTS = [4322, 7682]
+for (const port of TEST_PORTS) {
+  const result = Bun.spawnSync(['sh', '-c', `lsof -t -i :${port} | xargs kill -9 2>/dev/null || true`])
+  if (result.exitCode !== 0) {
+    // lsof/kill not available — not fatal, Playwright will report port errors
+  }
+}
+// Brief pause so the OS recycles the sockets before Playwright binds them.
+await Bun.sleep(150)
+
 test('e2e suite', async () => {
   const root = import.meta.dir + '/..'
   const proc = Bun.spawn(

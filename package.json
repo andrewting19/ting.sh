@@ -8,7 +8,7 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "bun run server.ts",
-    "test": "playwright test",
+    "test": "bun test",
     "test:ui": "playwright test --ui"
   },
   "dependencies": {
