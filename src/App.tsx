@@ -15,8 +15,10 @@ export function App() {
   // Sync refs for use inside callbacks (avoid stale closures)
   const currentIdRef = useRef<string | null>(null)
   const sessionsRef = useRef<Session[]>([])
+  const sessionOrderRef = useRef<string[]>([])
   currentIdRef.current = currentId
   sessionsRef.current = sessions
+  sessionOrderRef.current = sessionOrder
 
   // Set when we've sent attach/create but haven't received ready yet.
   // Binary scrollback arrives before ready, so we route it here.
@@ -176,10 +178,14 @@ export function App() {
 
       case 'ready': {
         const id = m.id as string
+        const name = m.name as string
         attachingIdRef.current = null
         // Update sync ref immediately so binary routing is correct
         currentIdRef.current = id
         setCurrentId(id)
+        // Update hash — use name from payload (sessions state may not have
+        // updated yet since setSessions is async)
+        history.replaceState(null, '', '#' + encodeURIComponent(name))
 
         // If this was a duplicate, insert the new session right after its source
         if (duplicateSourceRef.current) {
@@ -201,10 +207,24 @@ export function App() {
         const id = m.id as string
         tm.destroy(id)
         setSessions(s => s.filter(s => s.id !== id))
+
         if (currentIdRef.current === id) {
-          currentIdRef.current = null
-          setCurrentId(null)
-          history.replaceState(null, '', location.pathname)
+          // Find the session that takes this slot: same index in order, or
+          // the new last item if it was at the end, or nothing if list empties.
+          const order = sessionOrderRef.current
+          const remaining = order.filter(
+            sid => sid !== id && sessionsRef.current.some(s => s.id === sid)
+          )
+          const deadIdx = order.indexOf(id)
+          const nextId = remaining[deadIdx] ?? remaining[remaining.length - 1] ?? null
+
+          if (nextId) {
+            attachSession(nextId)
+          } else {
+            currentIdRef.current = null
+            setCurrentId(null)
+            history.replaceState(null, '', location.pathname)
+          }
         }
         break
       }
