@@ -42,6 +42,32 @@ export async function getTerminalText(page: Page, sessionId: string): Promise<st
 }
 
 /**
+ * Wait until the terminal shows any non-whitespace content, indicating the
+ * shell has started and printed its first prompt.
+ *
+ * Use this instead of waitForTerminal(page, id, 'somePromptString') when you
+ * just need to know the session is ready for input. It works regardless of
+ * shell type (bash/zsh), user (root/non-root), CWD, or custom prompt config —
+ * the only requirement is that the shell outputs something on startup.
+ */
+export async function waitForPrompt(page: Page, sessionId: string, timeout = 8000): Promise<void> {
+  await page.waitForFunction(
+    (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entry = (window as any).__wt_terminals?.get(id)
+      if (!entry) return false
+      const buf = entry.term.buffer.active
+      for (let i = 0; i < buf.length; i++) {
+        if (buf.getLine(i)?.translateToString(true)?.trim()) return true
+      }
+      return false
+    },
+    sessionId,
+    { timeout },
+  )
+}
+
+/**
  * Poll the terminal buffer until `needle` appears, or throw on timeout.
  * Uses waitForFunction (no arbitrary sleeps) so it's as fast as possible.
  */

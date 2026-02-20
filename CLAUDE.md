@@ -67,7 +67,7 @@ The git log is the project history. `git log --oneline` should read like a chang
 
 - `server.ts` — single file, session Map, Bun WebSocket handler. Keep it simple.
 - `src/hooks/useWS.ts` — manages WS lifecycle, auto-reconnect, stable `send` ref
-- `src/components/Terminal.tsx` — thin wrapper around xterm.js, exposes imperative handle via `forwardRef`
+- `src/hooks/useTerminalManager.ts` — owns all xterm.js instances; exposes `ensureTerminal`, `write`, `reset`, `setActive`, `focus`, `destroy`
 - Binary WS frames = raw PTY output → `term.write(data)`. JSON frames = control messages.
 - Sessions survive tab close. Scrollback buffer (10MB cap) replayed on reconnect.
 - **Scrollback**: server always replays the full buffer on every `attach`. Client must call `tm.reset(id)` before sending `attach` to avoid duplication on re-attach. `fresh` flag in `ready` is only set for `create`, not `attach` — it's informational only now.

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { getSessions, newSession, getTerminalText, waitForTerminal, switchToSession, killAllSessions } from './helpers'
+import { getSessions, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
 
 /** Returns the data-session-id of the currently active session item. */
 async function getActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
@@ -28,12 +28,12 @@ test('create session — appears in sidebar and shows shell prompt', async ({ pa
   const id = await newSession(page)
   expect(id).toBeTruthy()
   // Shell prompt should appear (zsh/bash both show %)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 })
 
 test('switch sessions — scrollback not duplicated on return', async ({ page }) => {
   const id1 = await newSession(page)
-  await waitForTerminal(page, id1, 'workspace')
+  await waitForPrompt(page, id1)
 
   // Type a unique marker in session 1
   const marker = `wt_test_${Date.now()}`
@@ -48,7 +48,7 @@ test('switch sessions — scrollback not duplicated on return', async ({ page })
 
   // Switch to session 2, then back to session 1
   const id2 = await newSession(page)
-  await waitForTerminal(page, id2, 'workspace')
+  await waitForPrompt(page, id2)
   await switchToSession(page, id1)
   await waitForTerminal(page, id1, marker) // wait for scrollback replay
 
@@ -60,7 +60,7 @@ test('switch sessions — scrollback not duplicated on return', async ({ page })
 
 test('kill session — removed from sidebar', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   // Right-click → Kill → confirm
   await page.click(`[data-session-id="${id}"]`, { button: 'right' })
@@ -72,7 +72,7 @@ test('kill session — removed from sidebar', async ({ page }) => {
 
 test('rename session — name persisted in sidebar', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   const newName = `renamed-${Date.now()}`
 
@@ -88,7 +88,7 @@ test('rename session — name persisted in sidebar', async ({ page }) => {
 
 test('reconnect — session survives page reload, content preserved', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   const marker = `reconnect_${Date.now()}`
   await page.keyboard.type(`echo ${marker}`)
@@ -120,7 +120,7 @@ test('reconnect — session survives page reload, content preserved', async ({ p
 
 test('terminal input produces output', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   await page.keyboard.type('echo "wt_output_test"')
   await page.keyboard.press('Enter')
@@ -144,9 +144,9 @@ test('Alt+T creates a new session', async ({ page }) => {
 
 test('Alt+1 switches to first session', async ({ page }) => {
   const id1 = await newSession(page)
-  await waitForTerminal(page, id1, 'workspace')
+  await waitForPrompt(page, id1)
   const id2 = await newSession(page)
-  await waitForTerminal(page, id2, 'workspace')
+  await waitForPrompt(page, id2)
 
   // id2 should be active after creation
   expect(await getActiveSessionId(page)).toBe(id2)
@@ -193,7 +193,7 @@ test('session order persists across page reload', async ({ page }) => {
 
 test('duplicate session — spawns in same CWD, appears after source', async ({ page }) => {
   const id1 = await newSession(page)
-  await waitForTerminal(page, id1, 'workspace')
+  await waitForPrompt(page, id1)
 
   const before = await getSessions(page)
 
@@ -220,7 +220,7 @@ test('duplicate session — spawns in same CWD, appears after source', async ({ 
 
 test('kill session — cancel in modal keeps session alive', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   // Open kill modal via right-click
   await page.click(`[data-session-id="${id}"]`, { button: 'right' })
@@ -241,7 +241,7 @@ test('kill session — cancel in modal keeps session alive', async ({ page }) =>
 
 test('Alt+W — opens kill modal for active session', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   await page.keyboard.press('Alt+w')
 
@@ -255,7 +255,7 @@ test('Alt+W — opens kill modal for active session', async ({ page }) => {
 
 test('rename — Escape reverts to original name', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   const originalName = await page.locator(`[data-session-id="${id}"] .session-name`).textContent()
 
@@ -272,7 +272,7 @@ test('rename — Escape reverts to original name', async ({ page }) => {
 
 test('WS reconnect — session survives network drop', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   // Confirm connected before going offline
   await expect(page.locator('.status-dot.connected')).toBeVisible()
@@ -288,7 +288,7 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
 
   // Session still in sidebar and terminal content replayed from server buffer
   await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible()
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 })
 
 test('url hash — switching session updates hash to session name', async ({ page }) => {
@@ -366,7 +366,7 @@ test('url hash — killing current session clears or updates hash', async ({ pag
 
 test('no hash on load — auto-attaches to first session', async ({ page }) => {
   const id = await newSession(page)
-  await waitForTerminal(page, id, 'workspace')
+  await waitForPrompt(page, id)
 
   // Navigate to base URL (no hash)
   await page.goto('/')
