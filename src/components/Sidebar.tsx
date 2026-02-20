@@ -82,7 +82,7 @@ export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, 
                   draggedIdRef.current = null
                   setDragOverId(null)
                 }}
-                onDragEnd={() => { draggedIdRef.current = null; setDragOverId(null) }}
+                onDragEnd={() => { draggedIdRef.current = null; setDragOverId(null); setDragOverEnd(false) }}
               />
             ))}
             {/* Drop target at the end so you can drag a session to the last position */}
