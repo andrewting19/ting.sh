@@ -118,8 +118,8 @@ export function App() {
   // hashchange: if the user manually edits the URL hash, navigate to that session
   useEffect(() => {
     const handler = () => {
-      const id = location.hash.slice(1)
-      const s = sessionsRef.current.find(s => s.id === id)
+      const hashVal = decodeURIComponent(location.hash.slice(1))
+      const s = sessionsRef.current.find(s => s.name === hashVal) ?? sessionsRef.current.find(s => s.id === hashVal)
       if (s) attachSession(s.id)
     }
     window.addEventListener('hashchange', handler)
@@ -163,8 +163,10 @@ export function App() {
         // session if one is present in the URL (deeplink / bookmark support).
         if (!hasHandledInitialHashRef.current && list.length > 0) {
           hasHandledInitialHashRef.current = true
-          const hashId = location.hash.slice(1)
-          if (hashId && list.find(s => s.id === hashId)) attachSession(hashId)
+          const hashVal = decodeURIComponent(location.hash.slice(1))
+          // Match by name first, fall back to ID (for old bookmarks)
+          const match = list.find(s => s.name === hashVal) ?? list.find(s => s.id === hashVal)
+          if (match) attachSession(match.id)
         }
         break
       }
@@ -238,8 +240,9 @@ export function App() {
     tm.focus(id)
     const dims = tm.getDimensions(id)
     send({ type: 'attach', id, ...dims })
-    // Update URL hash for bookmarking / deeplink
-    history.replaceState(null, '', '#' + id)
+    // Update URL hash for bookmarking / deeplink — use name not UUID
+    const name = sessionsRef.current.find(s => s.id === id)?.name ?? id
+    history.replaceState(null, '', '#' + encodeURIComponent(name))
   }
 
   function killSession(id: string) {
@@ -250,6 +253,10 @@ export function App() {
   function renameSession(id: string, name: string) {
     setSessions(s => s.map(s => s.id === id ? { ...s, name } : s))
     send({ type: 'rename', id, name })
+    // Keep URL hash in sync if this is the current session
+    if (id === currentIdRef.current) {
+      history.replaceState(null, '', '#' + encodeURIComponent(name))
+    }
   }
 
   function reorderSessions(fromId: string, toId: string) {
