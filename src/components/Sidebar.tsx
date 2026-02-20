@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ContextMenu } from './ContextMenu'
 import type { Session, ConnectionStatus } from '../types'
 
 interface Props {
@@ -9,9 +10,20 @@ interface Props {
   onAttach: (id: string) => void
   onKill: (id: string) => void
   onRename: (id: string, name: string) => void
+  onDuplicate: (id: string) => void
 }
 
-export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, onRename }: Props) {
+interface CtxMenu { id: string; x: number; y: number }
+
+export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, onRename, onDuplicate }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null)
+
+  function openContextMenu(e: React.MouseEvent, id: string) {
+    e.preventDefault()
+    setCtxMenu({ id, x: e.clientX, y: e.clientY })
+  }
+
   return (
     <nav className="sidebar">
       <div className="sidebar-top">
@@ -42,72 +54,100 @@ export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, 
               key={s.id}
               session={s}
               active={s.id === currentId}
+              isEditing={editingId === s.id}
               onAttach={() => onAttach(s.id)}
               onKill={() => onKill(s.id)}
-              onRename={(name) => onRename(s.id, name)}
+              onStartEdit={() => setEditingId(s.id)}
+              onCommitEdit={(name) => { setEditingId(null); if (name !== s.name) onRename(s.id, name) }}
+              onCancelEdit={() => setEditingId(null)}
+              onContextMenu={(e) => openContextMenu(e, s.id)}
             />
           ))
         )}
       </div>
+
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          items={[
+            {
+              label: 'Rename',
+              onClick: () => { setEditingId(ctxMenu.id); setCtxMenu(null) },
+            },
+            {
+              label: 'Duplicate',
+              onClick: () => { onDuplicate(ctxMenu.id); setCtxMenu(null) },
+            },
+            {
+              label: 'Kill',
+              danger: true,
+              onClick: () => { onKill(ctxMenu.id); setCtxMenu(null) },
+            },
+          ]}
+        />
+      )}
     </nav>
   )
 }
 
-function SessionItem({
-  session,
-  active,
-  onAttach,
-  onKill,
-  onRename,
-}: {
+interface ItemProps {
   session: Session
   active: boolean
+  isEditing: boolean
   onAttach: () => void
   onKill: () => void
-  onRename: (name: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
+  onStartEdit: () => void
+  onCommitEdit: (name: string) => void
+  onCancelEdit: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+}
+
+function SessionItem({ session, active, isEditing, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu }: ItemProps) {
   const [draft, setDraft] = useState(session.name)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function startEdit(e: React.MouseEvent) {
-    e.stopPropagation()
-    setDraft(session.name)
-    setEditing(true)
-    setTimeout(() => inputRef.current?.select(), 0)
-  }
+  // When editing starts (triggered externally), reset draft and focus
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(session.name)
+      setTimeout(() => inputRef.current?.select(), 0)
+    }
+  }, [isEditing]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function commitEdit() {
-    setEditing(false)
-    const name = draft.trim() || session.name
-    setDraft(name)
-    if (name !== session.name) onRename(name)
+  function commit() {
+    onCommitEdit(draft.trim() || session.name)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
     e.stopPropagation()
-    if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
-    if (e.key === 'Escape') { setDraft(session.name); setEditing(false) }
+    if (e.key === 'Enter') { e.preventDefault(); commit() }
+    if (e.key === 'Escape') { onCancelEdit() }
   }
 
   return (
-    <div className={`session-item ${active ? 'active' : ''}`} onClick={onAttach}>
+    <div
+      className={`session-item ${active ? 'active' : ''}`}
+      onClick={onAttach}
+      onContextMenu={onContextMenu}
+    >
       <div className="session-indicator" />
 
-      {editing ? (
+      {isEditing ? (
         <input
           ref={inputRef}
           className="session-name-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitEdit}
+          onBlur={commit}
           onKeyDown={onKeyDown}
           onClick={(e) => e.stopPropagation()}
           autoFocus
         />
       ) : (
         <div className="session-label">
-          <span className="session-name" onDoubleClick={startEdit} title="double-click to rename">
+          <span className="session-name" onDoubleClick={(e) => { e.stopPropagation(); onStartEdit() }}>
             {session.name}
           </span>
           {session.cwd && (

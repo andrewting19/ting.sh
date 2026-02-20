@@ -42,13 +42,18 @@ Working:
 - WebGL renderer on active terminal only (context-loss fallback to canvas)
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
-- Inline session rename (double-click) — persisted on server, survives reconnects
-- Live CWD display as subtitle in sidebar — updates on Enter keypress, 30s fallback poll. Linux: `/proc/<pid>/cwd`, macOS: `lsof`. No shell config needed.
+- Session rename — double-click or right-click context menu, persisted server-side
+- Right-click context menu — Rename, Duplicate, Kill
+- Duplicate session — spawns in same CWD, inserts directly after source in sidebar
+- Champion names for auto-generated sessions (all 172 LoL champions)
+- Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
+- Client-side session ordering persisted to localStorage
+- Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`)
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
 - Resize handling, mobile sidebar
 
 Missing / in progress:
-- Session titles auto-updated from OSC escape codes (Claude Code, vim, ssh all set these)
+- Drag-and-drop session reordering (ordering infrastructure already in place)
 - Multi-machine dashboard
 - Auto-update mechanism
 - URL-based direct session linking (`/?s=<id>`)

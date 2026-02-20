@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { useWS } from './hooks/useWS'
@@ -20,6 +20,38 @@ export function App() {
   // Set when we've sent attach/create but haven't received ready yet.
   // Binary scrollback arrives before ready, so we route it here.
   const attachingIdRef = useRef<string | null>(null)
+
+  // When set, the next ready response is a duplicate — insert after this ID
+  const duplicateSourceRef = useRef<string | null>(null)
+
+  // Client-side session order (persisted to localStorage for drag-and-drop etc.)
+  const [sessionOrder, setSessionOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('wt-session-order') ?? '[]') } catch { return [] }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('wt-session-order', JSON.stringify(sessionOrder))
+  }, [sessionOrder])
+
+  // Merge server session list into our local order:
+  // keep existing order, drop dead sessions, append new ones at end
+  useEffect(() => {
+    setSessionOrder(prev => {
+      const ids = new Set(sessions.map(s => s.id))
+      const kept = prev.filter(id => ids.has(id))
+      const keptSet = new Set(kept)
+      const added = sessions.map(s => s.id).filter(id => !keptSet.has(id))
+      return [...kept, ...added]
+    })
+  }, [sessions])
+
+  const orderedSessions = useMemo(() =>
+    [...sessions].sort((a, b) => {
+      const ai = sessionOrder.indexOf(a.id)
+      const bi = sessionOrder.indexOf(b.id)
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+    }),
+  [sessions, sessionOrder])
 
   // Per-session container refs — one div per session, always in DOM
   const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -80,7 +112,14 @@ export function App() {
       }
       if (e.altKey && /^[1-9]$/.test(e.key)) {
         e.preventDefault()
-        const s = sessionsRef.current[parseInt(e.key) - 1]
+        const ordered = [...sessionsRef.current].sort((a, b) => {
+          // Use current order from localStorage for shortcut navigation too
+          const order: string[] = (() => {
+            try { return JSON.parse(localStorage.getItem('wt-session-order') ?? '[]') } catch { return [] }
+          })()
+          return (order.indexOf(a.id) ?? 999) - (order.indexOf(b.id) ?? 999)
+        })
+        const s = ordered[parseInt(e.key) - 1]
         if (s) attachSession(s.id)
       }
     }
@@ -102,6 +141,19 @@ export function App() {
         currentIdRef.current = id
         setCurrentId(id)
 
+        // If this was a duplicate, insert the new session right after its source
+        if (duplicateSourceRef.current) {
+          const sourceId = duplicateSourceRef.current
+          duplicateSourceRef.current = null
+          setSessionOrder(prev => {
+            const next = prev.filter(x => x !== id)
+            const sourceIdx = next.indexOf(sourceId)
+            if (sourceIdx !== -1) next.splice(sourceIdx + 1, 0, id)
+            else next.push(id)
+            return next
+          })
+        }
+
         // If fresh (new session), reset the terminal to clear any prior state
         if (m.fresh) tm.reset(id)
         break
@@ -120,12 +172,17 @@ export function App() {
     }
   }
 
-  function newSession() {
-    // Dimensions from current session or defaults
+  function newSession(cwd?: string) {
     const dims = currentIdRef.current
       ? tm.getDimensions(currentIdRef.current)
       : { cols: 80, rows: 24 }
-    send({ type: 'create', ...dims })
+    send({ type: 'create', ...(cwd ? { cwd } : {}), ...dims })
+  }
+
+  function duplicateSession(sourceId: string) {
+    const source = sessionsRef.current.find(s => s.id === sourceId)
+    duplicateSourceRef.current = sourceId
+    newSession(source?.cwd || undefined)
   }
 
   function attachSession(id: string) {
@@ -155,20 +212,21 @@ export function App() {
       </header>
 
       <Sidebar
-        sessions={sessions}
+        sessions={orderedSessions}
         currentId={currentId}
         status={status}
-        onNew={newSession}
+        onNew={() => newSession()}
         onAttach={attachSession}
         onKill={(id) => setKillTarget(sessions.find(s => s.id === id) ?? null)}
         onRename={renameSession}
+        onDuplicate={duplicateSession}
       />
 
       <main className="main">
         {!currentId && (
           <div className="no-session">
             <div className="no-session-prompt">no active session</div>
-            <button className="no-session-btn" onClick={newSession}>new session</button>
+            <button className="no-session-btn" onClick={() => newSession()}>new session</button>
           </div>
         )}
 

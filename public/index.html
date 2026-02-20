@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>web-terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg0:      #0d0e17;
+      --bg1:      #11121c;
+      --bg2:      #191a28;
+      --bg3:      #1f2132;
+      --border:   #1e2035;
+      --border2:  #262840;
+      --fg:       #c0caf5;
+      --fg2:      #9aa5ce;
+      --fg3:      #565f89;
+      --blue:     #7aa2f7;
+      --purple:   #bb9af7;
+      --cyan:     #7dcfff;
+      --green:    #9ece6a;
+      --red:      #f7768e;
+      --yellow:   #e0af68;
+      --font:     'JetBrains Mono', 'Fira Code', monospace;
+      --sidebar-w: 210px;
+      --header-h:  38px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg0);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* ── Layout ──────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--header-h) 1fr;
+      height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────── */
+    #header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg1);
+      user-select: none;
+    }
+
+    #wordmark {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      color: var(--fg2);
+    }
+
+    #wordmark span {
+      color: var(--blue);
+    }
+
+    #header-spacer { flex: 1; }
+
+    #status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--fg3);
+    }
+
+    #status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--fg3);
+      transition: background .3s;
+    }
+    #status-dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    #status-dot.reconnecting { background: var(--yellow); animation: pulse 1s ease-in-out infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .35; }
+    }
+
+    /* ── Sidebar ─────────────────────────────── */
+    #sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--bg1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #sidebar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 10px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #sidebar-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--fg3);
+    }
+
+    #new-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      color: var(--fg2);
+      border-radius: 4px;
+      padding: 3px 8px 3px 6px;
+      font-size: 11px;
+      font-family: var(--font);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    #new-btn:hover {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: var(--bg0);
+    }
+    #new-btn svg { flex-shrink: 0; }
+
+    #session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 5px 6px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--bg3) transparent;
+    }
+    #session-list::-webkit-scrollbar { width: 4px; }
+    #session-list::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+
+    .session-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: var(--fg3);
+      transition: background .12s, color .12s;
+      border: 1px solid transparent;
+    }
+    .session-item:hover {
+      background: var(--bg2);
+      color: var(--fg2);
+    }
+    .session-item.active {
+      background: var(--bg3);
+      color: var(--fg);
+      border-color: var(--border2);
+    }
+
+    .session-indicator {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--fg3);
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    .session-item.active .session-indicator { background: var(--blue); box-shadow: 0 0 5px var(--blue); }
+
+    .session-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      outline: none;
+    }
+    .session-name[contenteditable="true"] {
+      background: var(--bg0);
+      border-radius: 3px;
+      padding: 1px 4px;
+      color: var(--fg);
+      border: 1px solid var(--blue);
+      cursor: text;
+    }
+
+    .session-clients {
+      font-size: 10px;
+      color: var(--fg3);
+      opacity: 0;
+      transition: opacity .15s;
+      flex-shrink: 0;
+    }
+    .session-item:hover .session-clients,
+    .session-item.active .session-clients { opacity: 1; }
+
+    .kill-btn {
+      opacity: 0;
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: var(--fg3);
+      cursor: pointer;
+      padding: 1px 2px;
+      font-size: 13px;
+      line-height: 1;
+      font-family: var(--font);
+      border-radius: 3px;
+      transition: all .12s;
+    }
+    .session-item:hover .kill-btn { opacity: .5; }
+    .kill-btn:hover { opacity: 1 !important; color: var(--red) !important; background: rgba(247,118,142,.1); }
+
+    #empty-state {
+      padding: 24px 10px;
+      text-align: center;
+      color: var(--fg3);
+      font-size: 11px;
+      line-height: 1.7;
+    }
+    #empty-state kbd {
+      display: inline-block;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: var(--font);
+      font-size: 11px;
+      color: var(--fg2);
+    }
+
+    /* ── Main / Terminal ─────────────────────── */
+    #main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg0);
+    }
+
+    #terminal-wrap {
+      flex: 1;
+      overflow: hidden;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+    }
+    #terminal-wrap .xterm { height: 100%; }
+
+    #no-session {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--fg3);
+    }
+
+    #no-session .prompt {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #no-session .prompt::before {
+      content: '❯';
+      color: var(--blue);
+    }
+
+    #no-session-btn {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      color: var(--fg2);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 18px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    #no-session-btn:hover {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: var(--bg0);
+    }
+
+    /* ── Mobile ──────────────────────────────── */
+    #sidebar-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--fg3);
+      cursor: pointer;
+      padding: 4px;
+      font-size: 16px;
+    }
+
+    @media (max-width: 640px) {
+      :root { --sidebar-w: 0px; }
+      #app { grid-template-columns: 0 1fr; }
+      #sidebar { position: fixed; left: 0; top: var(--header-h); bottom: 0; width: 220px; z-index: 100; transform: translateX(-100%); transition: transform .2s ease; }
+      #sidebar.open { transform: translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,.5); }
+      #sidebar-toggle { display: flex; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header id="header">
+    <button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+    <div id="wordmark">web<span>—</span>terminal</div>
+    <div id="header-spacer"></div>
+    <div id="status">
+      <div id="status-dot"></div>
+      <span id="status-text">connecting</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div id="sidebar-top">
+      <span id="sidebar-label">Sessions</span>
+      <button id="new-btn" onclick="newSession()" title="New session (n)">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        new
+      </button>
+    </div>
+    <div id="session-list"></div>
+  </nav>
+
+  <!-- Main -->
+  <main id="main">
+    <div id="no-session">
+      <div class="prompt">no active session</div>
+      <button id="no-session-btn" onclick="newSession()">new session</button>
+    </div>
+    <div id="terminal-wrap" style="display:none"></div>
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.18.0/lib/addon-webgl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script>
+const WS_URL = `ws://${location.host}/ws`;
+
+// ── xterm.js ─────────────────────────────────────────────────────
+const term = new Terminal({
+  fontSize: 13,
+  lineHeight: 1.2,
+  fontFamily: '"JetBrains Mono", "Fira Code", Menlo, monospace',
+  cursorBlink: true,
+  cursorStyle: 'block',
+  scrollback: 10000,
+  theme: {
+    background:    '#0d0e17',
+    foreground:    '#c0caf5',
+    cursor:        '#c0caf5',
+    cursorAccent:  '#0d0e17',
+    selectionBackground: '#283457',
+    black:         '#15161e',
+    red:           '#f7768e',
+    green:         '#9ece6a',
+    yellow:        '#e0af68',
+    blue:          '#7aa2f7',
+    magenta:       '#bb9af7',
+    cyan:          '#7dcfff',
+    white:         '#a9b1d6',
+    brightBlack:   '#414868',
+    brightRed:     '#f7768e',
+    brightGreen:   '#9ece6a',
+    brightYellow:  '#e0af68',
+    brightBlue:    '#7aa2f7',
+    brightMagenta: '#bb9af7',
+    brightCyan:    '#7dcfff',
+    brightWhite:   '#c0caf5',
+  },
+});
+
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+
+const wrap = document.getElementById('terminal-wrap');
+term.open(wrap);
+
+// WebGL renderer with context-loss safety
+try {
+  const webglAddon = new WebglAddon.WebglAddon();
+  webglAddon.onContextLoss(() => webglAddon.dispose());
+  term.loadAddon(webglAddon);
+} catch (e) {
+  console.warn('WebGL unavailable, using canvas renderer');
+}
+
+// Fit whenever the wrap element resizes
+const ro = new ResizeObserver(() => { fitAddon.fit(); sendResize(); });
+ro.observe(wrap);
+
+// ── State ─────────────────────────────────────────────────────────
+let ws            = null;
+let currentId     = null;
+let sessions      = [];
+
+// ── WebSocket ─────────────────────────────────────────────────────
+function connect() {
+  setStatus('reconnecting');
+  ws = new WebSocket(WS_URL);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    setStatus('connected');
+    send({ type: 'list' });
+    if (currentId) {
+      const { cols, rows } = term;
+      send({ type: 'attach', id: currentId, cols, rows });
+    }
+  };
+
+  ws.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      term.write(new Uint8Array(e.data));
+      return;
+    }
+    handleMessage(JSON.parse(e.data));
+  };
+
+  ws.onclose = () => {
+    setStatus('reconnecting');
+    setTimeout(connect, 1500);
+  };
+}
+
+function send(obj) {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'sessions':
+      sessions = msg.list;
+      renderSidebar();
+      break;
+    case 'ready':
+      currentId = msg.id;
+      showTerminal();
+      renderSidebar();
+      sendResize();
+      term.focus();
+      break;
+    case 'session-exit':
+      if (currentId === msg.id) { currentId = null; hideTerminal(); }
+      sessions = sessions.filter(s => s.id !== msg.id);
+      renderSidebar();
+      break;
+    case 'error':
+      console.error('[web-terminal]', msg.message);
+      break;
+  }
+}
+
+// ── Terminal I/O ──────────────────────────────────────────────────
+term.onData(data => send({ type: 'input', data }));
+
+function sendResize() {
+  if (!currentId) return;
+  send({ type: 'resize', cols: term.cols, rows: term.rows });
+}
+
+// ── Session actions ───────────────────────────────────────────────
+function newSession() {
+  term.reset();
+  closeSidebar();
+  const { cols, rows } = term;
+  send({ type: 'create', cols, rows });
+}
+
+function attachSession(id) {
+  if (id === currentId) return;
+  term.reset();
+  closeSidebar();
+  send({ type: 'attach', id, cols: term.cols, rows: term.rows });
+}
+
+function killSession(id, e) {
+  e.stopPropagation();
+  if (!confirm('Kill this session?')) return;
+  send({ type: 'kill', id });
+}
+
+function startRename(id, el, e) {
+  e.stopPropagation();
+  el.contentEditable = 'true';
+  el.focus();
+  // Select all
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+
+  const commit = () => {
+    el.contentEditable = 'false';
+    const name = el.textContent.trim() || 'session';
+    el.textContent = name;
+    // Optimistic local update
+    const s = sessions.find(s => s.id === id);
+    if (s) s.name = name;
+    // Inform server (server will ignore unknown types gracefully)
+    send({ type: 'rename', id, name });
+  };
+
+  el.onblur = commit;
+  el.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+    if (ev.key === 'Escape') { el.textContent = sessions.find(s=>s.id===id)?.name || ''; el.blur(); }
+    ev.stopPropagation();
+  };
+}
+
+// ── Sidebar render ────────────────────────────────────────────────
+function renderSidebar() {
+  const list = document.getElementById('session-list');
+  if (!sessions.length) {
+    list.innerHTML = `<div id="empty-state">no sessions<br/><br/>press <kbd>n</kbd> or click<br/><kbd>+ new</kbd> to start</div>`;
+    return;
+  }
+  list.innerHTML = sessions.map(s => `
+    <div class="session-item ${s.id === currentId ? 'active' : ''}"
+         onclick="attachSession('${s.id}')">
+      <div class="session-indicator"></div>
+      <span class="session-name"
+            ondblclick="startRename('${s.id}', this, event)"
+            title="double-click to rename">${escHtml(s.name)}</span>
+      ${s.clients > 1 ? `<span class="session-clients">${s.clients}</span>` : ''}
+      <button class="kill-btn" onclick="killSession('${s.id}', event)" title="Kill">✕</button>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── UI helpers ────────────────────────────────────────────────────
+function showTerminal() {
+  document.getElementById('no-session').style.display = 'none';
+  wrap.style.display = 'flex';
+  fitAddon.fit();
+}
+
+function hideTerminal() {
+  wrap.style.display = 'none';
+  document.getElementById('no-session').style.display = 'flex';
+}
+
+function setStatus(state) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  dot.className = state;
+  text.textContent = state;
+}
+
+// ── Mobile sidebar ────────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+}
+document.getElementById('main').addEventListener('click', closeSidebar);
+
+// ── Keyboard shortcuts ────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (document.activeElement === term.textarea) return;
+  if (e.key === 'n' && !e.metaKey && !e.ctrlKey) newSession();
+});
+
+// ── Go ────────────────────────────────────────────────────────────
+connect();
+</script>
+</body>
+</html>

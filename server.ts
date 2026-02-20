@@ -115,7 +115,7 @@ function broadcastSessions() {
   }
 }
 
-function createSession(name: string, cols: number, rows: number): Session {
+function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
   const id = randomUUID();
   const session: Session = {
     id,
@@ -129,6 +129,7 @@ function createSession(name: string, cols: number, rows: number): Session {
   };
 
   const proc = Bun.spawn([SHELL], {
+    ...(cwd ? { cwd } : {}),
     env: { ...process.env, TERM: "xterm-256color" },
     terminal: {
       cols,
@@ -227,7 +228,7 @@ const server = Bun.serve<WSData>({
           // Detach from any current session
           if (session) session.clients.delete(ws);
 
-          const s = createSession(data.name ?? "", data.cols ?? 80, data.rows ?? 24);
+          const s = createSession(data.name ?? "", data.cols ?? 80, data.rows ?? 24, data.cwd || undefined);
           ws.data.sessionId = s.id;
           s.clients.add(ws);
           // sessions before ready — client needs the new session in its list so
