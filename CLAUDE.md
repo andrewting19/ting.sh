@@ -24,6 +24,17 @@ In dev, Vite proxies `/ws` to `localhost:7681`. The frontend always connects to 
 2. **Update README.md** "Current state" section if working/missing features changed
 3. **Update TODO.md** — check off completed items, add newly discovered bugs or tasks
 
+## When to run tests
+
+**Speed of iteration is the priority. Never let tests block commits.**
+
+Run `bun test` only when:
+- End of a session (final sanity check before handing off)
+- You modified any file in `tests/`
+- You touched a core flow that has test coverage (session switch, kill, rename, reconnect, duplicate)
+
+Do NOT run tests after every commit — commit first, iterate fast, test at the end.
+
 These three steps keep the repo self-documenting so any future developer (or Claude session) can onboard from the files alone.
 
 ## Commit message standard
