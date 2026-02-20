@@ -26,9 +26,9 @@ In dev, Vite proxies `/ws` to `localhost:7681`. The frontend always connects to 
 
 ## When to run tests
 
-Run `bun test` **after every commit**. Tests take ~8 seconds — fast enough to not break iteration speed. If tests fail, fix and recommit before moving on.
+Run `bun test` **after every commit**. Tests take ~25 seconds — fast enough to not break iteration speed. If tests fail, fix and recommit before moving on.
 
-Both `bun test` and `bun run test` work. Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess.
+Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess. `tests/e2e.test.ts` also kills any stale processes on the test ports (4322/7682) before launching Playwright, so interrupted runs don't leave the next run broken.
 
 No unit tests — mocking React/WS/xterm.js costs more than it's worth. E2E covers the real behavior. Exception: if server.ts grows complex logic, add Bun unit tests for that file.
 
@@ -67,10 +67,11 @@ The git log is the project history. `git log --oneline` should read like a chang
 
 - `server.ts` — single file, session Map, Bun WebSocket handler. Keep it simple.
 - `src/hooks/useWS.ts` — manages WS lifecycle, auto-reconnect, stable `send` ref
-- `src/hooks/useTerminalManager.ts` — owns all xterm.js instances; exposes `ensureTerminal`, `write`, `reset`, `setActive`, `focus`, `destroy`
+- `src/hooks/useTerminalManager.ts` — owns all xterm.js instances; exposes `primeTerminal`, `ensureTerminal`, `write`, `reset`, `setActive`, `focus`, `getDimensions`, `destroy`
 - Binary WS frames = raw PTY output → `term.write(data)`. JSON frames = control messages.
 - Sessions survive tab close. Scrollback buffer (10MB cap) replayed on reconnect.
 - **Scrollback**: server always replays the full buffer on every `attach`. Client must call `tm.reset(id)` before sending `attach` to avoid duplication on re-attach. `fresh` flag in `ready` is only set for `create`, not `attach` — it's informational only now.
+- **`primeTerminal`**: called from the `ready` handler (for `create`) before React has rendered the container div. Creates the xterm.js Terminal instance in a not-yet-opened state so PTY output that arrives during the React render cycle is buffered rather than dropped. `ensureTerminal` detects the primed state and calls `term.open(container)` when the div is available.
 - **`attachSession` order matters**: `ensureTerminal` → `reset` → `setCurrentId` (optimistic) → `setActive` → `focus` → `send attach`. Focus must be called synchronously within the user gesture for iOS keyboard to appear.
 
 ## Mobile / CSS patterns
