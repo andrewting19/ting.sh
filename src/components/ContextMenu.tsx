@@ -25,18 +25,19 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     if (rect.bottom > window.innerHeight) ref.current.style.top = `${y - rect.height}px`
   }, [x, y])
 
-  // Close on outside click or Escape
+  // Close on outside tap/click or Escape.
+  // Use pointerdown (not mousedown) so it fires on touch devices too.
   useEffect(() => {
-    const onMouseDown = (e: MouseEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose()
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    // Defer so the triggering right-click doesn't immediately close the menu
-    const t = setTimeout(() => document.addEventListener('mousedown', onMouseDown), 0)
+    // Defer so the triggering press doesn't immediately close the menu
+    const t = setTimeout(() => document.addEventListener('pointerdown', onPointerDown), 0)
     document.addEventListener('keydown', onKey)
     return () => {
       clearTimeout(t)
-      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKey)
     }
   }, [onClose])

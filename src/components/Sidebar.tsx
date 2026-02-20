@@ -14,14 +14,16 @@ interface Props {
   onRename: (id: string, name: string) => void
   onDuplicate: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
+  onReorderToEnd: (fromId: string) => void
 }
 
 interface CtxMenu { id: string; x: number; y: number }
 
-export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, onKill, onRename, onDuplicate, onReorder }: Props) {
+export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, onKill, onRename, onDuplicate, onReorder, onReorderToEnd }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [dragOverEnd, setDragOverEnd] = useState(false)
   const draggedIdRef = useRef<string | null>(null)
 
   function openContextMenu(e: React.MouseEvent, id: string) {
@@ -54,34 +56,46 @@ export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, 
             <kbd>Alt+T</kbd> or click <kbd>+ new</kbd>
           </div>
         ) : (
-          sessions.map((s) => (
-            <SessionItem
-              key={s.id}
-              data-session-id={s.id}
-              session={s}
-              active={s.id === currentId}
-              isEditing={editingId === s.id}
-              isDragOver={dragOverId === s.id}
-              onAttach={() => onAttach(s.id)}
-              onKill={() => onKill(s.id)}
-              onStartEdit={() => setEditingId(s.id)}
-              onCommitEdit={(name) => { setEditingId(null); if (name !== s.name) onRename(s.id, name) }}
-              onCancelEdit={() => setEditingId(null)}
-              onContextMenu={(e) => openContextMenu(e, s.id)}
-              onLongPress={(x, y) => setCtxMenu({ id: s.id, x, y })}
-              onDragStart={() => { draggedIdRef.current = s.id }}
-              onDragOver={(e) => { e.preventDefault(); if (draggedIdRef.current !== s.id) setDragOverId(s.id) }}
-              onDragLeave={() => setDragOverId(null)}
+          <>
+            {sessions.map((s) => (
+              <SessionItem
+                key={s.id}
+                session={s}
+                active={s.id === currentId}
+                isEditing={editingId === s.id}
+                isDragOver={dragOverId === s.id}
+                onAttach={() => onAttach(s.id)}
+                onKill={() => onKill(s.id)}
+                onStartEdit={() => setEditingId(s.id)}
+                onCommitEdit={(name) => { setEditingId(null); if (name !== s.name) onRename(s.id, name) }}
+                onCancelEdit={() => setEditingId(null)}
+                onContextMenu={(e) => openContextMenu(e, s.id)}
+                onLongPress={(x, y) => setCtxMenu({ id: s.id, x, y })}
+                onDragStart={() => { draggedIdRef.current = s.id }}
+                onDragOver={(e) => { e.preventDefault(); if (draggedIdRef.current !== s.id) setDragOverId(s.id) }}
+                onDragLeave={() => setDragOverId(null)}
+                onDrop={() => {
+                  if (draggedIdRef.current && draggedIdRef.current !== s.id) {
+                    onReorder(draggedIdRef.current, s.id)
+                  }
+                  draggedIdRef.current = null
+                  setDragOverId(null)
+                }}
+                onDragEnd={() => { draggedIdRef.current = null; setDragOverId(null) }}
+              />
+            ))}
+            {/* Drop target at the end so you can drag a session to the last position */}
+            <div
+              className={`session-drop-end${dragOverEnd ? ' drag-over' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverEnd(true) }}
+              onDragLeave={() => setDragOverEnd(false)}
               onDrop={() => {
-                if (draggedIdRef.current && draggedIdRef.current !== s.id) {
-                  onReorder(draggedIdRef.current, s.id)
-                }
+                if (draggedIdRef.current) onReorderToEnd(draggedIdRef.current)
                 draggedIdRef.current = null
-                setDragOverId(null)
+                setDragOverEnd(false)
               }}
-              onDragEnd={() => { draggedIdRef.current = null; setDragOverId(null) }}
             />
-          ))
+          </>
         )}
       </div>
 
@@ -116,7 +130,6 @@ interface ItemProps {
   active: boolean
   isEditing: boolean
   isDragOver: boolean
-  'data-session-id': string
   onAttach: () => void
   onKill: () => void
   onStartEdit: () => void
@@ -131,15 +144,19 @@ interface ItemProps {
   onDragEnd: () => void
 }
 
-function SessionItem({ session, active, isEditing, isDragOver, 'data-session-id': dataSessionId, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onLongPress, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
+function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onLongPress, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
   const [draft, setDraft] = useState(session.name)
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Set to true when a long-press fires; suppresses the subsequent click event
+  const longPressFiredRef = useRef(false)
 
   function startLongPress(e: React.PointerEvent) {
+    longPressFiredRef.current = false
     if (e.button !== 0 && e.pointerType !== 'touch') return
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null
+      longPressFiredRef.current = true
       onLongPress(e.clientX, e.clientY)
     }, 500)
   }
@@ -172,9 +189,12 @@ function SessionItem({ session, active, isEditing, isDragOver, 'data-session-id'
   return (
     <div
       className={`session-item ${active ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
-      data-session-id={dataSessionId}
       draggable={!isEditing}
-      onClick={onAttach}
+      onClick={() => {
+        // Suppress the click that fires right after a long-press completes
+        if (longPressFiredRef.current) { longPressFiredRef.current = false; return }
+        onAttach()
+      }}
       onContextMenu={onContextMenu}
       onPointerDown={startLongPress}
       onPointerUp={cancelLongPress}

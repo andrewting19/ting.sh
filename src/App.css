@@ -194,6 +194,14 @@ html, body, #root {
 }
 .session-item.drag-over { box-shadow: 0 -2px 0 var(--blue); }
 
+.session-drop-end {
+  height: 8px;
+  border-radius: 2px;
+  margin: 0 4px;
+  transition: background 0.1s;
+}
+.session-drop-end.drag-over { background: var(--blue); }
+
 .session-indicator {
   width: 5px; height: 5px;
   border-radius: 50%;
