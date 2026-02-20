@@ -93,9 +93,10 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     activeIdRef.current = sessionId
 
-    // Load WebGL on newly active terminal
+    // Load WebGL on newly active terminal (skip on mobile — fails silently on iOS Safari)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     const entry = entriesRef.current.get(sessionId)
-    if (entry && !entry.webglAddon) {
+    if (entry && !entry.webglAddon && !isMobile) {
       try {
         const webgl = new WebglAddon()
         webgl.onContextLoss(() => { webgl.dispose(); entry.webglAddon = null })

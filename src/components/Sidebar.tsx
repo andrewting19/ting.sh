@@ -7,6 +7,7 @@ interface Props {
   sessions: Session[]
   currentId: string | null
   status: ConnectionStatus
+  isOpen: boolean
   onNew: () => void
   onAttach: (id: string) => void
   onKill: (id: string) => void
@@ -17,7 +18,7 @@ interface Props {
 
 interface CtxMenu { id: string; x: number; y: number }
 
-export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, onRename, onDuplicate, onReorder }: Props) {
+export function Sidebar({ sessions, currentId, status, isOpen, onNew, onAttach, onKill, onRename, onDuplicate, onReorder }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -29,7 +30,7 @@ export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, 
   }
 
   return (
-    <nav className="sidebar">
+    <nav className={`sidebar${isOpen ? ' open' : ''}`}>
       <div className="sidebar-top">
         <div className="sidebar-meta">
           <span className="sidebar-label">Sessions</span>
@@ -66,6 +67,7 @@ export function Sidebar({ sessions, currentId, status, onNew, onAttach, onKill, 
               onCommitEdit={(name) => { setEditingId(null); if (name !== s.name) onRename(s.id, name) }}
               onCancelEdit={() => setEditingId(null)}
               onContextMenu={(e) => openContextMenu(e, s.id)}
+              onLongPress={(x, y) => setCtxMenu({ id: s.id, x, y })}
               onDragStart={() => { draggedIdRef.current = s.id }}
               onDragOver={(e) => { e.preventDefault(); if (draggedIdRef.current !== s.id) setDragOverId(s.id) }}
               onDragLeave={() => setDragOverId(null)}
@@ -119,6 +121,7 @@ interface ItemProps {
   onCommitEdit: (name: string) => void
   onCancelEdit: () => void
   onContextMenu: (e: React.MouseEvent) => void
+  onLongPress: (x: number, y: number) => void
   onDragStart: () => void
   onDragOver: (e: DragEvent<HTMLDivElement>) => void
   onDragLeave: () => void
@@ -126,9 +129,25 @@ interface ItemProps {
   onDragEnd: () => void
 }
 
-function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
+function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill, onStartEdit, onCommitEdit, onCancelEdit, onContextMenu, onLongPress, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: ItemProps) {
   const [draft, setDraft] = useState(session.name)
   const inputRef = useRef<HTMLInputElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function startLongPress(e: React.PointerEvent) {
+    if (e.button !== 0 && e.pointerType !== 'touch') return
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null
+      onLongPress(e.clientX, e.clientY)
+    }, 500)
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
 
   // When editing starts (triggered externally), reset draft and focus
   useEffect(() => {
@@ -154,6 +173,10 @@ function SessionItem({ session, active, isEditing, isDragOver, onAttach, onKill,
       draggable={!isEditing}
       onClick={onAttach}
       onContextMenu={onContextMenu}
+      onPointerDown={startLongPress}
+      onPointerUp={cancelLongPress}
+      onPointerMove={cancelLongPress}
+      onPointerCancel={cancelLongPress}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

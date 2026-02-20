@@ -62,4 +62,20 @@ The git log is the project history. `git log --oneline` should read like a chang
 - `src/components/Terminal.tsx` — thin wrapper around xterm.js, exposes imperative handle via `forwardRef`
 - Binary WS frames = raw PTY output → `term.write(data)`. JSON frames = control messages.
 - Sessions survive tab close. Scrollback buffer (10MB cap) replayed on reconnect.
-- `fresh: true` in server's `ready` response means it's a newly created session (not an existing one being reattached) — client uses this to know it's safe to `term.reset()` without losing scrollback.
+- **Scrollback**: server always replays the full buffer on every `attach`. Client must call `tm.reset(id)` before sending `attach` to avoid duplication on re-attach. `fresh` flag in `ready` is only set for `create`, not `attach` — it's informational only now.
+- **`attachSession` order matters**: `ensureTerminal` → `reset` → `setCurrentId` (optimistic) → `setActive` → `focus` → `send attach`. Focus must be called synchronously within the user gesture for iOS keyboard to appear.
+
+## Mobile / CSS patterns
+
+- **Never use `display:none` for inactive terminal panes** — FitAddon can't measure. Use `opacity: 0; pointer-events: none`.
+- **Never use `visibility: hidden` for focusable elements** — iOS Safari won't trigger keyboard from elements inside `visibility: hidden` containers. Use `opacity: 0` instead.
+- **Always wrap hover styles in `@media (hover: hover)`** — touch devices fire `:hover` on first tap, causing double-tap to select. Pattern:
+  ```css
+  @media (hover: hover) {
+    .thing:hover { background: var(--bg2); }
+  }
+  ```
+- **Use `100dvh` not `100vh`** — iOS Safari's `100vh` ignores the collapsible browser chrome. Always set both: `height: 100vh; height: 100dvh;`
+- **Grid + `position: fixed` children**: fixed elements don't block grid auto-placement. Give `.main` explicit `grid-column: 2; grid-row: 2` so it doesn't collapse to the 0px sidebar column on mobile.
+- **WebGL on mobile**: skip it — fails silently on iOS Safari. Detect with `navigator.userAgent` and fall through to canvas renderer.
+- **Long-press for context menu on touch**: use `pointerdown` + 500ms timeout, cancel on `pointerup`/`pointermove`. Right-click doesn't exist on touch devices.

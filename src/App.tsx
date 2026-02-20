@@ -10,6 +10,7 @@ export function App() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [killTarget, setKillTarget] = useState<Session | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Sync refs for use inside callbacks (avoid stale closures)
   const currentIdRef = useRef<string | null>(null)
@@ -81,6 +82,7 @@ export function App() {
       attachingIdRef.current = id
       const container = containerRefs.current.get(id)
       if (container) tm.ensureTerminal(id, container)
+      tm.reset(id)
       const dims = tm.getDimensions(id)
       send({ type: 'attach', id, ...dims })
     }
@@ -154,8 +156,6 @@ export function App() {
           })
         }
 
-        // If fresh (new session), reset the terminal to clear any prior state
-        if (m.fresh) tm.reset(id)
         break
       }
 
@@ -186,11 +186,22 @@ export function App() {
   }
 
   function attachSession(id: string) {
-    if (id === currentIdRef.current) return
+    if (id === currentIdRef.current) {
+      tm.focus(id)
+      return
+    }
     attachingIdRef.current = id
-    // Ensure terminal exists before scrollback arrives
     const container = containerRefs.current.get(id)
     if (container) tm.ensureTerminal(id, container)
+    // Clear existing content — server always replays the full scrollback buffer
+    // on every attach, so we must reset first to avoid duplication.
+    tm.reset(id)
+    // Optimistic: make pane visible immediately so focus() fires within the
+    // user gesture (required for iOS keyboard), without waiting for ready.
+    currentIdRef.current = id
+    setCurrentId(id)
+    tm.setActive(id)
+    tm.focus(id)
     const dims = tm.getDimensions(id)
     send({ type: 'attach', id, ...dims })
   }
@@ -217,15 +228,21 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
+        <button className="hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+          <span /><span /><span />
+        </button>
         <div className="wordmark">web<span>—</span>terminal</div>
       </header>
+
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
 
       <Sidebar
         sessions={orderedSessions}
         currentId={currentId}
         status={status}
+        isOpen={sidebarOpen}
         onNew={() => newSession()}
-        onAttach={attachSession}
+        onAttach={(id) => { attachSession(id); setSidebarOpen(false) }}
         onKill={(id) => setKillTarget(sessions.find(s => s.id === id) ?? null)}
         onRename={renameSession}
         onDuplicate={duplicateSession}

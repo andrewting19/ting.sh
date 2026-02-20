@@ -27,10 +27,20 @@
 
 ## Up next (in order)
 
-1. **Drag-and-drop reordering** — HTML5 drag on session list, persists to localStorage
-   (ordering infrastructure already in place in App.tsx)
-2. **Copy-on-select** — one line: `copyOnSelect: true` in xterm.js options
-3. **URL routing** — `/?s=<id>` to deeplink / bookmark directly to a session
+1. **E2E test suite (Playwright)** — high priority; project is fully AI-vibe-coded so
+   agents need automated regression detection between sessions. Key flows to cover:
+   - Session create, switch, scrollback replay (no duplication), kill, rename
+   - Reconnect behavior (WS drop + rejoin)
+   - Mobile layout (viewport resize, sidebar toggle)
+   Strategy: start `bun run dev` as a fixture, drive browser with Playwright,
+   read terminal content via `term.buffer.active` exposed through a test hook or
+   `page.evaluate`. See `testing.md` (to be created) for architecture.
+
+2. **Long-press context menu on mobile** — touch devices have no right-click;
+   need `pointerdown` + 500ms timeout → open context menu at touch position.
+   Cancel on `pointerup`/`pointermove`. Replaces the hidden kill button on touch.
+
+3. **URL routing** — `#<id>` hash to deeplink / bookmark directly to a session
 
 ## Backlog
 
