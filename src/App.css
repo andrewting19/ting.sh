@@ -197,12 +197,13 @@ html, body, #root {
 .session-name-input {
   width: 100%;
   background: var(--bg0);
-  border: 1px solid var(--blue);
+  border: none;
+  box-shadow: 0 0 0 1px var(--blue); /* visual border without affecting layout */
   border-radius: 3px;
   color: var(--fg);
   font-family: var(--font);
   font-size: 12px;
-  line-height: 1;
+  line-height: inherit;
   padding: 0 3px;
   outline: none;
   min-width: 0;
