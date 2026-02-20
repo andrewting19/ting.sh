@@ -64,7 +64,26 @@ export async function waitForPrompt(page: Page, sessionId: string, timeout = 800
     },
     sessionId,
     { timeout },
-  )
+  ).catch(async (err: Error) => {
+    // Diagnose why waitForPrompt failed — log terminal state at time of failure
+    const diag = await page.evaluate((id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wt = (window as any).__wt_terminals
+      if (!wt) return 'no __wt_terminals map'
+      const entry = wt.get(id)
+      if (!entry) return `no entry for id ${id} (map has ${wt.size} entries, keys: ${[...wt.keys()].join(',')})`
+      const buf = entry.term.buffer.active
+      const lines: string[] = []
+      for (let i = 0; i < Math.min(buf.length, 5); i++) {
+        lines.push(JSON.stringify(buf.getLine(i)?.translateToString(true) ?? ''))
+      }
+      return `entry exists (opened=${entry.opened}), buf.length=${buf.length}, first 5 lines: [${lines.join(', ')}]`
+    }, sessionId)
+    const sessions = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-session-id]')].map(el => el.getAttribute('data-session-id')).join(',')
+    )
+    throw new Error(`${err.message}\nDiagnostic: ${diag}\nVisible sessions: [${sessions}]`)
+  })
 }
 
 /**
