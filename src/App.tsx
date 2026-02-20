@@ -25,6 +25,10 @@ export function App() {
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceRef = useRef<string | null>(null)
 
+  // URL hash routing: only do the initial hash navigation once, after the
+  // first non-empty sessions list arrives from the server.
+  const hasHandledInitialHashRef = useRef(false)
+
   // Client-side session order (persisted to localStorage for drag-and-drop etc.)
   const [sessionOrder, setSessionOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('wt-session-order') ?? '[]') } catch { return [] }
@@ -111,6 +115,17 @@ export function App() {
     }
   }, [currentId, sessions.length, tm])
 
+  // hashchange: if the user manually edits the URL hash, navigate to that session
+  useEffect(() => {
+    const handler = () => {
+      const id = location.hash.slice(1)
+      const s = sessionsRef.current.find(s => s.id === id)
+      if (s) attachSession(s.id)
+    }
+    window.addEventListener('hashchange', handler)
+    return () => window.removeEventListener('hashchange', handler)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -141,9 +156,18 @@ export function App() {
   function handleMessage(msg: unknown) {
     const m = msg as Record<string, unknown>
     switch (m.type) {
-      case 'sessions':
-        setSessions(m.list as Session[])
+      case 'sessions': {
+        const list = m.list as Session[]
+        setSessions(list)
+        // After the first real sessions list arrives, navigate to the #hash
+        // session if one is present in the URL (deeplink / bookmark support).
+        if (!hasHandledInitialHashRef.current && list.length > 0) {
+          hasHandledInitialHashRef.current = true
+          const hashId = location.hash.slice(1)
+          if (hashId && list.find(s => s.id === hashId)) attachSession(hashId)
+        }
         break
+      }
 
       case 'ready': {
         const id = m.id as string
@@ -175,6 +199,7 @@ export function App() {
         if (currentIdRef.current === id) {
           currentIdRef.current = null
           setCurrentId(null)
+          history.replaceState(null, '', location.pathname)
         }
         break
       }
@@ -213,6 +238,8 @@ export function App() {
     tm.focus(id)
     const dims = tm.getDimensions(id)
     send({ type: 'attach', id, ...dims })
+    // Update URL hash for bookmarking / deeplink
+    history.replaceState(null, '', '#' + id)
   }
 
   function killSession(id: string) {

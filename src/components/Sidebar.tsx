@@ -235,7 +235,6 @@ function SessionItem({ session, active, isEditing, isDragOver, 'data-session-id'
         )}
       </div>
 
-      {session.clients > 1 && <span className="session-clients">{session.clients}</span>}
 
       <button
         className="kill-btn"
