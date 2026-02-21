@@ -14,6 +14,22 @@ async function getHash(page: import('@playwright/test').Page): Promise<string> {
   return page.evaluate(() => decodeURIComponent(location.hash.slice(1)))
 }
 
+/** Returns the server-reported local host ID. */
+async function getLocalHostId(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(async () => {
+    try {
+      const res = await fetch('/api/host')
+      if (!res.ok) return 'local'
+      const json = await res.json() as { self?: { id?: unknown } }
+      return typeof json.self?.id === 'string' && json.self.id.trim().length > 0
+        ? json.self.id.trim()
+        : 'local'
+    } catch {
+      return 'local'
+    }
+  })
+}
+
 /** Returns the visible name text for a session item. */
 async function getSessionName(page: import('@playwright/test').Page, id: string): Promise<string> {
   return page.$eval(`[data-session-id="${id}"] .session-name`, el => el.textContent ?? '')
@@ -518,10 +534,11 @@ test('shared session — desktop reclaims width after mobile resize', async ({ p
 test('url hash — switching session updates hash to host/sessionName', async ({ page }) => {
   const id1 = await newSession(page)
   const id2 = await newSession(page)
+  const localHostId = await getLocalHostId(page)
   // id2 is active after creation; switch to id1
   await switchToSession(page, id1)
   const name1 = await getSessionName(page, id1)
-  const expected1 = `local/${name1}`
+  const expected1 = `${localHostId}/${name1}`
 
   await page.waitForFunction(
     (expected: string) => decodeURIComponent(location.hash.slice(1)) === expected,
@@ -533,7 +550,7 @@ test('url hash — switching session updates hash to host/sessionName', async ({
   // Switch back to id2 — hash should follow
   await switchToSession(page, id2)
   const name2 = await getSessionName(page, id2)
-  const expected2 = `local/${name2}`
+  const expected2 = `${localHostId}/${name2}`
   await page.waitForFunction(
     (expected: string) => decodeURIComponent(location.hash.slice(1)) === expected,
     expected2,

@@ -8,7 +8,7 @@ import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
 import './App.css'
 
-const LOCAL_HOST_ID = 'local'
+const LEGACY_LOCAL_HOST_ID = 'local'
 type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
 type SessionOrderByHost = Record<string, string[]>
 
@@ -27,12 +27,12 @@ function toStringArray(value: unknown): string[] {
   return next
 }
 
-function readHostSessionOrder(hostId: string): string[] {
+function readHostSessionOrder(hostId: string, isLocalHost = false): string[] {
   try {
     const raw = localStorage.getItem(`${SESSION_ORDER_STORAGE_PREFIX}${hostId}`)
     if (raw) return toStringArray(JSON.parse(raw))
 
-    if (hostId !== LOCAL_HOST_ID) return []
+    if (!isLocalHost && hostId !== LEGACY_LOCAL_HOST_ID) return []
     const legacyRaw = localStorage.getItem(LEGACY_SESSION_ORDER_KEY)
     if (!legacyRaw) return []
     const legacy = toStringArray(JSON.parse(legacyRaw))
@@ -59,13 +59,33 @@ function sameStringArray(a: string[], b: string[]): boolean {
   return true
 }
 
+function remapSessionKeyHost(key: SessionKey | null, fromHostId: string, toHostId: string): SessionKey | null {
+  if (!key || fromHostId === toHostId) return key
+  const { hostId, sessionId } = parseKey(key)
+  if (hostId !== fromHostId) return key
+  return makeKey(toHostId, sessionId)
+}
+
+function normalizeHostId(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  const id = value.trim()
+  if (!id || id.includes(':')) return fallback
+  return id
+}
+
+function normalizeHostName(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  const name = value.trim()
+  return name || fallback
+}
+
 export function App() {
-  const [hosts, setHosts] = useState<Host[]>([{ id: LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
+  const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
   const [killTargetKey, setKillTargetKey] = useState<SessionKey | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const localHostId = hosts.find(h => h.local)?.id ?? LOCAL_HOST_ID
+  const localHostId = hosts.find(h => h.local)?.id ?? LEGACY_LOCAL_HOST_ID
   const currentHostId = currentKey ? parseKey(currentKey).hostId : localHostId
   const sessions = hostSessions.get(currentHostId) ?? []
   const currentId = currentKey ? parseKey(currentKey).sessionId : null
@@ -102,7 +122,7 @@ export function App() {
 
   // Client-side session order (persisted to localStorage for drag-and-drop etc.)
   const [sessionOrderByHost, setSessionOrderByHost] = useState<SessionOrderByHost>(() => ({
-    [LOCAL_HOST_ID]: readHostSessionOrder(LOCAL_HOST_ID),
+    [LEGACY_LOCAL_HOST_ID]: readHostSessionOrder(LEGACY_LOCAL_HOST_ID, true),
   }))
   sessionOrderByHostRef.current = sessionOrderByHost
 
@@ -118,7 +138,7 @@ export function App() {
       const next = { ...prev }
       for (const host of hosts) {
         if (Object.prototype.hasOwnProperty.call(next, host.id)) continue
-        next[host.id] = readHostSessionOrder(host.id)
+        next[host.id] = readHostSessionOrder(host.id, host.local)
         changed = true
       }
       return changed ? next : prev
@@ -141,7 +161,8 @@ export function App() {
     const rawHost = raw.slice(0, slashIdx)
     const rawTarget = raw.slice(slashIdx + 1)
     try {
-      const hostId = decodeURIComponent(rawHost)
+      const decodedHostId = decodeURIComponent(rawHost)
+      const hostId = decodedHostId === LEGACY_LOCAL_HOST_ID ? localHostId : decodedHostId
       const target = decodeURIComponent(rawTarget)
       if (!hostId || !target) return null
       return { hostId, target }
@@ -223,6 +244,75 @@ export function App() {
     },
   })
 
+  const reconcileLocalHostIdentity = useCallback((connectionHostId: string, reportedId: string, reportedName: string) => {
+    const localConnection = hosts.find(host => host.local && host.id === connectionHostId)
+    const currentName = hosts.find(host => host.id === connectionHostId)?.name ?? 'Local Host'
+    const normalizedName = normalizeHostName(reportedName, currentName)
+    if (!localConnection) {
+      setHosts(prev => prev.map(host => host.id === connectionHostId ? { ...host, name: normalizedName } : host))
+      return
+    }
+
+    const normalizedId = normalizeHostId(reportedId, connectionHostId)
+    const collides = normalizedId !== connectionHostId && hosts.some(host => host.id === normalizedId && host.id !== connectionHostId)
+    const nextLocalId = collides ? connectionHostId : normalizedId
+
+    setHosts(prev => prev.map(host => {
+      if (!(host.local && host.id === connectionHostId)) return host
+      return { ...host, id: nextLocalId, name: normalizedName }
+    }))
+
+    if (nextLocalId === connectionHostId) return
+
+    const migratedSessions = hostSessionsRef.current.get(connectionHostId) ?? []
+    for (const session of migratedSessions) {
+      const oldKey = makeKey(connectionHostId, session.id)
+      tm.destroy(oldKey)
+      containerRefs.current.delete(oldKey)
+    }
+
+    setHostSessions(prev => {
+      const moved = prev.get(connectionHostId)
+      if (!moved) return prev
+      const next = new Map(prev)
+      next.delete(connectionHostId)
+      const existing = next.get(nextLocalId) ?? []
+      const byId = new Map<string, Session>()
+      for (const session of existing) byId.set(session.id, session)
+      for (const session of moved) byId.set(session.id, { ...session, hostId: nextLocalId })
+      next.set(nextLocalId, [...byId.values()])
+      return next
+    })
+
+    setSessionOrderByHost(prev => {
+      const moved = prev[connectionHostId]
+      if (!moved) return prev
+      const existing = prev[nextLocalId] ?? []
+      const merged = [...moved, ...existing.filter(id => !moved.includes(id))]
+      const next: SessionOrderByHost = { ...prev, [nextLocalId]: merged }
+      delete next[connectionHostId]
+      return next
+    })
+
+    currentKeyRef.current = remapSessionKeyHost(currentKeyRef.current, connectionHostId, nextLocalId)
+    attachedKeyRef.current = remapSessionKeyHost(attachedKeyRef.current, connectionHostId, nextLocalId)
+    pendingAttachTargetKeyRef.current = remapSessionKeyHost(pendingAttachTargetKeyRef.current, connectionHostId, nextLocalId)
+    duplicateSourceKeyRef.current = remapSessionKeyHost(duplicateSourceKeyRef.current, connectionHostId, nextLocalId)
+    setCurrentKey(prev => remapSessionKeyHost(prev, connectionHostId, nextLocalId))
+    setKillTargetKey(prev => remapSessionKeyHost(prev, connectionHostId, nextLocalId))
+
+    const remappedKilled = new Set<SessionKey>()
+    for (const key of killedSessionKeys.current) {
+      const mapped = remapSessionKeyHost(key, connectionHostId, nextLocalId)
+      if (mapped) remappedKilled.add(mapped)
+    }
+    killedSessionKeys.current = remappedKilled
+
+    if (pendingRequestRef.current?.hostId === connectionHostId) {
+      pendingRequestRef.current = { ...pendingRequestRef.current, hostId: nextLocalId }
+    }
+  }, [hosts, tm])
+
   const sendAttachRequest = useCallback((key: SessionKey) => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
     const { hostId, sessionId } = parseKey(key)
@@ -277,11 +367,29 @@ export function App() {
       try {
         const res = await fetch('/api/host')
         if (!res.ok) return
-        const json = await res.json() as { self: { id: string; name: string }; peers: Array<{ id: string; name: string; url: string }> }
+        const json = await res.json() as {
+          self?: { id?: unknown; name?: unknown }
+          peers?: Array<{ id?: unknown; name?: unknown; url?: unknown }>
+        }
         if (cancelled) return
+        const selfId = normalizeHostId(json.self?.id, LEGACY_LOCAL_HOST_ID)
+        const selfName = normalizeHostName(json.self?.name, 'Local Host')
+        const seen = new Set<string>([selfId])
+        const peers = (json.peers ?? []).flatMap(peer => {
+          const id = normalizeHostId(peer.id, '')
+          if (!id || seen.has(id)) return []
+          if (typeof peer.url !== 'string' || peer.url.trim().length === 0) return []
+          seen.add(id)
+          return [{
+            id,
+            name: normalizeHostName(peer.name, id),
+            url: peer.url,
+            local: false,
+          }]
+        })
         setHosts([
-          { id: LOCAL_HOST_ID, name: json.self.name || 'Local Host', url: location.origin, local: true },
-          ...json.peers.map(peer => ({ id: peer.id, name: peer.name, url: peer.url, local: false })),
+          { id: selfId, name: selfName, url: location.origin, local: true },
+          ...peers,
         ])
       } catch {
         // stay in single-host fallback mode
@@ -399,9 +507,9 @@ export function App() {
     const m = msg as Record<string, unknown>
     switch (m.type) {
       case 'host-info': {
-        const name = typeof m.name === 'string' && m.name.trim().length > 0 ? m.name : null
-        if (!name) break
-        setHosts(prev => prev.map(host => host.id === hostId ? { ...host, name } : host))
+        const reportedId = normalizeHostId(m.id, hostId)
+        const reportedName = normalizeHostName(m.name, '')
+        reconcileLocalHostIdentity(hostId, reportedId, reportedName)
         break
       }
 
