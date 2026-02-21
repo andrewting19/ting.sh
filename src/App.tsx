@@ -4,7 +4,7 @@ import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
-import type { Host, Session, SessionKey } from './types'
+import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
 import './App.css'
 

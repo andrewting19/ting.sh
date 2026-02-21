@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { utimesSync } from 'node:fs'
 import { getSessions, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
 
 /** Returns the data-session-id of the currently active session item. */
@@ -16,6 +17,42 @@ async function getHash(page: import('@playwright/test').Page): Promise<string> {
 /** Returns the visible name text for a session item. */
 async function getSessionName(page: import('@playwright/test').Page, id: string): Promise<string> {
   return page.$eval(`[data-session-id="${id}"] .session-name`, el => el.textContent ?? '')
+}
+
+/** Query server-reported attached-client count for a session via a probe WS. */
+async function getAttachedClientCount(page: import('@playwright/test').Page, id: string): Promise<number> {
+  return page.evaluate((sessionId: string) => {
+    return new Promise<number>((resolve, reject) => {
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const ws = new WebSocket(`${wsProtocol}//${location.host}/ws`)
+      const timer = setTimeout(() => {
+        ws.close()
+        reject(new Error('timed out waiting for sessions list'))
+      }, 5000)
+
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'list' }))
+
+      ws.onmessage = (e) => {
+        if (typeof e.data !== 'string') return
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type !== 'sessions' || !Array.isArray(msg.list)) return
+          const target = msg.list.find((s: { id?: unknown }) => s.id === sessionId) as { clients?: unknown } | undefined
+          clearTimeout(timer)
+          ws.close()
+          resolve(typeof target?.clients === 'number' ? target.clients : 0)
+        } catch {
+          // ignore malformed messages while probing
+        }
+      }
+
+      ws.onerror = () => {
+        clearTimeout(timer)
+        ws.close()
+        reject(new Error('probe websocket error'))
+      }
+    })
+  }, id)
 }
 
 /** Read the PTY rows/cols by running `stty size` and parsing marked output. */
@@ -397,6 +434,40 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
   // Session still in sidebar and terminal content replayed from server buffer
   await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible()
   await waitForPrompt(page, id)
+})
+
+test('server hot reload — reconnect does not duplicate output', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const marker = `hot_reload_before_${Date.now()}`
+  await page.keyboard.type(`echo ${marker}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, marker)
+
+  const beforeText = await getTerminalText(page, id)
+  const beforeCount = (beforeText.match(new RegExp(marker, 'g')) ?? []).length
+
+  const now = new Date()
+  utimesSync('server.ts', now, now)
+
+  await page.locator('.status-dot.reconnecting').waitFor({ state: 'visible', timeout: 1500 }).catch(() => {})
+  await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
+
+  await switchToSession(page, id)
+  await waitForTerminal(page, id, marker)
+
+  const afterText = await getTerminalText(page, id)
+  const afterCount = (afterText.match(new RegExp(marker, 'g')) ?? []).length
+  expect(afterCount).toBe(beforeCount)
+  expect(await getAttachedClientCount(page, id)).toBe(1)
+
+  const markerAfter = `hot_reload_after_${Date.now()}`
+  await page.keyboard.type(`echo ${markerAfter}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, markerAfter)
+  const finalText = await getTerminalText(page, id)
+  expect((finalText.match(new RegExp(markerAfter, 'g')) ?? []).length).toBe(2)
 })
 
 test('shared session — desktop reclaims width after mobile resize', async ({ page, browser }) => {

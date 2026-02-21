@@ -11,6 +11,7 @@
 - [x] Shared-session width stuck after phone use — fixed (foreground + same-session resize reclaim)
 - [x] Output leaked into wrong terminal during fast session switches — fixed (requestId-validated attach + stale-stream binary quarantine)
 - [x] Truncated replay could render with broken ANSI state — fixed (sanitize first partial line after buffer cap trims)
+- [x] Duplicate output after reconnect/hot reload — fixed (ignore stale WS events + hot-reload regression test)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
@@ -29,7 +30,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 26 tests covering all key flows
+- [x] E2E test suite (Playwright) — 28 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)

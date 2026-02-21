@@ -47,10 +47,12 @@ export class WSConnection {
     ws.binaryType = 'arraybuffer'
 
     ws.onopen = () => {
+      if (this.ws !== ws) return
       this.handlers.onStatusChange('connected')
     }
 
     ws.onmessage = (e) => {
+      if (this.ws !== ws) return
       if (e.data instanceof ArrayBuffer) {
         this.handlers.onBinary(e.data)
         return
@@ -63,9 +65,15 @@ export class WSConnection {
     }
 
     ws.onclose = () => {
+      if (this.ws !== ws) return
+      this.ws = null
       if (this.intentionallyClosed) return
       this.handlers.onStatusChange('reconnecting')
-      this.reconnectTimer = setTimeout(() => this.connect(), 1500)
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null
+        this.connect()
+      }, 1500)
     }
   }
 }
