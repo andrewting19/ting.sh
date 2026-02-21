@@ -4,7 +4,7 @@ import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
-import type { ConnectionStatus, Host, Session, SessionKey } from './types'
+import type { Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
 import './App.css'
 
@@ -18,7 +18,8 @@ export function App() {
   const [killTargetKey, setKillTargetKey] = useState<SessionKey | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const localHostId = hosts.find(h => h.local)?.id ?? LOCAL_HOST_ID
-  const sessions = hostSessions.get(localHostId) ?? []
+  const currentHostId = currentKey ? parseKey(currentKey).hostId : localHostId
+  const sessions = hostSessions.get(currentHostId) ?? []
   const currentId = currentKey ? parseKey(currentKey).sessionId : null
 
   // Sync refs for use inside callbacks (avoid stale closures)
@@ -66,7 +67,7 @@ export function App() {
   // Skip when sessions is empty (initial state before WS connects) to avoid
   // wiping the localStorage-restored order before we have real data.
   useEffect(() => {
-    const allKeys = [...hostSessions.values()].flatMap(list => list.map(s => makeKey(localHostId, s.id)))
+    const allKeys = [...hostSessions.values()].flatMap(list => list.map(s => makeKey(s.hostId, s.id)))
     if (allKeys.length === 0) return
     setSessionOrder(prev => {
       const ids = new Set(allKeys)
@@ -77,13 +78,18 @@ export function App() {
     })
   }, [hostSessions, localHostId])
 
-  const orderedSessions = useMemo(() =>
-    [...sessions].sort((a, b) => {
-      const ai = sessionOrder.indexOf(makeKey(localHostId, a.id))
-      const bi = sessionOrder.indexOf(makeKey(localHostId, b.id))
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-    }),
-  [sessions, sessionOrder, localHostId])
+  const orderedHostSessions = useMemo(() => {
+    const next = new Map<string, Session[]>()
+    for (const host of hosts) {
+      const list = hostSessions.get(host.id) ?? []
+      next.set(host.id, [...list].sort((a, b) => {
+        const ai = sessionOrder.indexOf(makeKey(host.id, a.id))
+        const bi = sessionOrder.indexOf(makeKey(host.id, b.id))
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+      }))
+    }
+    return next
+  }, [hostSessions, hosts, sessionOrder])
 
   // Per-session container refs — one div per session, always in DOM
   const containerRefs = useRef<Map<SessionKey, HTMLDivElement>>(new Map())
@@ -259,6 +265,7 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const activeHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
       // Use e.code (physical key) not e.key — on macOS, Option remaps keys at
       // the OS level so e.key is '†'/'∑'/'¡' instead of 't'/'w'/'1'.
       if (e.altKey && e.code === 'KeyT') { e.preventDefault(); newSession() }
@@ -269,13 +276,13 @@ export function App() {
       }
       if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
         e.preventDefault()
-        const ordered = [...(hostSessionsRef.current.get(localHostId) ?? [])].sort((a, b) => {
-          const ai = sessionOrderRef.current.indexOf(makeKey(localHostId, a.id))
-          const bi = sessionOrderRef.current.indexOf(makeKey(localHostId, b.id))
+        const ordered = [...(hostSessionsRef.current.get(activeHostId) ?? [])].sort((a, b) => {
+          const ai = sessionOrderRef.current.indexOf(makeKey(activeHostId, a.id))
+          const bi = sessionOrderRef.current.indexOf(makeKey(activeHostId, b.id))
           return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
         })
         const s = ordered[parseInt(e.code[5]) - 1]
-        if (s) attachSession(makeKey(localHostId, s.id))
+        if (s) attachSession(makeKey(activeHostId, s.id))
       }
     }
     // Capture phase (true) so we intercept before xterm.js, which consumes
@@ -430,22 +437,22 @@ export function App() {
     }
   }
 
-  function newSession(cwd?: string) {
+  function newSession(hostId = (currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId), cwd?: string) {
     const dims = currentKeyRef.current
       ? tm.getDimensions(currentKeyRef.current)
       : { cols: 80, rows: 24 }
-    const targetHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
     const requestId = `create-${++nextRequestSeqRef.current}`
-    pendingRequestRef.current = { hostId: targetHostId, requestId, kind: 'create' }
+    pendingRequestRef.current = { hostId, requestId, kind: 'create' }
     pendingAttachTargetKeyRef.current = null
     dropBinaryUntilReadyRef.current = false
-    sendToHost(targetHostId, { type: 'create', requestId, ...(cwd ? { cwd } : {}), ...dims })
+    sendToHost(hostId, { type: 'create', requestId, ...(cwd ? { cwd } : {}), ...dims })
   }
 
-  function duplicateSession(sourceId: string) {
-    const source = (hostSessionsRef.current.get(localHostId) ?? []).find(s => s.id === sourceId)
-    duplicateSourceKeyRef.current = makeKey(localHostId, sourceId)
-    newSession(source?.cwd || undefined)
+  function duplicateSession(sourceKey: SessionKey) {
+    const { hostId, sessionId } = parseKey(sourceKey)
+    const source = (hostSessionsRef.current.get(hostId) ?? []).find(s => s.id === sessionId)
+    duplicateSourceKeyRef.current = sourceKey
+    newSession(hostId, source?.cwd || undefined)
   }
 
   function attachSession(key: SessionKey) {
@@ -482,24 +489,22 @@ export function App() {
     setKillTargetKey(null)
   }
 
-  function renameSession(id: string, name: string) {
-    const key = makeKey(localHostId, id)
+  function renameSession(key: SessionKey, name: string) {
+    const { hostId, sessionId } = parseKey(key)
     setHostSessions(prev => {
       const next = new Map(prev)
-      const list = next.get(localHostId) ?? []
-      next.set(localHostId, list.map(s => s.id === id ? { ...s, name } : s))
+      const list = next.get(hostId) ?? []
+      next.set(hostId, list.map(s => s.id === sessionId ? { ...s, name } : s))
       return next
     })
-    sendToHost(localHostId, { type: 'rename', id, name })
+    sendToHost(hostId, { type: 'rename', id: sessionId, name })
     // Keep URL hash in sync if this is the current session
     if (key === currentKeyRef.current) {
       history.replaceState(null, '', '#' + encodeURIComponent(name))
     }
   }
 
-  function reorderSessions(fromId: string, toId: string) {
-    const fromKey = makeKey(localHostId, fromId)
-    const toKey = makeKey(localHostId, toId)
+  function reorderSessions(fromKey: SessionKey, toKey: SessionKey) {
     setSessionOrder(prev => {
       const next = prev.filter(key => key !== fromKey)
       const toIdx = next.indexOf(toKey)
@@ -508,8 +513,7 @@ export function App() {
     })
   }
 
-  function reorderSessionToEnd(fromId: string) {
-    const fromKey = makeKey(localHostId, fromId)
+  function reorderSessionToEnd(fromKey: SessionKey, _hostId: string) {
     setSessionOrder(prev => [...prev.filter(key => key !== fromKey), fromKey])
   }
 
@@ -528,8 +532,15 @@ export function App() {
   }
 
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
-  const sidebarHostId = currentKey ? parseKey(currentKey).hostId : localHostId
-  const status: ConnectionStatus = hostStatuses.get(sidebarHostId) ?? 'reconnecting'
+  const terminalEntries = useMemo(() => {
+    const next: Array<{ key: SessionKey; session: Session }> = []
+    for (const host of hosts) {
+      for (const session of orderedHostSessions.get(host.id) ?? []) {
+        next.push({ key: makeKey(host.id, session.id), session })
+      }
+    }
+    return next
+  }, [hosts, orderedHostSessions])
 
   return (
     <div className="app">
@@ -543,13 +554,14 @@ export function App() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
 
       <Sidebar
-        sessions={orderedSessions}
-        currentId={currentId}
-        status={status}
+        hosts={hosts}
+        hostSessions={orderedHostSessions}
+        hostStatuses={hostStatuses}
+        currentKey={currentKey}
         isOpen={sidebarOpen}
-        onNew={() => newSession()}
-        onAttach={(id) => { attachSession(makeKey(localHostId, id)); setSidebarOpen(false) }}
-        onKill={(id) => setKillTargetKey(makeKey(localHostId, id))}
+        onNew={(hostId) => newSession(hostId)}
+        onAttach={(key) => { attachSession(key); setSidebarOpen(false) }}
+        onKill={(key) => setKillTargetKey(key)}
         onRename={renameSession}
         onDuplicate={duplicateSession}
         onReorder={reorderSessions}
@@ -557,18 +569,17 @@ export function App() {
       />
 
       <main className="main">
-        {!currentId && (
+        {!currentKey && (
           <div className="no-session">
             <div className="no-session-prompt">no active session</div>
-            <button className="no-session-btn" onClick={() => newSession()}>new session</button>
+            <button className="no-session-btn" onClick={() => newSession(localHostId)}>new session</button>
           </div>
         )}
 
         {/* One container per session — always in DOM, stacked absolutely.
             Lazy: xterm.js instance is created only when the session is first viewed. */}
         <div className="terminal-area">
-          {sessions.map(s => {
-            const key = makeKey(localHostId, s.id)
+          {terminalEntries.map(({ key }) => {
             return (
             <div
               key={key}
@@ -584,7 +595,7 @@ export function App() {
       </main>
 
       <MobileToolbar
-        currentId={currentId}
+        currentId={currentKey ? parseKey(currentKey).sessionId : null}
         sendInput={sendInput}
         focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
         scrollToBottom={scrollToBottom}

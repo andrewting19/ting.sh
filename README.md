@@ -64,6 +64,7 @@ Working:
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
 - Host connection engine scaffolded: `useHostConnections` + imperative `WSConnection` with per-host reconnect/send lifecycle
 - App/terminal manager now run on host-scoped session keys and use multi-host WS transport plumbing (`useHostConnections`)
+- Sidebar now supports host-grouped sections with per-host connection status and host-scoped drag/drop interactions
 
 Missing / in progress:
 - Multi-machine dashboard
