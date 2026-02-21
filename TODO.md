@@ -13,6 +13,7 @@
 - [x] Truncated replay could render with broken ANSI state — fixed (sanitize first partial line after buffer cap trims)
 - [x] Duplicate output after reconnect/hot reload — fixed (ignore stale WS events + hot-reload regression test)
 - [x] Host-scoped drag reorder intermittently no-op'd — fixed (read dragged host from live ref inside drag handlers + reorder persistence regression test)
+- [x] Cross-site WS hijack risk — fixed (`/ws` now rejects mismatched `Origin`, allows absent origin for non-browser clients)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

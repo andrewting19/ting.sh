@@ -84,6 +84,22 @@ function parseHostUrl(value: unknown, field: string): string {
   return parsed.toString().replace(/\/$/, "");
 }
 
+function isAllowedWsOrigin(req: Request): boolean {
+  const originHeader = req.headers.get("origin");
+  // Allow non-browser clients (no Origin header).
+  if (!originHeader) return true;
+
+  let origin: URL;
+  let target: URL;
+  try {
+    origin = new URL(originHeader);
+    target = new URL(req.url);
+  } catch {
+    return false;
+  }
+  return origin.origin === target.origin;
+}
+
 function loadHostConfig(): HostConfig {
   const defaultHost = hostname();
   const defaults: HostConfig = {
@@ -324,6 +340,9 @@ const server = Bun.serve<WSData>({
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
+      if (!isAllowedWsOrigin(req)) {
+        return new Response("Forbidden", { status: 403 });
+      }
       if (server.upgrade(req, { data: { sessionId: null } })) return;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }

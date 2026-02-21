@@ -60,6 +60,7 @@ Working:
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
+- WebSocket CSWSH hardening — `/ws` upgrade now validates browser `Origin` and rejects cross-origin upgrades (non-browser clients without `Origin` still allowed)
 - Automated E2E test suite (Playwright) — 28 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
