@@ -33,6 +33,8 @@
 - [x] Auto-attach to first session when no hash in URL
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
+- [x] Mobile toolbar — keyboard button, scroll-to-bottom, ESC, Enter, arrow pad, sticky CTRL/SHIFT, 3 programmable hotkeys, paste modal with history
+- [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
 
 ## Up next (in order)
 
