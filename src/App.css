@@ -361,6 +361,28 @@ html, body, #root {
   pointer-events: auto;
 }
 
+/* xterm.js accessibility tree overrides the parent's user-select:none with
+   user-select:text (for screen readers). On iOS, the accessibility layer sits
+   at z-index:10 above the canvas and iOS's text-selection gesture recognizer
+   uses it for hit testing even though pointer-events:none is set on the parent.
+   Result: touches starting on text nodes are consumed as selection gestures
+   instead of scroll gestures — scroll silently fails on those positions.
+   Override back to none; screen reader content is still accessible via
+   assistive tech APIs which don't depend on user-select. */
+.xterm .xterm-accessibility-tree {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* cursor:text on .xterm signals to iOS that this is a text element,
+   causing it to bias touch gestures toward text selection. Use default
+   on touch devices. */
+@media (hover: none) {
+  .xterm {
+    cursor: default;
+  }
+}
+
 /* ── Modal ── */
 .modal-backdrop {
   position: fixed;
