@@ -431,29 +431,31 @@ test('shared session — desktop reclaims width after mobile resize', async ({ p
   }
 })
 
-test('url hash — switching session updates hash to session name', async ({ page }) => {
+test('url hash — switching session updates hash to host/sessionName', async ({ page }) => {
   const id1 = await newSession(page)
   const id2 = await newSession(page)
   // id2 is active after creation; switch to id1
   await switchToSession(page, id1)
   const name1 = await getSessionName(page, id1)
+  const expected1 = `local/${name1}`
 
   await page.waitForFunction(
-    (name: string) => decodeURIComponent(location.hash.slice(1)) === name,
-    name1,
+    (expected: string) => decodeURIComponent(location.hash.slice(1)) === expected,
+    expected1,
     { timeout: 3000 },
   )
-  expect(await getHash(page)).toBe(name1)
+  expect(await getHash(page)).toBe(expected1)
 
   // Switch back to id2 — hash should follow
   await switchToSession(page, id2)
   const name2 = await getSessionName(page, id2)
+  const expected2 = `local/${name2}`
   await page.waitForFunction(
-    (name: string) => decodeURIComponent(location.hash.slice(1)) === name,
-    name2,
+    (expected: string) => decodeURIComponent(location.hash.slice(1)) === expected,
+    expected2,
     { timeout: 3000 },
   )
-  expect(await getHash(page)).toBe(name2)
+  expect(await getHash(page)).toBe(expected2)
 })
 
 test('url hash — loading /#name attaches to correct session', async ({ page }) => {
@@ -462,6 +464,22 @@ test('url hash — loading /#name attaches to correct session', async ({ page })
 
   // Reload with the hash — simulates opening a bookmark
   await page.goto(`/#${encodeURIComponent(name)}`)
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+
+  await page.waitForFunction(
+    (expectedName: string) =>
+      document.querySelector('.session-item.active .session-name')?.textContent === expectedName,
+    name,
+    { timeout: 5000 },
+  )
+  expect(await getActiveSessionId(page)).toBe(id)
+})
+
+test('url hash — loading /#local/name attaches to correct session', async ({ page }) => {
+  const id = await newSession(page)
+  const name = await getSessionName(page, id)
+
+  await page.goto(`/#local/${encodeURIComponent(name)}`)
   await page.waitForSelector('[data-session-id]', { timeout: 8000 })
 
   await page.waitForFunction(

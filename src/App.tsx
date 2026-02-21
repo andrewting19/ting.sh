@@ -10,6 +10,54 @@ import './App.css'
 
 const LOCAL_HOST_ID = 'local'
 type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
+type SessionOrderByHost = Record<string, string[]>
+
+const LEGACY_SESSION_ORDER_KEY = 'wt-session-order'
+const SESSION_ORDER_STORAGE_PREFIX = 'wt-session-order:'
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const next: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'string' || item.length === 0 || seen.has(item)) continue
+    seen.add(item)
+    next.push(item)
+  }
+  return next
+}
+
+function readHostSessionOrder(hostId: string): string[] {
+  try {
+    const raw = localStorage.getItem(`${SESSION_ORDER_STORAGE_PREFIX}${hostId}`)
+    if (raw) return toStringArray(JSON.parse(raw))
+
+    if (hostId !== LOCAL_HOST_ID) return []
+    const legacyRaw = localStorage.getItem(LEGACY_SESSION_ORDER_KEY)
+    if (!legacyRaw) return []
+    const legacy = toStringArray(JSON.parse(legacyRaw))
+    const next: string[] = []
+    const seen = new Set<string>()
+    for (const item of legacy) {
+      const sep = item.indexOf(':')
+      const sessionId = sep === -1 ? item : item.slice(sep + 1)
+      if (sessionId.length === 0 || seen.has(sessionId)) continue
+      seen.add(sessionId)
+      next.push(sessionId)
+    }
+    return next
+  } catch {
+    return []
+  }
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
 
 export function App() {
   const [hosts, setHosts] = useState<Host[]>([{ id: LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
@@ -25,10 +73,10 @@ export function App() {
   // Sync refs for use inside callbacks (avoid stale closures)
   const currentKeyRef = useRef<SessionKey | null>(null)
   const hostSessionsRef = useRef<Map<string, Session[]>>(new Map())
-  const sessionOrderRef = useRef<SessionKey[]>([])
+  const sessionOrderByHostRef = useRef<SessionOrderByHost>({})
   currentKeyRef.current = currentKey
   hostSessionsRef.current = hostSessions
-  // sessionOrderRef.current is assigned after sessionOrder useState below
+  // sessionOrderByHostRef.current is assigned after sessionOrderByHost useState below
 
   // Session currently attached on the server for this WS connection.
   // Binary output always routes here (never to optimistic UI state).
@@ -53,43 +101,97 @@ export function App() {
   const hasHandledInitialHashRef = useRef(false)
 
   // Client-side session order (persisted to localStorage for drag-and-drop etc.)
-  const [sessionOrder, setSessionOrder] = useState<SessionKey[]>(() => {
-    try { return JSON.parse(localStorage.getItem('wt-session-order') ?? '[]') as SessionKey[] } catch { return [] }
-  })
-  sessionOrderRef.current = sessionOrder
+  const [sessionOrderByHost, setSessionOrderByHost] = useState<SessionOrderByHost>(() => ({
+    [LOCAL_HOST_ID]: readHostSessionOrder(LOCAL_HOST_ID),
+  }))
+  sessionOrderByHostRef.current = sessionOrderByHost
 
   useEffect(() => {
-    localStorage.setItem('wt-session-order', JSON.stringify(sessionOrder))
-  }, [sessionOrder])
+    for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
+      localStorage.setItem(`${SESSION_ORDER_STORAGE_PREFIX}${hostId}`, JSON.stringify(order))
+    }
+  }, [sessionOrderByHost])
 
-  // Merge server session list into our local order:
-  // keep existing order, drop dead sessions, append new ones at end.
-  // Skip when sessions is empty (initial state before WS connects) to avoid
-  // wiping the localStorage-restored order before we have real data.
   useEffect(() => {
-    const allKeys = [...hostSessions.values()].flatMap(list => list.map(s => makeKey(s.hostId, s.id)))
-    if (allKeys.length === 0) return
-    setSessionOrder(prev => {
-      const ids = new Set(allKeys)
-      const kept = prev.filter(key => ids.has(key))
-      const keptSet = new Set(kept)
-      const added = allKeys.filter(key => !keptSet.has(key))
-      return [...kept, ...added]
+    setSessionOrderByHost(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const host of hosts) {
+        if (Object.prototype.hasOwnProperty.call(next, host.id)) continue
+        next[host.id] = readHostSessionOrder(host.id)
+        changed = true
+      }
+      return changed ? next : prev
     })
-  }, [hostSessions, localHostId])
+  }, [hosts])
+
+  const parseHashRoute = useCallback((hash: string): { hostId: string; target: string } | null => {
+    const raw = hash.startsWith('#') ? hash.slice(1) : hash
+    if (!raw) return null
+
+    const slashIdx = raw.indexOf('/')
+    if (slashIdx === -1) {
+      try {
+        return { hostId: localHostId, target: decodeURIComponent(raw) }
+      } catch {
+        return null
+      }
+    }
+
+    const rawHost = raw.slice(0, slashIdx)
+    const rawTarget = raw.slice(slashIdx + 1)
+    try {
+      const hostId = decodeURIComponent(rawHost)
+      const target = decodeURIComponent(rawTarget)
+      if (!hostId || !target) return null
+      return { hostId, target }
+    } catch {
+      return null
+    }
+  }, [localHostId])
+
+  const replaceHash = useCallback((hostId: string, name: string) => {
+    history.replaceState(null, '', `#${encodeURIComponent(hostId)}/${encodeURIComponent(name)}`)
+  }, [])
+
+  // Merge server session list into local host order:
+  // keep existing order, drop dead sessions, append new ones at end.
+  // Skip untouched hosts so we don't wipe localStorage-restored order before
+  // the first sessions list arrives for that host.
+  useEffect(() => {
+    setSessionOrderByHost(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const [hostId, list] of hostSessions.entries()) {
+        const ids = list.map(s => s.id)
+        const idSet = new Set(ids)
+        const current = next[hostId] ?? []
+        const kept = current.filter(id => idSet.has(id))
+        const keptSet = new Set(kept)
+        const added = ids.filter(id => !keptSet.has(id))
+        const merged = [...kept, ...added]
+        if (!sameStringArray(current, merged)) {
+          next[hostId] = merged
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [hostSessions])
 
   const orderedHostSessions = useMemo(() => {
     const next = new Map<string, Session[]>()
     for (const host of hosts) {
       const list = hostSessions.get(host.id) ?? []
+      const order = sessionOrderByHost[host.id] ?? []
       next.set(host.id, [...list].sort((a, b) => {
-        const ai = sessionOrder.indexOf(makeKey(host.id, a.id))
-        const bi = sessionOrder.indexOf(makeKey(host.id, b.id))
+        const ai = order.indexOf(a.id)
+        const bi = order.indexOf(b.id)
         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
       }))
     }
     return next
-  }, [hostSessions, hosts, sessionOrder])
+  }, [hostSessions, hosts, sessionOrderByHost])
 
   // Per-session container refs — one div per session, always in DOM
   const containerRefs = useRef<Map<SessionKey, HTMLDivElement>>(new Map())
@@ -97,6 +199,7 @@ export function App() {
   const getSessionByKey = useCallback((key: SessionKey): Session | null => {
     const { hostId, sessionId } = parseKey(key)
     return hostSessionsRef.current.get(hostId)?.find(s => s.id === sessionId) ?? null
+  })
   }, [])
 
   const { hostStatuses, connect, disconnect, send: sendToHost, forceClose } = useHostConnections({
@@ -253,14 +356,15 @@ export function App() {
   // hashchange: if the user manually edits the URL hash, navigate to that session
   useEffect(() => {
     const handler = () => {
-      const hashVal = decodeURIComponent(location.hash.slice(1))
-      const list = hostSessionsRef.current.get(localHostId) ?? []
-      const s = list.find(session => session.name === hashVal) ?? list.find(session => session.id === hashVal)
-      if (s) attachSession(makeKey(localHostId, s.id))
+      const route = parseHashRoute(location.hash)
+      if (!route) return
+      const list = hostSessionsRef.current.get(route.hostId) ?? []
+      const s = list.find(session => session.name === route.target) ?? list.find(session => session.id === route.target)
+      if (s) attachSession(makeKey(route.hostId, s.id))
     }
     window.addEventListener('hashchange', handler)
     return () => window.removeEventListener('hashchange', handler)
-  }, [localHostId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [parseHashRoute]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -276,9 +380,10 @@ export function App() {
       }
       if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
         e.preventDefault()
+        const hostOrder = sessionOrderByHostRef.current[activeHostId] ?? []
         const ordered = [...(hostSessionsRef.current.get(activeHostId) ?? [])].sort((a, b) => {
-          const ai = sessionOrderRef.current.indexOf(makeKey(activeHostId, a.id))
-          const bi = sessionOrderRef.current.indexOf(makeKey(activeHostId, b.id))
+          const ai = hostOrder.indexOf(a.id)
+          const bi = hostOrder.indexOf(b.id)
           return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
         })
         const s = ordered[parseInt(e.code[5]) - 1]
@@ -308,17 +413,21 @@ export function App() {
           next.set(hostId, list)
           return next
         })
-        // After the first real sessions list arrives, navigate to the #hash
-        // session if one is present in the URL (deeplink / bookmark support).
-        if (!hasHandledInitialHashRef.current && list.length > 0 && (hostId === localHostId || hosts.length === 1)) {
-          hasHandledInitialHashRef.current = true
-          const hashVal = decodeURIComponent(location.hash.slice(1))
-          // Match by name first, fall back to ID (for old bookmarks),
-          // then fall back to first session if no hash present
-          const match = list.find(s => s.name === hashVal)
-            ?? list.find(s => s.id === hashVal)
-            ?? list[0]
-          attachSession(makeKey(hostId, match.id))
+        // After the first sessions list arrives for the hash target host,
+        // navigate to the hash route. Bare '#name' targets local host.
+        if (!hasHandledInitialHashRef.current) {
+          const route = parseHashRoute(location.hash)
+          if (route) {
+            if (route.hostId !== hostId || list.length === 0) break
+            hasHandledInitialHashRef.current = true
+            const match = list.find(s => s.name === route.target)
+              ?? list.find(s => s.id === route.target)
+              ?? list[0]
+            attachSession(makeKey(hostId, match.id))
+          } else if (hostId === localHostId && list.length > 0) {
+            hasHandledInitialHashRef.current = true
+            attachSession(makeKey(hostId, list[0].id))
+          }
         }
         break
       }
@@ -357,18 +466,20 @@ export function App() {
         setCurrentKey(key)
         // Update hash — use name from payload (sessions state may not have
         // updated yet since setSessions is async)
-        history.replaceState(null, '', '#' + encodeURIComponent(name))
+        replaceHash(parseKey(key).hostId, name)
 
         // If this was a duplicate, insert the new session right after its source
         if (duplicateSourceKeyRef.current) {
           const sourceKey = duplicateSourceKeyRef.current
           duplicateSourceKeyRef.current = null
-          setSessionOrder(prev => {
-            const next = prev.filter(x => x !== key)
-            const sourceIdx = next.indexOf(sourceKey)
-            if (sourceIdx !== -1) next.splice(sourceIdx + 1, 0, key)
-            else next.push(key)
-            return next
+          const source = parseKey(sourceKey)
+          const created = parseKey(key)
+          setSessionOrderByHost(prev => {
+            const current = [...(prev[source.hostId] ?? [])].filter(x => x !== created.sessionId)
+            const sourceIdx = current.indexOf(source.sessionId)
+            if (sourceIdx !== -1) current.splice(sourceIdx + 1, 0, created.sessionId)
+            else current.push(created.sessionId)
+            return { ...prev, [source.hostId]: current }
           })
         }
 
@@ -388,7 +499,7 @@ export function App() {
           tm.setActive(fallback)
           tm.focus(fallback)
           const name = getSessionByKey(fallback)?.name ?? parseKey(fallback).sessionId
-          history.replaceState(null, '', '#' + encodeURIComponent(name))
+          replaceHash(parseKey(fallback).hostId, name)
         } else {
           history.replaceState(null, '', location.pathname)
         }
@@ -420,15 +531,15 @@ export function App() {
           const remaining = (hostSessionsRef.current.get(hostId) ?? [])
             .filter(s => s.id !== id && !killedSessionKeys.current.has(makeKey(hostId, s.id)))
           if (remaining.length > 0) {
-            const order = sessionOrderRef.current
-            const killedIdx = order.indexOf(key)
+            const hostOrder = sessionOrderByHostRef.current[hostId] ?? []
+            const killedIdx = hostOrder.indexOf(id)
             const ordered = [...remaining].sort((a, b) => {
-              const ai = order.indexOf(makeKey(hostId, a.id))
-              const bi = order.indexOf(makeKey(hostId, b.id))
+              const ai = hostOrder.indexOf(a.id)
+              const bi = hostOrder.indexOf(b.id)
               return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
             })
             // Prefer the session that was right after the killed one; fall back to last
-            const next = ordered.find(s => order.indexOf(makeKey(hostId, s.id)) > killedIdx) ?? ordered[ordered.length - 1]
+            const next = ordered.find(s => hostOrder.indexOf(s.id) > killedIdx) ?? ordered[ordered.length - 1]
             attachSession(makeKey(hostId, next.id))
           }
         }
@@ -479,8 +590,9 @@ export function App() {
     tm.focus(key)
     sendAttachRequest(key)
     // Update URL hash for bookmarking / deeplink — use name not UUID
-    const name = getSessionByKey(key)?.name ?? parseKey(key).sessionId
-    history.replaceState(null, '', '#' + encodeURIComponent(name))
+    const parsed = parseKey(key)
+    const name = getSessionByKey(key)?.name ?? parsed.sessionId
+    replaceHash(parsed.hostId, name)
   }
 
   function killSession(key: SessionKey) {
@@ -500,21 +612,31 @@ export function App() {
     sendToHost(hostId, { type: 'rename', id: sessionId, name })
     // Keep URL hash in sync if this is the current session
     if (key === currentKeyRef.current) {
-      history.replaceState(null, '', '#' + encodeURIComponent(name))
+      replaceHash(hostId, name)
     }
   }
 
   function reorderSessions(fromKey: SessionKey, toKey: SessionKey) {
-    setSessionOrder(prev => {
-      const next = prev.filter(key => key !== fromKey)
-      const toIdx = next.indexOf(toKey)
-      next.splice(toIdx, 0, fromKey)
-      return next
+    const from = parseKey(fromKey)
+    const to = parseKey(toKey)
+    if (from.hostId !== to.hostId) return
+    setSessionOrderByHost(prev => {
+      const next = [...(prev[from.hostId] ?? [])].filter(id => id !== from.sessionId)
+      const toIdx = next.indexOf(to.sessionId)
+      if (toIdx === -1) next.push(from.sessionId)
+      else next.splice(toIdx, 0, from.sessionId)
+      return { ...prev, [from.hostId]: next }
     })
   }
 
-  function reorderSessionToEnd(fromKey: SessionKey, _hostId: string) {
-    setSessionOrder(prev => [...prev.filter(key => key !== fromKey), fromKey])
+  function reorderSessionToEnd(fromKey: SessionKey, hostId: string) {
+    const from = parseKey(fromKey)
+    if (from.hostId !== hostId) return
+    setSessionOrderByHost(prev => {
+      const next = [...(prev[hostId] ?? [])].filter(id => id !== from.sessionId)
+      next.push(from.sessionId)
+      return { ...prev, [hostId]: next }
+    })
   }
 
   function sendInput(data: string) {

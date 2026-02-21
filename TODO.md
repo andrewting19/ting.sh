@@ -17,7 +17,7 @@
 - [x] Per-session xterm.js instances (lazy, WebGL on active only)
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
-- [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch
+- [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal
 - [x] Session rename — double-click or right-click → context menu, persisted server-side
 - [x] Right-click context menu — Rename / Duplicate / Kill
@@ -25,14 +25,14 @@
 - [x] Rename UX polish — CWD subtitle stays visible, no height jump (box-shadow not border)
 - [x] Champion names for auto-generated session names (all 172, as of Feb 2026)
 - [x] Live CWD subtitle in sidebar (Enter-key triggered + 30s fallback poll)
-- [x] Client-side session ordering persisted to localStorage
+- [x] Client-side session ordering persisted to per-host localStorage keys
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
 - [x] E2E test suite (Playwright) — 26 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
-- [x] URL hash routing — `#<name>` deeplinks to session by name
+- [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
 - [x] Auto-attach to first session when no hash in URL
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
@@ -49,7 +49,7 @@
 - [x] Multi-host phase 4: `useHostConnections` hook
 - [x] Multi-host phase 5: app + terminal manager host-aware refactor
 - [x] Multi-host phase 6: host-grouped sidebar UI
-- [ ] Multi-host phase 7: polish (hash routing, host-local ordering, host shortcuts)
+- [x] Multi-host phase 7: polish (hash routing, host-local ordering, host shortcuts)
 
 ## Backlog
 

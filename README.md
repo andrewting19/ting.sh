@@ -45,15 +45,15 @@ Working:
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar
-- Drag-and-drop session reordering in sidebar, persisted to localStorage
+- Drag-and-drop session reordering in sidebar, persisted to per-host localStorage keys
 - Champion names for auto-generated sessions (all 172 LoL champions)
 - Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
-- Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
+- Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
 - Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
-- URL hash routing — `#<name>` deeplinks directly to a session; auto-attaches to first on load
+- URL hash routing — `#<hostId>/<name>` deeplinks directly to a session (legacy `#<name>` still supported for local); auto-attaches on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
