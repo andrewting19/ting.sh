@@ -28,7 +28,19 @@ async function getSttySize(page: import('@playwright/test').Page, id: string): P
   const result = await page.waitForFunction(
     ([sessionId, outputMarker]: [string, string]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const entry = (window as any).__wt_terminals?.get(sessionId)
+      const wt = (window as any).__wt_terminals
+      if (!wt) return null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let entry = wt.get(sessionId) as any
+      if (!entry) {
+        for (const key of wt.keys() as Iterable<string>) {
+          if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            entry = wt.get(key) as any
+            break
+          }
+        }
+      }
       if (!entry) return null
       const buf = entry.term.buffer.active
       let found: { rows: number; cols: number } | null = null

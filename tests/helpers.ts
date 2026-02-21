@@ -30,7 +30,19 @@ export async function newSession(page: Page): Promise<string> {
 export async function getTerminalText(page: Page, sessionId: string): Promise<string> {
   return page.evaluate((id: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const entry = (window as any).__wt_terminals?.get(id)
+    const wt = (window as any).__wt_terminals
+    if (!wt) return ''
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let entry = wt.get(id) as any
+    if (!entry) {
+      for (const key of wt.keys() as Iterable<string>) {
+        if (typeof key === 'string' && key.endsWith(`:${id}`)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entry = wt.get(key) as any
+          break
+        }
+      }
+    }
     if (!entry) return ''
     const buf = entry.term.buffer.active
     const lines: string[] = []
@@ -54,7 +66,19 @@ export async function waitForPrompt(page: Page, sessionId: string, timeout = 800
   await page.waitForFunction(
     (id: string) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const entry = (window as any).__wt_terminals?.get(id)
+      const wt = (window as any).__wt_terminals
+      if (!wt) return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let entry = wt.get(id) as any
+      if (!entry) {
+        for (const key of wt.keys() as Iterable<string>) {
+          if (typeof key === 'string' && key.endsWith(`:${id}`)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            entry = wt.get(key) as any
+            break
+          }
+        }
+      }
       if (!entry) return false
       const buf = entry.term.buffer.active
       for (let i = 0; i < buf.length; i++) {
@@ -99,7 +123,19 @@ export async function waitForTerminal(
   await page.waitForFunction(
     ([id, text]: [string, string]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const entry = (window as any).__wt_terminals?.get(id)
+      const wt = (window as any).__wt_terminals
+      if (!wt) return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let entry = wt.get(id) as any
+      if (!entry) {
+        for (const key of wt.keys() as Iterable<string>) {
+          if (typeof key === 'string' && key.endsWith(`:${id}`)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            entry = wt.get(key) as any
+            break
+          }
+        }
+      }
       if (!entry) return false
       const buf = entry.term.buffer.active
       let content = ''

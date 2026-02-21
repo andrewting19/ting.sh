@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import { FitAddon } from '@xterm/addon-fit'
+import type { SessionKey } from '../types'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalEntry {
@@ -20,8 +21,8 @@ interface TerminalEntry {
 }
 
 interface Callbacks {
-  onData: (sessionId: string, data: string) => void
-  onResize: (sessionId: string, cols: number, rows: number) => void
+  onData: (sessionKey: SessionKey, data: string) => void
+  onResize: (sessionKey: SessionKey, cols: number, rows: number) => void
 }
 
 const TERMINAL_OPTIONS = {
@@ -160,7 +161,7 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
 }
 
 export function useTerminalManager(callbacks: Callbacks) {
-  const entriesRef = useRef<Map<string, TerminalEntry>>(new Map())
+  const entriesRef = useRef<Map<SessionKey, TerminalEntry>>(new Map())
 
   // Expose terminal entries on window in dev mode so Playwright tests can
   // read terminal buffer content without scraping the canvas.
@@ -168,7 +169,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).__wt_terminals = entriesRef.current
   }
-  const activeIdRef = useRef<string | null>(null)
+  const activeIdRef = useRef<SessionKey | null>(null)
   // Always-fresh callbacks via ref — no stale closure issues
   const cbRef = useRef(callbacks)
   cbRef.current = callbacks
@@ -178,8 +179,8 @@ export function useTerminalManager(callbacks: Callbacks) {
   // open() is called, so binary that arrives before React re-renders (and
   // the container div appears) is captured rather than dropped.
   // Called from the 'ready' handler in App.tsx for 'create' flows.
-  const primeTerminal = useCallback((sessionId: string) => {
-    if (entriesRef.current.has(sessionId)) return
+  const primeTerminal = useCallback((sessionKey: SessionKey) => {
+    if (entriesRef.current.has(sessionKey)) return
 
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
@@ -191,16 +192,16 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
 
     term.onData((data) => {
-      if (activeIdRef.current === sessionId) cbRef.current.onData(sessionId, data)
+      if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
     })
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionId, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
   }, [])
 
-  const ensureTerminal = useCallback((sessionId: string, container: HTMLElement) => {
-    const existing = entriesRef.current.get(sessionId)
+  const ensureTerminal = useCallback((sessionKey: SessionKey, container: HTMLElement) => {
+    const existing = entriesRef.current.get(sessionKey)
 
     if (existing) {
       if (!existing.opened) {
@@ -213,7 +214,7 @@ export function useTerminalManager(callbacks: Callbacks) {
         existing.ro.disconnect()
         const ro = new ResizeObserver(() => {
           existing.fitAddon.fit()
-          cbRef.current.onResize(sessionId, existing.term.cols, existing.term.rows)
+          cbRef.current.onResize(sessionKey, existing.term.cols, existing.term.rows)
         })
         ro.observe(container)
         existing.ro = ro
@@ -234,25 +235,25 @@ export function useTerminalManager(callbacks: Callbacks) {
     fitAddon.fit()
 
     term.onData((data) => {
-      if (activeIdRef.current === sessionId) cbRef.current.onData(sessionId, data)
+      if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
     })
 
     const ro = new ResizeObserver(() => {
       fitAddon.fit()
-      cbRef.current.onResize(sessionId, term.cols, term.rows)
+      cbRef.current.onResize(sessionKey, term.cols, term.rows)
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionId, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
   }, [])
 
   // Switch the WebGL renderer to the newly active terminal.
   // Inactive terminals don't need GPU acceleration — they're invisible.
-  const setActive = useCallback((sessionId: string) => {
+  const setActive = useCallback((sessionKey: SessionKey) => {
     const prevId = activeIdRef.current
 
     // Dispose WebGL from previous terminal
-    if (prevId && prevId !== sessionId) {
+    if (prevId && prevId !== sessionKey) {
       const prev = entriesRef.current.get(prevId)
       if (prev?.webglAddon) {
         prev.webglAddon.dispose()
@@ -260,11 +261,11 @@ export function useTerminalManager(callbacks: Callbacks) {
       }
     }
 
-    activeIdRef.current = sessionId
+    activeIdRef.current = sessionKey
 
     // Load WebGL on newly active terminal (skip on mobile — fails silently on iOS Safari)
     const isMobile = isMobileDevice()
-    const entry = entriesRef.current.get(sessionId)
+    const entry = entriesRef.current.get(sessionKey)
     if (entry && entry.opened && !entry.webglAddon && !isMobile) {
       try {
         const webgl = new WebglAddon()
@@ -280,33 +281,33 @@ export function useTerminalManager(callbacks: Callbacks) {
     if (entry?.opened) entry.fitAddon.fit()
   }, [])
 
-  const write = useCallback((sessionId: string, data: Uint8Array) => {
-    entriesRef.current.get(sessionId)?.term.write(data)
+  const write = useCallback((sessionKey: SessionKey, data: Uint8Array) => {
+    entriesRef.current.get(sessionKey)?.term.write(data)
   }, [])
 
-  const reset = useCallback((sessionId: string) => {
-    entriesRef.current.get(sessionId)?.term.reset()
+  const reset = useCallback((sessionKey: SessionKey) => {
+    entriesRef.current.get(sessionKey)?.term.reset()
   }, [])
 
-  const focus = useCallback((sessionId: string) => {
-    entriesRef.current.get(sessionId)?.term.focus()
+  const focus = useCallback((sessionKey: SessionKey) => {
+    entriesRef.current.get(sessionKey)?.term.focus()
   }, [])
 
-  const getDimensions = useCallback((sessionId: string) => {
-    const term = entriesRef.current.get(sessionId)?.term
+  const getDimensions = useCallback((sessionKey: SessionKey) => {
+    const term = entriesRef.current.get(sessionKey)?.term
     return { cols: term?.cols ?? 80, rows: term?.rows ?? 24 }
   }, [])
 
-  const destroy = useCallback((sessionId: string) => {
-    const entry = entriesRef.current.get(sessionId)
+  const destroy = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.ro.disconnect()
     entry.momentumCleanup?.()
     entry.webglAddon?.dispose()
     entry.canvasAddon?.dispose()
     entry.term.dispose()
-    entriesRef.current.delete(sessionId)
-    if (activeIdRef.current === sessionId) activeIdRef.current = null
+    entriesRef.current.delete(sessionKey)
+    if (activeIdRef.current === sessionKey) activeIdRef.current = null
   }, [])
 
   // useMemo so the returned object has a stable reference across renders.
