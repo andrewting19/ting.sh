@@ -1,15 +1,17 @@
 import { randomUUID } from "crypto";
 import { readlinkSync } from "fs";
+import { sanitizeReplayBuffer } from "./serverBuffer";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
 const SHELL = process.env.SHELL ?? "zsh";
-const MAX_BUFFER = 10 * 1024 * 1024; // 10MB scrollback per session
+const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024)); // 10MB by default
 
 interface Session {
   id: string;
   name: string;
   proc: ReturnType<typeof Bun.spawn>;
   buffer: Buffer;
+  bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
   cwd: string;
@@ -64,6 +66,7 @@ const g = globalThis as typeof globalThis & {
 };
 if (!g.__wt_sessions) g.__wt_sessions = new Map();
 const sessions = g.__wt_sessions;
+const listSubscribers = new Set<ServerWebSocket<WSData>>();
 
 // Platform-aware CWD reader.
 // Linux: single readlink syscall on /proc/<pid>/cwd — essentially free.
@@ -110,9 +113,11 @@ function sessionInfo(s: Session) {
 function broadcastSessions() {
   const list = [...sessions.values()].map(sessionInfo);
   const msg = JSON.stringify({ type: "sessions", list });
+  const recipients = new Set<ServerWebSocket<WSData>>(listSubscribers);
   for (const s of sessions.values()) {
-    for (const ws of s.clients) ws.send(msg);
+    for (const ws of s.clients) recipients.add(ws);
   }
+  for (const ws of recipients) ws.send(msg);
 }
 
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
@@ -122,6 +127,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     name: name?.trim() || pickSessionName(),
     proc: null as any,
     buffer: Buffer.alloc(0),
+    bufferTrimmed: false,
     clients: new Set(),
     createdAt: Date.now(),
     cwd: "",
@@ -137,10 +143,12 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       data(_terminal, data) {
         // Append to scrollback buffer (capped)
         const combined = Buffer.concat([session.buffer, data]);
-        session.buffer =
-          combined.length > MAX_BUFFER
-            ? combined.subarray(combined.length - MAX_BUFFER)
-            : combined;
+        if (combined.length > MAX_BUFFER) {
+          session.buffer = combined.subarray(combined.length - MAX_BUFFER);
+          session.bufferTrimmed = true;
+        } else {
+          session.buffer = combined;
+        }
 
         // Broadcast raw bytes to all attached clients
         for (const ws of session.clients) ws.sendBinary(data);
@@ -220,7 +228,17 @@ const server = Bun.serve<WSData>({
 
       switch (data.type) {
         case "list": {
+          listSubscribers.add(ws);
           ws.send(JSON.stringify({ type: "sessions", list: [...sessions.values()].map(sessionInfo) }));
+          break;
+        }
+
+        case "detach": {
+          if (session) {
+            session.clients.delete(ws);
+            ws.data.sessionId = null;
+            broadcastSessions();
+          }
           break;
         }
 
@@ -234,14 +252,24 @@ const server = Bun.serve<WSData>({
           // sessions before ready — client needs the new session in its list so
           // the container div exists in the DOM when the ready handler fires.
           broadcastSessions();
-          ws.send(JSON.stringify({ type: "ready", id: s.id, name: s.name, fresh: true }));
+          ws.send(JSON.stringify({
+            type: "ready",
+            id: s.id,
+            name: s.name,
+            fresh: true,
+            ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+          }));
           break;
         }
 
         case "attach": {
           const s = sessions.get(data.id);
           if (!s) {
-            ws.send(JSON.stringify({ type: "error", message: "Session not found" }));
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Session not found",
+              ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+            }));
             return;
           }
 
@@ -251,14 +279,21 @@ const server = Bun.serve<WSData>({
           // Attach to new session
           ws.data.sessionId = s.id;
           s.clients.add(ws);
+          broadcastSessions();
 
           // Resize to match client dimensions
           if (data.cols && data.rows) s.proc.terminal?.resize(data.cols, data.rows);
 
-          // Replay scrollback
-          if (s.buffer.length > 0) ws.sendBinary(s.buffer);
-
-          ws.send(JSON.stringify({ type: "ready", id: s.id, name: s.name }));
+          ws.send(JSON.stringify({
+            type: "ready",
+            id: s.id,
+            name: s.name,
+            ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+          }));
+          // Replay after ready so client can validate requestId first and drop
+          // stale attach responses before any scrollback bytes are applied.
+          const replay = sanitizeReplayBuffer(s.buffer, s.bufferTrimmed);
+          if (replay.length > 0) ws.sendBinary(replay);
           break;
         }
 
@@ -301,7 +336,11 @@ const server = Bun.serve<WSData>({
 
     close(ws) {
       const session = ws.data.sessionId ? sessions.get(ws.data.sessionId) : null;
-      if (session) session.clients.delete(ws);
+      if (session) {
+        session.clients.delete(ws);
+        broadcastSessions();
+      }
+      listSubscribers.delete(ws);
     },
   },
 });

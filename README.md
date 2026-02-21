@@ -57,6 +57,7 @@ Working:
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Automated E2E test suite (Playwright) — 24 tests, runs with `bun test`
+- Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 
 Missing / in progress:
 - Multi-machine dashboard
