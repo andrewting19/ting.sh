@@ -1,5 +1,11 @@
 # Test suite — agent instructions
 
+## When to add unit tests vs E2E
+
+- **E2E** (Playwright): anything involving the full stack — UI interactions, WS message flow, terminal rendering, session lifecycle. This is the primary suite.
+- **Unit tests** (Bun): pure logic that can be tested in isolation — server session management, name allocation, state machine helpers. Add as `*.test.ts` files alongside the code they test (e.g. `server.test.ts`). Bun's test runner picks these up automatically.
+- **Don't unit-test**: React component rendering, WS hookups, xterm.js integration — E2E covers these better with less mocking.
+
 ## Architecture
 
 ```

@@ -30,7 +30,7 @@ Run `bun test` **after every commit**. Tests take ~10 seconds. If tests fail, fi
 
 Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess. Each run gets OS-assigned dynamic ports so concurrent agents never collide.
 
-No unit tests — mocking React/WS/xterm.js costs more than it's worth. E2E covers the real behavior. Exception: if server.ts grows complex logic, add Bun unit tests for that file.
+E2E tests are the primary suite. Unit tests are welcome for pure logic (server session management, name allocation, state machines) — add them as `*.test.ts` files alongside the code they test. Don't unit-test React/WS/xterm.js integration — E2E covers that better.
 
 See `tests/CLAUDE.md` for detailed test architecture and guidelines for writing new tests.
 
