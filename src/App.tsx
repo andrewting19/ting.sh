@@ -130,7 +130,14 @@ export function App() {
     for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
       localStorage.setItem(`${SESSION_ORDER_STORAGE_PREFIX}${hostId}`, JSON.stringify(order))
     }
-  }, [sessionOrderByHost])
+    const localOrder = sessionOrderByHost[localHostId]
+    if (localOrder) {
+      // Keep legacy keys hot so reloads that start before host-id reconciliation
+      // still restore the local host ordering.
+      localStorage.setItem(`${SESSION_ORDER_STORAGE_PREFIX}${LEGACY_LOCAL_HOST_ID}`, JSON.stringify(localOrder))
+      localStorage.setItem(LEGACY_SESSION_ORDER_KEY, JSON.stringify(localOrder))
+    }
+  }, [localHostId, sessionOrderByHost])
 
   useEffect(() => {
     setSessionOrderByHost(prev => {
