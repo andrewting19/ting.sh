@@ -1,12 +1,14 @@
 import { useRef, useCallback, useMemo } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalEntry {
   term: Terminal
   fitAddon: FitAddon
+  canvasAddon: CanvasAddon | null
   webglAddon: WebglAddon | null
   ro: ResizeObserver
   // False until term.open(container) is called. A terminal can be primed
@@ -54,35 +56,33 @@ const TERMINAL_OPTIONS = {
   },
 }
 
-// iOS Safari scroll fix for xterm.js.
-//
-// Root cause: xterm.js registers touchstart with {passive:true}, so it can
-// never call preventDefault(). iOS therefore fires synthetic mouse events
-// (mousedown → mouseup → click) after every touch ends. xterm.js has a
-// mousedown handler that activates its selection-tracking state machine.
-// Once selection mode activates mid-gesture, subsequent touches get partially
-// consumed by selection logic instead of the scroll handler — causing the
-// "scroll sometimes stops registering" bug.
-//
-// Fix:
-//   1. touchend always calls preventDefault() — this suppresses ALL synthetic
-//      mouse events from the terminal canvas, including the mousedown that
-//      would focus xterm's textarea. Keyboard access is exclusively through
-//      the mobile toolbar's keyboard button which calls term.focus() directly.
-//   2. Track velocity for momentum scrolling regardless of gesture type.
-//   3. capture:true on all listeners so xterm.js's stopPropagation() calls
-//      in bubble phase never affect us.
-//   4. We never call stopPropagation() — xterm.js keeps all events and
-//      drives the live per-frame scroll itself. We only add momentum after
-//      touchend when xterm.js is idle.
+function isIOSDevice(): boolean {
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
+  // iPadOS with desktop-site UA reports MacIntel plus touch points.
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+function isMobileDevice(): boolean {
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+// iOS touch scrolling with momentum. We intentionally own touchmove + scrollTop
+// here so xterm's internal handler can't double-apply deltas.
 function attachIOSScroll(container: HTMLElement): (() => void) | null {
-  if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) return null
+  if (!isIOSDevice()) return null
 
   const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
   if (!viewport) return null
 
+  const prevOverflow = viewport.style.overflow
+  const prevTouchAction = viewport.style.touchAction
+  // Kill native scrolling in this viewport; we drive scrollTop ourselves.
+  viewport.style.overflow = 'hidden'
+  viewport.style.touchAction = 'none'
+
   const samples: { y: number; t: number }[] = []
-  let startY = 0
+  let lastY = 0
   let rafId: number | null = null
 
   const cancelMomentum = () => {
@@ -92,32 +92,27 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const onTouchStart = (e: TouchEvent) => {
     cancelMomentum()
     samples.length = 0
-    startY = e.touches[0].pageY
-    samples.push({ y: startY, t: performance.now() })
-    // Belt-and-suspenders alongside touch-action:none in CSS: prevent default
-    // here too so iOS UIKit gets a JS-level signal that this touch is claimed.
-    // (touch-action:none is the primary fix; this handles any edge cases where
-    // UIKit hasn't yet applied the CSS at gesture-start time.)
+    lastY = e.touches[0].pageY
+    samples.push({ y: lastY, t: performance.now() })
     e.preventDefault()
   }
 
   const onTouchMove = (e: TouchEvent) => {
     if (e.touches.length !== 1) return
-    // Prevent iOS UIKit from classifying this gesture as text-selection.
-    // Must be called in capture phase (before xterm's bubble handler) with a
-    // non-passive listener. xterm's own touchmove handler calls preventDefault
-    // too, but in bubble phase — iOS UIKit makes its decision earlier.
-    // This does NOT stop xterm's handler from firing (preventDefault ≠ stopPropagation).
     e.preventDefault()
     const y = e.touches[0].pageY
+    const deltaY = lastY - y
+    lastY = y
+    if (deltaY !== 0) viewport.scrollTop += deltaY
     samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
+    // Prevent xterm's own touchmove handler from double-scrolling.
+    e.stopPropagation()
   }
 
   const onTouchEnd = (e: TouchEvent) => {
-    // Always suppress synthetic mousedown — keyboard access is via the toolbar's
-    // keyboard button which calls term.focus() directly inside a user gesture.
     e.preventDefault()
+    e.stopPropagation()
 
     if (samples.length < 2) return
     const last = samples[samples.length - 1]
@@ -143,23 +138,20 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const onTouchCancel = () => {
     cancelMomentum()
     samples.length = 0
-    startY = 0
+    lastY = 0
   }
 
-  // All listeners active (passive:false) — we call preventDefault on all three.
-  // touchstart: claim touch from UIKit before gesture classification starts.
-  // touchmove:  prevent UIKit from proceeding with text-selection gesture.
-  // touchend:   suppress synthetic mousedown → prevents keyboard dismissal.
-  // touchcancel: passive is fine, just cleanup.
   const captureActive  = { capture: true, passive: false } as const
   const capturePassive = { capture: true, passive: true  } as const
   container.addEventListener('touchstart',  onTouchStart,  captureActive)
-  container.addEventListener('touchmove',   onTouchMove,   captureActive)   // active: call preventDefault
+  container.addEventListener('touchmove',   onTouchMove,   captureActive)
   container.addEventListener('touchend',    onTouchEnd,    captureActive)
   container.addEventListener('touchcancel', onTouchCancel, capturePassive)
 
   return () => {
     cancelMomentum()
+    viewport.style.overflow = prevOverflow
+    viewport.style.touchAction = prevTouchAction
     container.removeEventListener('touchstart',  onTouchStart,  captureActive)
     container.removeEventListener('touchmove',   onTouchMove,   captureActive)
     container.removeEventListener('touchend',    onTouchEnd,    captureActive)
@@ -192,6 +184,11 @@ export function useTerminalManager(callbacks: Callbacks) {
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
+    let canvasAddon: CanvasAddon | null = null
+    if (isIOSDevice()) {
+      canvasAddon = new CanvasAddon()
+      term.loadAddon(canvasAddon)
+    }
 
     term.onData((data) => {
       if (activeIdRef.current === sessionId) cbRef.current.onData(sessionId, data)
@@ -199,7 +196,7 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
+    entriesRef.current.set(sessionId, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
   }, [])
 
   const ensureTerminal = useCallback((sessionId: string, container: HTMLElement) => {
@@ -228,6 +225,11 @@ export function useTerminalManager(callbacks: Callbacks) {
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
+    let canvasAddon: CanvasAddon | null = null
+    if (isIOSDevice()) {
+      canvasAddon = new CanvasAddon()
+      term.loadAddon(canvasAddon)
+    }
     term.open(container)
     fitAddon.fit()
 
@@ -241,7 +243,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionId, { term, fitAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
+    entriesRef.current.set(sessionId, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
   }, [])
 
   // Switch the WebGL renderer to the newly active terminal.
@@ -261,7 +263,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     activeIdRef.current = sessionId
 
     // Load WebGL on newly active terminal (skip on mobile — fails silently on iOS Safari)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    const isMobile = isMobileDevice()
     const entry = entriesRef.current.get(sessionId)
     if (entry && entry.opened && !entry.webglAddon && !isMobile) {
       try {
@@ -301,6 +303,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     entry.ro.disconnect()
     entry.momentumCleanup?.()
     entry.webglAddon?.dispose()
+    entry.canvasAddon?.dispose()
     entry.term.dispose()
     entriesRef.current.delete(sessionId)
     if (activeIdRef.current === sessionId) activeIdRef.current = null

@@ -1,5 +1,5 @@
 /**
- * Mobile touch-scroll tests — run with iPhone user agent so attachIOSScroll activates.
+ * Mobile touch-scroll tests — run with iPhone user agent so mobile touch handlers activate.
  *
  * These tests dispatch raw TouchEvent sequences and verify the xterm viewport
  * scrollTop changes.  They run on Chromium (not iOS Safari), so they CANNOT
@@ -8,17 +8,17 @@
  *   - The core JS scroll path works: touchmove fires → xterm scrollTop += deltaY
  *   - preventDefault on touchmove (active listener) doesn't break scrolling
  *   - Our momentum rAF loop runs without errors
- *   - Regressions in attachIOSScroll listener setup / teardown
+ *   - Regressions in mobile touch-listener setup / teardown
  *
- * The touch-action:none + touchmove preventDefault fixes are validated on real
- * iOS hardware; these tests guard the JavaScript side.
+ * Physical iOS Safari still needs device verification for true gesture behavior;
+ * these tests guard our JS path plus renderer configuration.
  */
 
 import { test, expect } from '@playwright/test'
 import { waitForPrompt, killAllSessions } from './helpers'
 import type { Page } from '@playwright/test'
 
-// Spoof iPhone UA so attachIOSScroll registers its listeners.
+// Spoof iPhone UA so iOS-specific terminal behavior is active.
 test.use({
   userAgent:
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -83,7 +83,7 @@ async function touchSwipe(
       const scrollTopBefore = viewport.scrollTop
 
       // Dispatch on the viewport element (inside xterm root) so that:
-      // - Capture phase reaches .terminal-pane first (our attachIOSScroll handler)
+      // - Capture phase reaches .terminal-pane first (our mobile touch handler)
       // - Then the event reaches .xterm in the bubble phase (xterm's handlers)
       // Dispatching from the outer container would not reach xterm's inner listeners.
       const fire = (type: string, y: number) => {
@@ -124,6 +124,31 @@ async function touchSwipe(
     { startY, endY, steps },
   )
 }
+
+test('iPhone UA uses canvas renderer (no DOM text rows)', async ({ page }) => {
+  const id = await newSessionMobile(page)
+  await waitForPrompt(page, id)
+
+  await page.waitForFunction(() => {
+    const pane = document.querySelector<HTMLElement>('.terminal-pane.active')
+    if (!pane) return false
+    const canvasCount = pane.querySelectorAll('.xterm-screen canvas').length
+    const hasDomRows = !!pane.querySelector('.xterm-rows')
+    return canvasCount > 0 && !hasDomRows
+  })
+
+  const info = await page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>('.terminal-pane.active')
+    if (!pane) throw new Error('no active .terminal-pane')
+    return {
+      canvasCount: pane.querySelectorAll('.xterm-screen canvas').length,
+      hasDomRows: !!pane.querySelector('.xterm-rows'),
+    }
+  })
+
+  expect(info.canvasCount).toBeGreaterThan(0)
+  expect(info.hasDomRows).toBe(false)
+})
 
 test('touch swipe up scrolls terminal down (scrollTop increases)', async ({ page }) => {
   const id = await newSessionMobile(page)

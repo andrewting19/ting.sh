@@ -27,7 +27,7 @@ Tmux session detection is supported as an optional future feature (for interop w
 - **Runtime**: Bun
 - **Backend**: Bun HTTP + WebSocket server, `Bun.spawn` native PTY API (no node-pty)
 - **Frontend**: React + TypeScript, bundled by Vite
-- **Terminal**: xterm.js 5.x with WebGL renderer + FitAddon
+- **Terminal**: xterm.js 5.x with WebGL (desktop) + Canvas (iOS) + FitAddon
 
 Dev: `bun run dev` — Vite on :4321 with HMR, WS server on :7681, proxied transparently
 Prod: `bun run build && bun run start` — single Bun server on :7681 serves everything
@@ -39,7 +39,7 @@ Working:
 - PTY sessions persist when browser tab closes — reconnect and resume
 - Scrollback replay on reconnect (10MB buffer per session)
 - WebSocket auto-reconnect with status indicator
-- WebGL renderer on active terminal only (canvas fallback; WebGL skipped on mobile)
+- WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
@@ -51,10 +51,11 @@ Working:
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
+- iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
 - Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, 3 programmable hotkey slots (long-press to edit), paste modal with history
 - URL hash routing — `#<name>` deeplinks directly to a session; auto-attaches to first on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
-- Automated E2E test suite (Playwright) — 18 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 21 tests, runs with `bun test`
 
 Missing / in progress:
 - Multi-machine dashboard

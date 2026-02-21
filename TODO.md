@@ -26,7 +26,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 18 tests covering all key flows
+- [x] E2E test suite (Playwright) — 21 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<name>` deeplinks to session by name
@@ -35,6 +35,7 @@
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
 - [x] Mobile toolbar — keyboard button, scroll-to-bottom, ESC, Enter, arrow pad, sticky CTRL/SHIFT, 3 programmable hotkeys, paste modal with history
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
+- [x] iOS Safari scroll-on-text bug fixed (Canvas renderer forced on iOS + renderer guard test)
 
 ## Up next (in order)
 
@@ -53,6 +54,7 @@
 
 - **Bun native PTY** — `Bun.spawn({ terminal: { ... } })`, no node-pty
 - **Per-session xterm.js instances, lazy** — created on first view, kept alive; WebGL on active only
+- **Renderer split by platform** — WebGL on desktop; Canvas forced on iOS to avoid Safari glyph-touch selection issues
 - **`visibility:hidden` not `display:none`** — FitAddon needs layout to measure
 - **`attachingIdRef`** — routes binary scrollback to the right terminal before `ready` arrives
 - **`globalThis` for session Map** — survives Bun `--hot` reloads
