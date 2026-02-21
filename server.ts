@@ -10,7 +10,7 @@ const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1
 interface Session {
   id: string;
   name: string;
-  proc: ReturnType<typeof Bun.spawn>;
+  proc: ReturnType<typeof Bun.spawn> | null;
   buffer: Buffer;
   bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
@@ -49,6 +49,8 @@ interface RawHostPeer {
   url?: unknown;
 }
 
+type ParsedClientMessage = { type: string } & Record<string, unknown>;
+
 function parseHostId(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${field} must be a non-empty string`);
@@ -82,6 +84,16 @@ function parseHostUrl(value: unknown, field: string): string {
     throw new Error(`${field} must use http:// or https://`);
   }
   return parsed.toString().replace(/\/$/, "");
+}
+
+function asPositiveInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const n = Math.floor(value);
+  return n > 0 ? n : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 function isAllowedWsOrigin(req: Request): boolean {
@@ -220,6 +232,7 @@ function scheduleCwdRefresh(session: Session) {
   if (session.cwdTimer) clearTimeout(session.cwdTimer);
   session.cwdTimer = setTimeout(async () => {
     session.cwdTimer = null;
+    if (!session.proc) return;
     const cwd = await getCwd(session.proc.pid);
     if (cwd && cwd !== session.cwd) {
       session.cwd = cwd;
@@ -267,7 +280,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
   const session: Session = {
     id,
     name: name?.trim() || pickSessionName(),
-    proc: null as any,
+    proc: null,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     clients: new Set(),
@@ -325,6 +338,7 @@ g.__wt_cwd_poll = setInterval(async () => {
   let changed = false;
   await Promise.all(
     [...sessions.values()].map(async (s) => {
+      if (!s.proc) return;
       const cwd = await getCwd(s.proc.pid);
       if (cwd && cwd !== s.cwd) { s.cwd = cwd; changed = true; }
     })
@@ -375,9 +389,13 @@ const server = Bun.serve<WSData>({
       // Binary = terminal input from client (shouldn't happen but ignore)
       if (typeof msg !== "string") return;
 
-      let data: any;
+      let data: ParsedClientMessage;
       try {
-        data = JSON.parse(msg);
+        const parsed = JSON.parse(msg);
+        if (!parsed || typeof parsed !== "object") return;
+        const record = parsed as Record<string, unknown>;
+        if (typeof record.type !== "string") return;
+        data = record as ParsedClientMessage;
       } catch {
         return;
       }
@@ -402,7 +420,13 @@ const server = Bun.serve<WSData>({
           // Detach from any current session
           if (session) session.clients.delete(ws);
 
-          const s = createSession(data.name ?? "", data.cols ?? 80, data.rows ?? 24, data.cwd || undefined);
+          const name = asString(data.name) ?? "";
+          const cols = asPositiveInt(data.cols) ?? 80;
+          const rows = asPositiveInt(data.rows) ?? 24;
+          const cwdRaw = asString(data.cwd);
+          const cwd = cwdRaw && cwdRaw.trim().length > 0 ? cwdRaw : undefined;
+          const requestId = asString(data.requestId);
+          const s = createSession(name, cols, rows, cwd);
           ws.data.sessionId = s.id;
           // sessions before ready — client needs the new session in its list so
           // the container div exists in the DOM when the ready handler fires.
@@ -412,7 +436,7 @@ const server = Bun.serve<WSData>({
             id: s.id,
             name: s.name,
             fresh: true,
-            ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+            ...(requestId !== null ? { requestId } : {}),
           }));
           // Attach only after ready so no binary from the new PTY can arrive
           // before client-side routing flips to this new session.
@@ -423,12 +447,14 @@ const server = Bun.serve<WSData>({
         }
 
         case "attach": {
-          const s = sessions.get(data.id);
+          const id = asString(data.id);
+          const requestId = asString(data.requestId);
+          const s = id ? sessions.get(id) : null;
           if (!s) {
             ws.send(JSON.stringify({
               type: "error",
               message: "Session not found",
-              ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+              ...(requestId !== null ? { requestId } : {}),
             }));
             return;
           }
@@ -442,13 +468,15 @@ const server = Bun.serve<WSData>({
           broadcastSessions();
 
           // Resize to match client dimensions
-          if (data.cols && data.rows) s.proc.terminal?.resize(data.cols, data.rows);
+          const cols = asPositiveInt(data.cols);
+          const rows = asPositiveInt(data.rows);
+          if (cols && rows) s.proc?.terminal?.resize(cols, rows);
 
           ws.send(JSON.stringify({
             type: "ready",
             id: s.id,
             name: s.name,
-            ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
+            ...(requestId !== null ? { requestId } : {}),
           }));
           // Replay after ready so client can validate requestId first and drop
           // stale attach responses before any scrollback bytes are applied.
@@ -458,36 +486,44 @@ const server = Bun.serve<WSData>({
         }
 
         case "input": {
-          if (!session) return;
-          session.proc.terminal?.write(data.data);
+          const input = asString(data.data);
+          if (!session || input === null) return;
+          session.proc?.terminal?.write(input);
           // Enter key — schedule a CWD refresh after the command has time to run
-          if (data.data === "\r") scheduleCwdRefresh(session);
+          if (input === "\r") scheduleCwdRefresh(session);
           break;
         }
 
         case "resize": {
-          if (!session) return;
-          session.proc.terminal?.resize(data.cols, data.rows);
+          const cols = asPositiveInt(data.cols);
+          const rows = asPositiveInt(data.rows);
+          if (!session || !cols || !rows) return;
+          session.proc?.terminal?.resize(cols, rows);
           break;
         }
 
         case "rename": {
-          const s = sessions.get(data.id);
+          const id = asString(data.id);
+          if (!id) return;
+          const s = sessions.get(id);
           if (!s) return;
-          s.name = (data.name ?? "").trim() || s.name;
+          const nextName = asString(data.name);
+          s.name = (nextName ?? "").trim() || s.name;
           broadcastSessions();
           break;
         }
 
         case "kill": {
-          const s = sessions.get(data.id);
+          const id = asString(data.id);
+          if (!id) return;
+          const s = sessions.get(id);
           if (!s) return;
           if (s.cwdTimer) clearTimeout(s.cwdTimer);
-          sessions.delete(data.id);
-          const exitMsg = JSON.stringify({ type: "session-exit", id: data.id });
+          sessions.delete(id);
+          const exitMsg = JSON.stringify({ type: "session-exit", id });
           for (const c of s.clients) c.send(exitMsg);
-          s.proc.terminal?.close();
-          s.proc.kill();
+          s.proc?.terminal?.close();
+          s.proc?.kill();
           broadcastSessions();
           break;
         }

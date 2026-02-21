@@ -17,6 +17,7 @@
 - [x] Local host stayed hardcoded as `local` — fixed (reconcile local host id/name from `host-info` and `/api/host`)
 - [x] Peer WS scheme inherited from page protocol — fixed (derive ws/wss from each host URL instead)
 - [x] Deprecated `useWS` hook still present — fixed (remove dead hook and keep WS lifecycle in `useHostConnections`)
+- [x] `server.ts` control-path `any` usage — fixed (typed JSON guards + typed field coercion helpers)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

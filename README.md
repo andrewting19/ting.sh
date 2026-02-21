@@ -71,6 +71,7 @@ Working:
 - Local host identity reconciliation — local host ID/name now follows server `host-info`/`/api/host` values instead of staying hardcoded as `local`
 - Peer WS URL derivation now follows each peer base URL scheme (`http→ws`, `https→wss`) instead of the current page protocol
 - Legacy single-host `useWS` hook removed; host transport now flows only through `useHostConnections` / `WSConnection`
+- Server control-message parsing now uses typed guards (no `any` in `server.ts` request handling paths)
 
 Missing / in progress:
 - Multi-machine dashboard
