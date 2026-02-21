@@ -26,11 +26,13 @@ In dev, Vite proxies `/ws` to `localhost:7681`. The frontend always connects to 
 
 ## When to run tests
 
-Run `bun test` **after every commit**. Tests take ~25 seconds — fast enough to not break iteration speed. If tests fail, fix and recommit before moving on.
+Run `bun test` **after every commit**. Tests take ~10 seconds. If tests fail, fix and recommit before moving on.
 
-Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess. `tests/e2e.test.ts` also kills any stale processes on the test ports (4322/7682) before launching Playwright, so interrupted runs don't leave the next run broken.
+Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess. Each run gets OS-assigned dynamic ports so concurrent agents never collide.
 
 No unit tests — mocking React/WS/xterm.js costs more than it's worth. E2E covers the real behavior. Exception: if server.ts grows complex logic, add Bun unit tests for that file.
+
+See `tests/CLAUDE.md` for detailed test architecture and guidelines for writing new tests.
 
 These three steps keep the repo self-documenting so any future developer (or Claude session) can onboard from the files alone.
 
