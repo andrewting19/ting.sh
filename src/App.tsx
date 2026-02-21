@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
+import { MobileToolbar } from './components/MobileToolbar'
 import { useWS } from './hooks/useWS'
 import { useTerminalManager } from './hooks/useTerminalManager'
 import type { Session } from './types'
@@ -312,6 +313,18 @@ export function App() {
     setSessionOrder(prev => [...prev.filter(id => id !== fromId), fromId])
   }
 
+  function sendInput(data: string) {
+    send({ type: 'input', data })
+  }
+
+  function scrollToBottom() {
+    const id = currentIdRef.current
+    if (!id) return
+    const container = containerRefs.current.get(id)
+    const viewport = container?.querySelector('.xterm-viewport') as HTMLElement | null
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -360,6 +373,13 @@ export function App() {
           ))}
         </div>
       </main>
+
+      <MobileToolbar
+        currentId={currentId}
+        sendInput={sendInput}
+        focusTerminal={() => { if (currentId) tm.focus(currentId) }}
+        scrollToBottom={scrollToBottom}
+      />
 
       {killTarget && (
         <Modal

@@ -65,13 +65,11 @@ const TERMINAL_OPTIONS = {
 // "scroll sometimes stops registering" bug.
 //
 // Fix:
-//   1. Track whether the gesture moved >5px (i.e. is a scroll, not a tap).
-//   2. touchend is non-passive so we CAN call preventDefault():
-//      - Scroll gesture: preventDefault() suppresses the synthetic mousedown
-//        → xterm.js selection mode never activates → reliable scroll +
-//        momentum animation.
-//      - Tap gesture: no preventDefault → synthetic mousedown fires normally
-//        → xterm.js focuses its textarea → iOS keyboard appears.
+//   1. touchend always calls preventDefault() — this suppresses ALL synthetic
+//      mouse events from the terminal canvas, including the mousedown that
+//      would focus xterm's textarea. Keyboard access is exclusively through
+//      the mobile toolbar's keyboard button which calls term.focus() directly.
+//   2. Track velocity for momentum scrolling regardless of gesture type.
 //   3. capture:true on all listeners so xterm.js's stopPropagation() calls
 //      in bubble phase never affect us.
 //   4. We never call stopPropagation() — xterm.js keeps all events and
@@ -83,10 +81,8 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
   if (!viewport) return null
 
-  const SCROLL_THRESHOLD_PX = 5
   const samples: { y: number; t: number }[] = []
   let startY = 0
-  let isScrollGesture = false
   let rafId: number | null = null
 
   const cancelMomentum = () => {
@@ -96,7 +92,6 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const onTouchStart = (e: TouchEvent) => {
     cancelMomentum()
     samples.length = 0
-    isScrollGesture = false
     startY = e.touches[0].pageY
     samples.push({ y: startY, t: performance.now() })
   }
@@ -104,17 +99,13 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const onTouchMove = (e: TouchEvent) => {
     if (e.touches.length !== 1) return
     const y = e.touches[0].pageY
-    if (!isScrollGesture && Math.abs(y - startY) > SCROLL_THRESHOLD_PX) {
-      isScrollGesture = true
-    }
     samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
   }
 
   const onTouchEnd = (e: TouchEvent) => {
-    if (!isScrollGesture) return  // tap — let synthetic mousedown through for keyboard/focus
-
-    // Suppress synthetic mousedown so xterm.js selection mode never activates
+    // Always suppress synthetic mousedown — keyboard access is via the toolbar's
+    // keyboard button which calls term.focus() directly inside a user gesture.
     e.preventDefault()
 
     if (samples.length < 2) return
@@ -141,7 +132,7 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
   const onTouchCancel = () => {
     cancelMomentum()
     samples.length = 0
-    isScrollGesture = false
+    startY = 0
   }
 
   const capturePassive = { capture: true, passive: true } as const
