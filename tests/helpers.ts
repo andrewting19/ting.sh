@@ -116,6 +116,18 @@ export async function waitForTerminal(
 /** Switch to a session by clicking its sidebar item. */
 export async function switchToSession(page: Page, sessionId: string): Promise<void> {
   await page.click(`[data-session-id="${sessionId}"]`)
+  // Wait for the WS attach to complete (ready acknowledged), not just the
+  // optimistic active class switch in the sidebar.
+  await page.waitForFunction(
+    (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const getAttached = (window as any).__wt_get_attached_id
+      if (typeof getAttached === 'function') return getAttached() === id
+      return document.querySelector('.session-item.active')?.getAttribute('data-session-id') === id
+    },
+    sessionId,
+    { timeout: 5000 },
+  )
 }
 
 /**

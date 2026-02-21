@@ -110,6 +110,26 @@ function sessionInfo(s: Session) {
   return { id: s.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size, cwd: s.cwd };
 }
 
+function detachClient(ws: ServerWebSocket<WSData>): boolean {
+  const sessionId = ws.data.sessionId;
+  if (!sessionId) return false;
+  ws.data.sessionId = null;
+  const session = sessions.get(sessionId);
+  if (!session) return false;
+  return session.clients.delete(ws);
+}
+
+function safeSend(ws: ServerWebSocket<WSData>, payload: string): boolean {
+  try {
+    ws.send(payload);
+    return true;
+  } catch {
+    listSubscribers.delete(ws);
+    detachClient(ws);
+    return false;
+  }
+}
+
 function broadcastSessions() {
   const list = [...sessions.values()].map(sessionInfo);
   const msg = JSON.stringify({ type: "sessions", list });
@@ -117,7 +137,7 @@ function broadcastSessions() {
   for (const s of sessions.values()) {
     for (const ws of s.clients) recipients.add(ws);
   }
-  for (const ws of recipients) ws.send(msg);
+  for (const ws of recipients) safeSend(ws, msg);
 }
 
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
@@ -234,9 +254,7 @@ const server = Bun.serve<WSData>({
         }
 
         case "detach": {
-          if (session) {
-            session.clients.delete(ws);
-            ws.data.sessionId = null;
+          if (detachClient(ws)) {
             broadcastSessions();
           }
           break;
@@ -248,7 +266,6 @@ const server = Bun.serve<WSData>({
 
           const s = createSession(data.name ?? "", data.cols ?? 80, data.rows ?? 24, data.cwd || undefined);
           ws.data.sessionId = s.id;
-          s.clients.add(ws);
           // sessions before ready — client needs the new session in its list so
           // the container div exists in the DOM when the ready handler fires.
           broadcastSessions();
@@ -259,6 +276,11 @@ const server = Bun.serve<WSData>({
             fresh: true,
             ...(typeof data.requestId === "string" ? { requestId: data.requestId } : {}),
           }));
+          // Attach only after ready so no binary from the new PTY can arrive
+          // before client-side routing flips to this new session.
+          s.clients.add(ws);
+          if (s.buffer.length > 0) ws.sendBinary(s.buffer);
+          broadcastSessions();
           break;
         }
 

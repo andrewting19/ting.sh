@@ -56,7 +56,9 @@ Working:
 - URL hash routing — `#<name>` deeplinks directly to a session; auto-attaches to first on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
-- Automated E2E test suite (Playwright) — 24 tests, runs with `bun test`
+- Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
+- Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
+- Automated E2E test suite (Playwright) — 26 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 
 Missing / in progress:

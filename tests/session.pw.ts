@@ -88,6 +88,70 @@ test('switch sessions — scrollback not duplicated on return', async ({ page })
   expect(countAfter).toBe(countBefore)
 })
 
+test('switch during noisy output — old session bytes do not leak', async ({ page }) => {
+  const id1 = await newSession(page)
+  await waitForPrompt(page, id1)
+  const id2 = await newSession(page)
+  await waitForPrompt(page, id2)
+
+  await switchToSession(page, id1)
+  await waitForPrompt(page, id1)
+
+  const marker = `LEAK_${Date.now()}`
+  await page.keyboard.type(`for i in {1..50000}; do echo ${marker}; done`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id1, marker)
+
+  await switchToSession(page, id2)
+  await waitForPrompt(page, id2)
+
+  const text2 = await getTerminalText(page, id2)
+  expect(text2.includes(marker), `marker leaked into session2: ${marker}`).toBe(false)
+})
+
+test('rapid multi-switch keeps final session clean', async ({ page }) => {
+  const id1 = await newSession(page)
+  await waitForPrompt(page, id1)
+  const id2 = await newSession(page)
+  await waitForPrompt(page, id2)
+  const id3 = await newSession(page)
+  await waitForPrompt(page, id3)
+
+  await switchToSession(page, id2)
+  const marker2 = `M2_${Date.now()}`
+  await page.keyboard.type(`echo ${marker2}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id2, marker2)
+
+  await switchToSession(page, id3)
+  const marker3 = `M3_${Date.now()}`
+  await page.keyboard.type(`echo ${marker3}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id3, marker3)
+
+  await page.evaluate(([a, b]) => {
+    const first = document.querySelector<HTMLElement>(`[data-session-id="${a}"]`)
+    const second = document.querySelector<HTMLElement>(`[data-session-id="${b}"]`)
+    first?.click()
+    second?.click()
+  }, [id2, id3])
+
+  await page.waitForFunction(
+    (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const getAttached = (window as any).__wt_get_attached_id
+      return typeof getAttached === 'function' && getAttached() === id
+    },
+    id3,
+    { timeout: 5000 },
+  )
+  await waitForPrompt(page, id3)
+
+  const text3 = await getTerminalText(page, id3)
+  expect(text3.includes(marker2), `id2 marker leaked into id3: ${marker2}`).toBe(false)
+  expect(text3).toContain(marker3)
+})
+
 test('kill session — removed from sidebar', async ({ page }) => {
   const id = await newSession(page)
   await waitForPrompt(page, id)

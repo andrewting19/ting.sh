@@ -9,6 +9,8 @@
 - [x] New session blank until switch away/back — fixed (sessions before ready)
 - [x] Session name collisions after delete — fixed (champion name pool)
 - [x] Shared-session width stuck after phone use — fixed (foreground + same-session resize reclaim)
+- [x] Output leaked into wrong terminal during fast session switches — fixed (requestId-validated attach + stale-stream binary quarantine)
+- [x] Truncated replay could render with broken ANSI state — fixed (sanitize first partial line after buffer cap trims)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
@@ -27,7 +29,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 24 tests covering all key flows
+- [x] E2E test suite (Playwright) — 26 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<name>` deeplinks to session by name
@@ -66,7 +68,7 @@
 - **Per-session xterm.js instances, lazy** — created on first view, kept alive; WebGL on active only
 - **Renderer split by platform** — WebGL on desktop; Canvas forced on iOS to avoid Safari glyph-touch selection issues
 - **`visibility:hidden` not `display:none`** — FitAddon needs layout to measure
-- **`attachingIdRef`** — routes binary scrollback to the right terminal before `ready` arrives
+- **Attach correlation via `requestId`** — client validates `ready` against the latest attach request and drops stale attach binary to prevent cross-session replay leaks
 - **`globalThis` for session Map** — survives Bun `--hot` reloads
 - **Binary WS frames** for terminal output, JSON for control
 - **No tmux** — PTY owned directly

@@ -21,9 +21,16 @@ export function App() {
   sessionsRef.current = sessions
   // sessionOrderRef.current is assigned after sessionOrder useState below
 
-  // Set when we've sent attach/create but haven't received ready yet.
-  // Binary scrollback arrives before ready, so we route it here.
-  const attachingIdRef = useRef<string | null>(null)
+  // Session currently attached on the server for this WS connection.
+  // Binary output always routes here (never to optimistic UI state).
+  const attachedIdRef = useRef<string | null>(null)
+  // Latest in-flight attach request. Older ready responses are ignored.
+  const pendingAttachRequestIdRef = useRef<string | null>(null)
+  const pendingAttachTargetIdRef = useRef<string | null>(null)
+  const nextRequestSeqRef = useRef(0)
+  // When we ignore a stale attach ready, drop binary until the newest attach
+  // is confirmed so replay from the stale attach cannot contaminate terminals.
+  const dropBinaryUntilReadyRef = useRef(false)
 
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceRef = useRef<string | null>(null)
@@ -81,12 +88,21 @@ export function App() {
 
   const { send, status } = useWS(`ws://${location.host}/ws`, {
     onBinary: (data) => {
-      // Route to the session we're transitioning to, or the current one
-      const id = attachingIdRef.current ?? currentIdRef.current
+      if (dropBinaryUntilReadyRef.current) return
+      const id = attachedIdRef.current
       if (id) tm.write(id, new Uint8Array(data))
     },
     onMessage: handleMessage,
   })
+
+  const sendAttachRequest = useCallback((id: string) => {
+    const requestId = `attach-${++nextRequestSeqRef.current}`
+    pendingAttachRequestIdRef.current = requestId
+    pendingAttachTargetIdRef.current = id
+    dropBinaryUntilReadyRef.current = false
+    const dims = tm.getDimensions(id)
+    send({ type: 'attach', id, requestId, ...dims })
+  }, [send, tm])
 
   const syncSessionSize = useCallback((id: string) => {
     const container = containerRefs.current.get(id)
@@ -100,25 +116,29 @@ export function App() {
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
   useEffect(() => {
-    if (import.meta.env.DEV) (window as any).__wt_send = send
+    if (!import.meta.env.DEV) return
+    ;(window as any).__wt_send = send
+    ;(window as any).__wt_get_attached_id = () => attachedIdRef.current
   }, [send])
 
   // On (re)connect: request session list and re-attach current session
   useEffect(() => {
     if (status !== 'connected') return
     killedSessionIds.current.clear()
+    attachedIdRef.current = null
+    pendingAttachRequestIdRef.current = null
+    pendingAttachTargetIdRef.current = null
+    dropBinaryUntilReadyRef.current = false
     send({ type: 'list' })
     const id = currentIdRef.current
     if (id) {
-      attachingIdRef.current = id
       const container = containerRefs.current.get(id)
       if (container) tm.ensureTerminal(id, container)
       tm.setActive(id)
       tm.reset(id)
-      const dims = tm.getDimensions(id)
-      send({ type: 'attach', id, ...dims })
+      sendAttachRequest(id)
     }
-  }, [status, send, tm])
+  }, [status, send, sendAttachRequest, tm])
 
   // When currentId changes (or sessions list grows), activate the terminal.
   // sessions.length is included so this re-runs when the new session's div
@@ -213,7 +233,23 @@ export function App() {
       case 'ready': {
         const id = m.id as string
         const name = m.name as string
-        attachingIdRef.current = null
+        const requestId = typeof m.requestId === 'string' ? m.requestId : null
+        if (requestId) {
+          const pending = pendingAttachRequestIdRef.current
+          if (!pending) return
+          if (requestId !== pending) {
+            dropBinaryUntilReadyRef.current = true
+            return
+          }
+          pendingAttachRequestIdRef.current = null
+          pendingAttachTargetIdRef.current = null
+          dropBinaryUntilReadyRef.current = false
+        } else {
+          pendingAttachRequestIdRef.current = null
+          pendingAttachTargetIdRef.current = null
+          dropBinaryUntilReadyRef.current = false
+        }
+        attachedIdRef.current = id
         // Update sync ref immediately so binary routing is correct
         currentIdRef.current = id
         // Prime the terminal immediately so it buffers incoming binary before
@@ -243,9 +279,35 @@ export function App() {
         break
       }
 
+      case 'error': {
+        const requestId = typeof m.requestId === 'string' ? m.requestId : null
+        if (!requestId || requestId !== pendingAttachRequestIdRef.current) break
+        pendingAttachRequestIdRef.current = null
+        pendingAttachTargetIdRef.current = null
+        dropBinaryUntilReadyRef.current = false
+        const fallback = attachedIdRef.current
+        currentIdRef.current = fallback
+        setCurrentId(fallback)
+        if (fallback) {
+          tm.setActive(fallback)
+          tm.focus(fallback)
+          const name = sessionsRef.current.find(s => s.id === fallback)?.name ?? fallback
+          history.replaceState(null, '', '#' + encodeURIComponent(name))
+        } else {
+          history.replaceState(null, '', location.pathname)
+        }
+        break
+      }
+
       case 'session-exit': {
         const id = m.id as string
         killedSessionIds.current.add(id)
+        if (attachedIdRef.current === id) attachedIdRef.current = null
+        if (pendingAttachTargetIdRef.current === id) {
+          pendingAttachRequestIdRef.current = null
+          pendingAttachTargetIdRef.current = null
+          dropBinaryUntilReadyRef.current = false
+        }
         tm.destroy(id)
         setSessions(s => s.filter(s => s.id !== id))
         if (currentIdRef.current === id) {
@@ -291,7 +353,6 @@ export function App() {
       tm.focus(id)
       return
     }
-    attachingIdRef.current = id
     const container = containerRefs.current.get(id)
     if (container) tm.ensureTerminal(id, container)
     // Clear existing content — server always replays the full scrollback buffer
@@ -303,8 +364,7 @@ export function App() {
     setCurrentId(id)
     tm.setActive(id)
     tm.focus(id)
-    const dims = tm.getDimensions(id)
-    send({ type: 'attach', id, ...dims })
+    sendAttachRequest(id)
     // Update URL hash for bookmarking / deeplink — use name not UUID
     const name = sessionsRef.current.find(s => s.id === id)?.name ?? id
     history.replaceState(null, '', '#' + encodeURIComponent(name))
