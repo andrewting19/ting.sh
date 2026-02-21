@@ -372,21 +372,28 @@ html, body, #root {
   overscroll-behavior: contain;
 }
 
-/* xterm.js accessibility tree overrides the parent's user-select:none with
-   user-select:text (for screen readers). On iOS, the accessibility layer sits
-   at z-index:10 above the canvas and iOS's text-selection gesture recognizer
-   uses it for hit testing even though pointer-events:none is set on the parent.
-   Result: touches starting on text nodes are consumed as selection gestures
-   instead of scroll gestures — scroll silently fails on those positions.
-
-   xterm.js also sets user-select:text via *inline styles* on individual <span>
-   children, so the class-level rule below needs !important to win. The * rule
-   covers those children. Screen reader content is still accessible via
-   assistive tech APIs (AX tree, VoiceOver) which don't depend on user-select. */
-.xterm .xterm-accessibility-tree,
-.xterm .xterm-accessibility-tree * {
-  -webkit-user-select: none !important;
-  user-select: none !important;
+/* On touch devices, hide the xterm.js accessibility container entirely.
+   Root cause of the scroll-on-text bug:
+     - .xterm-accessibility contains <span> rows with the terminal's text
+       content (for screen readers). It sits at z-index:10 with pointer-
+       events:none, but iOS Safari's UIKit gesture recognizer operates *below*
+       WebKit/JS and uses those text nodes for hit-testing regardless of
+       pointer-events or user-select CSS.
+     - When a touch starts on a visible character, UIKit classifies the gesture
+       as a potential text-selection before JS ever fires. While it decides
+       "selection vs scroll", touchmove is suppressed/delayed → scroll fails
+       or is jank.
+     - user-select:none !important is a WebKit hint, not a UIKit hint — it
+       doesn't prevent UIKit from seeing the text nodes.
+   Fix: display:none removes the nodes from the rendering tree entirely, which
+   removes them from UIKit hit-testing. The helper textarea (.xterm-helper-
+   textarea) lives in .xterm-screen > .xterm-helpers, a separate subtree, so
+   keyboard input is unaffected. VoiceOver on iOS uses its own AX-tree APIs
+   and doesn't depend on the in-page DOM for reading terminal content anyway. */
+@media (hover: none) {
+  .xterm-accessibility {
+    display: none;
+  }
 }
 
 /* cursor:text on .xterm signals to iOS that this is a text element,
