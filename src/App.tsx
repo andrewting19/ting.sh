@@ -352,9 +352,8 @@ export function App() {
   }, [forceClose, localHostId, sendToHost])
 
   const toWsUrl = useCallback((baseUrl: string) => {
-    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const next = new URL(baseUrl)
-    next.protocol = wsProtocol
+    next.protocol = next.protocol === 'https:' ? 'wss:' : 'ws:'
     next.pathname = '/ws'
     next.search = ''
     next.hash = ''
