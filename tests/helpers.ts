@@ -147,16 +147,18 @@ export async function killAllSessions(page: Page): Promise<void> {
   const ids = await getSessions(page)
   if (ids.length === 0) return
 
-  await page.evaluate((ids: string[]) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const send = (window as any).__wt_send
-    if (!send) throw new Error('__wt_send not available — is the app in dev mode?')
-    for (const id of ids) send({ type: 'kill', id })
-  }, ids)
-
-  // Wait for all session items to vanish from the DOM
-  await page.waitForFunction(
-    () => document.querySelectorAll('[data-session-id]').length === 0,
-    { timeout: 5000 },
-  )
+  // Kill sessions sequentially: kill one, wait for it to disappear, repeat.
+  for (const id of ids) {
+    await page.evaluate((id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const send = (window as any).__wt_send
+      if (!send) throw new Error('__wt_send not available — is the app in dev mode?')
+      send({ type: 'kill', id })
+    }, id)
+    await page.waitForFunction(
+      (killId: string) => !document.querySelector(`[data-session-id="${killId}"]`),
+      id,
+      { timeout: 5000 },
+    )
+  }
 }

@@ -20,7 +20,7 @@ async function getSessionName(page: import('@playwright/test').Page, id: string)
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  // Clean slate: kill any sessions left over from previous test runs
+  // Clean slate: atomic kill-all avoids auto-attach cascade
   await killAllSessions(page)
 })
 
@@ -274,16 +274,18 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
   const id = await newSession(page)
   await waitForPrompt(page, id)
 
-  // Confirm connected before going offline
+  // Confirm connected before dropping
   await expect(page.locator('.status-dot.connected')).toBeVisible()
 
-  // Drop the network — WS closes, app switches to reconnecting state.
-  // setOffline lives on BrowserContext, not Page.
-  await page.context().setOffline(true)
+  // Close the WebSocket from the client side — setOffline doesn't reliably
+  // affect localhost connections in all browsers/Playwright versions.
+  await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__wt_ws_close?.()
+  })
   await expect(page.locator('.status-dot.reconnecting')).toBeVisible({ timeout: 5000 })
 
-  // Restore network — useWS retries every 1500ms, so allow up to 8s
-  await page.context().setOffline(false)
+  // useWS retries every 1500ms, so allow up to 8s for reconnect
   await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
 
   // Session still in sidebar and terminal content replayed from server buffer
@@ -366,9 +368,8 @@ test('url hash — killing current session clears or updates hash', async ({ pag
 
 test('no hash on load — auto-attaches to first session', async ({ page }) => {
   const id = await newSession(page)
-  await waitForPrompt(page, id)
 
-  // Navigate to base URL (no hash)
+  // Navigate to base URL (no hash) — forces a fresh page load
   await page.goto('/')
   await page.waitForSelector('.session-item.active', { timeout: 8000 })
 

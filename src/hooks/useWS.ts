@@ -16,6 +16,11 @@ export function useWS(url: string, handlers: WSHandlers) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     let ws: WebSocket
+    // Set to true in cleanup so the async onclose callback doesn't enqueue
+    // a reconnect after the effect has been intentionally torn down.
+    // Without this, React StrictMode's double-mount leaves an orphaned timer
+    // that opens a duplicate WS connection 500ms after teardown.
+    let intentionallyClosed = false
 
     function connect() {
       setStatus('reconnecting')
@@ -26,7 +31,12 @@ export function useWS(url: string, handlers: WSHandlers) {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
       }
 
-      ws.onopen = () => setStatus('connected')
+      ws.onopen = () => {
+        setStatus('connected')
+        // Expose a way for tests to force-close the WS (setOffline doesn't
+        // reliably affect localhost connections in all browsers).
+        if (import.meta.env.DEV) (window as any).__wt_ws_close = () => ws.close()
+      }
 
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) {
@@ -37,6 +47,7 @@ export function useWS(url: string, handlers: WSHandlers) {
       }
 
       ws.onclose = () => {
+        if (intentionallyClosed) return
         setStatus('reconnecting')
         timer = setTimeout(connect, 1500)
       }
@@ -44,6 +55,7 @@ export function useWS(url: string, handlers: WSHandlers) {
 
     connect()
     return () => {
+      intentionallyClosed = true
       clearTimeout(timer)
       ws?.close()
     }
