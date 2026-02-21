@@ -405,6 +405,25 @@ html, body, #root {
   }
 }
 
+/* touch-action:none tells UIKit *before* gesture recognition starts that
+   all touch handling is owned by JavaScript. This prevents UIKit from
+   running ANY gesture recognizer (text-selection, native pan-and-zoom,
+   etc.) for touches landing inside the terminal pane, which is what
+   causes touchmove to be suppressed when the finger starts on a glyph.
+
+   Native scroll is not needed: xterm.js drives scroll via
+   viewport.scrollTop += deltaY in its touchmove handler, and our
+   attachIOSScroll adds momentum via requestAnimationFrame. Neither
+   depends on the browser's native pan behaviour.
+
+   touch-action is checked by UIKit at layout time, before any JS runs,
+   making it more effective than e.preventDefault() in touchstart. */
+@media (hover: none) {
+  .terminal-pane {
+    touch-action: none;
+  }
+}
+
 /* ── Modal ── */
 .modal-backdrop {
   position: fixed;

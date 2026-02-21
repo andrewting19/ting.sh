@@ -94,10 +94,21 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     samples.length = 0
     startY = e.touches[0].pageY
     samples.push({ y: startY, t: performance.now() })
+    // Belt-and-suspenders alongside touch-action:none in CSS: prevent default
+    // here too so iOS UIKit gets a JS-level signal that this touch is claimed.
+    // (touch-action:none is the primary fix; this handles any edge cases where
+    // UIKit hasn't yet applied the CSS at gesture-start time.)
+    e.preventDefault()
   }
 
   const onTouchMove = (e: TouchEvent) => {
     if (e.touches.length !== 1) return
+    // Prevent iOS UIKit from classifying this gesture as text-selection.
+    // Must be called in capture phase (before xterm's bubble handler) with a
+    // non-passive listener. xterm's own touchmove handler calls preventDefault
+    // too, but in bubble phase — iOS UIKit makes its decision earlier.
+    // This does NOT stop xterm's handler from firing (preventDefault ≠ stopPropagation).
+    e.preventDefault()
     const y = e.touches[0].pageY
     samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
@@ -135,17 +146,22 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     startY = 0
   }
 
-  const capturePassive = { capture: true, passive: true } as const
+  // All listeners active (passive:false) — we call preventDefault on all three.
+  // touchstart: claim touch from UIKit before gesture classification starts.
+  // touchmove:  prevent UIKit from proceeding with text-selection gesture.
+  // touchend:   suppress synthetic mousedown → prevents keyboard dismissal.
+  // touchcancel: passive is fine, just cleanup.
   const captureActive  = { capture: true, passive: false } as const
-  container.addEventListener('touchstart',  onTouchStart,  capturePassive)
-  container.addEventListener('touchmove',   onTouchMove,   capturePassive)
-  container.addEventListener('touchend',    onTouchEnd,    captureActive)   // needs preventDefault
+  const capturePassive = { capture: true, passive: true  } as const
+  container.addEventListener('touchstart',  onTouchStart,  captureActive)
+  container.addEventListener('touchmove',   onTouchMove,   captureActive)   // active: call preventDefault
+  container.addEventListener('touchend',    onTouchEnd,    captureActive)
   container.addEventListener('touchcancel', onTouchCancel, capturePassive)
 
   return () => {
     cancelMomentum()
-    container.removeEventListener('touchstart',  onTouchStart,  capturePassive)
-    container.removeEventListener('touchmove',   onTouchMove,   capturePassive)
+    container.removeEventListener('touchstart',  onTouchStart,  captureActive)
+    container.removeEventListener('touchmove',   onTouchMove,   captureActive)
     container.removeEventListener('touchend',    onTouchEnd,    captureActive)
     container.removeEventListener('touchcancel', onTouchCancel, capturePassive)
   }
