@@ -52,10 +52,10 @@ Working:
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
-- Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, 3 programmable hotkey slots (long-press to edit), paste modal with history
+- Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
 - URL hash routing — `#<name>` deeplinks directly to a session; auto-attaches to first on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
-- Automated E2E test suite (Playwright) — 21 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 23 tests, runs with `bun test`
 
 Missing / in progress:
 - Multi-machine dashboard

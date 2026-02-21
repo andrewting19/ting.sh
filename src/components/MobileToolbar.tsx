@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowPad } from './ArrowPad'
 import { PasteModal } from './PasteModal'
 
@@ -31,27 +31,30 @@ function saveHotkeys(slots: HotkeySlot[]) {
   localStorage.setItem(HOTKEYS_KEY, JSON.stringify(slots))
 }
 
-function computeSequence(slot: HotkeySlot, extraMods?: { ctrl?: boolean; shift?: boolean }): string {
+export function computeSequence(slot: HotkeySlot, extraMods?: { ctrl?: boolean; shift?: boolean; alt?: boolean }): string {
   const mods = new Set(slot.modifiers)
   if (extraMods?.ctrl) mods.add('ctrl')
   if (extraMods?.shift) mods.add('shift')
+  if (extraMods?.alt) mods.add('alt')
 
   const key = slot.key.toLowerCase()
+  let sequence = ''
 
-  if (key === 'esc') return '\x1b'
+  if (key === 'esc') sequence = '\x1b'
   if (key === 'tab') {
-    if (mods.has('shift')) return '\x1b[Z'
-    return '\t'
+    sequence = mods.has('shift') ? '\x1b[Z' : '\t'
   }
-  if (key === 'enter') return '\r'
+  if (key === 'enter') sequence = '\r'
 
-  if (mods.has('ctrl') && key.length === 1) {
-    if (key === '[') return '\x1b'
+  if (!sequence && mods.has('ctrl') && key.length === 1) {
+    if (key === '[') sequence = '\x1b'
     const code = key.toUpperCase().charCodeAt(0) - 64
-    if (code >= 1 && code <= 26) return String.fromCharCode(code)
+    if (code >= 1 && code <= 26) sequence = String.fromCharCode(code)
   }
 
-  return key
+  if (!sequence) sequence = key
+  if (mods.has('alt') && sequence) return '\x1b' + sequence
+  return sequence
 }
 
 // ── Hotkey editor ─────────────────────────────────────────────────────────────
@@ -68,6 +71,7 @@ interface HotkeyEditorProps {
 function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
   const [mods, setMods] = useState<Set<'ctrl' | 'shift' | 'alt'>>(new Set(slot.modifiers))
   const [key, setKey] = useState(slot.key)
+  const [lastCharKey, setLastCharKey] = useState(!SPECIAL_KEYS.includes(slot.key) && slot.key ? slot.key : 'a')
   const [label, setLabel] = useState(slot.label)
 
   const toggleMod = (m: 'ctrl' | 'shift' | 'alt') =>
@@ -109,7 +113,14 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
           <select
             className="hk-key-select"
             value={SPECIAL_KEYS.includes(key) ? key : '__char__'}
-            onChange={e => { if (e.target.value !== '__char__') setKey(e.target.value) }}
+            onChange={e => {
+              const value = e.target.value
+              if (value === '__char__') {
+                setKey(lastCharKey || 'a')
+                return
+              }
+              setKey(value)
+            }}
           >
             <option value="__char__">letter / char</option>
             {SPECIAL_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
@@ -119,7 +130,11 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
               className="hk-key-input"
               maxLength={1}
               value={key}
-              onChange={e => setKey(e.target.value.slice(-1).toLowerCase())}
+              onChange={e => {
+                const next = e.target.value.slice(-1).toLowerCase()
+                setKey(next)
+                if (next) setLastCharKey(next)
+              }}
               placeholder="key"
             />
           )}
@@ -171,6 +186,13 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
   const [editingSlot, setEditingSlot] = useState<HotkeySlot | null>(null)
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => () => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+  }, [])
+
   const fireHotkey = useCallback((slot: HotkeySlot) => {
     const seq = computeSequence(slot, { ctrl: ctrlActive, shift: shiftActive })
     sendInput(seq)
@@ -181,6 +203,8 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
   const startLongPress = (slot: HotkeySlot) => {
     longPressRef.current = setTimeout(() => {
       longPressRef.current = null
+      setArrowPadOpen(false)
+      setPasteOpen(false)
       setEditingSlot(slot)
     }, 500)
   }
@@ -200,6 +224,18 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
     const next = hotkeys.map(h => h.id === id ? def : h)
     setHotkeys(next)
     saveHotkeys(next)
+  }
+
+  const toggleArrowPad = () => {
+    setPasteOpen(false)
+    setEditingSlot(null)
+    setArrowPadOpen(o => !o)
+  }
+
+  const togglePaste = () => {
+    setArrowPadOpen(false)
+    setEditingSlot(null)
+    setPasteOpen(o => !o)
   }
 
   if (!currentId) return null
@@ -269,7 +305,7 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
           className={`tb-btn${arrowPadOpen ? ' tb-active' : ''}`}
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setArrowPadOpen(o => !o)}
+          onClick={toggleArrowPad}
           title="Arrow keys"
         >
           <span className="tb-dpad">⊕</span>
@@ -324,7 +360,7 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
           className={`tb-btn tb-paste${pasteOpen ? ' tb-active' : ''}`}
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setPasteOpen(o => !o)}
+          onClick={togglePaste}
           title="Paste"
         >
           paste

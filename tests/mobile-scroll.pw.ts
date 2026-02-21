@@ -216,3 +216,37 @@ test('touch swipe down scrolls terminal up (scrollTop decreases)', async ({ page
   expect(scrollTopAfter, `scrollTop should decrease: before=${scrollTopBefore} after=${scrollTopAfter}`)
     .toBeLessThan(scrollTopBefore)
 })
+
+test('opening paste closes arrow pad and keeps it closed', async ({ page }) => {
+  const id = await newSessionMobile(page)
+  await waitForPrompt(page, id)
+
+  await page.click("button[title='Arrow keys']")
+  await expect(page.locator('.arrow-pad-overlay')).toHaveCount(1)
+
+  await page.click("button[title='Paste']")
+  await expect(page.locator('.paste-modal')).toHaveCount(1)
+  await expect(page.locator('.arrow-pad-overlay')).toHaveCount(0)
+
+  await page.click('.paste-modal-close')
+  await expect(page.locator('.paste-modal')).toHaveCount(0)
+  await expect(page.locator('.arrow-pad-overlay')).toHaveCount(0)
+})
+
+test('hotkey editor can switch from special key back to char mode', async ({ page }) => {
+  const id = await newSessionMobile(page)
+  await waitForPrompt(page, id)
+
+  const hotkey = page.locator('.tb-hotkey').first()
+  await hotkey.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true, pointerId: 1, bubbles: true })
+  await page.waitForTimeout(550)
+  await hotkey.dispatchEvent('pointerup', { pointerType: 'touch', isPrimary: true, pointerId: 1, bubbles: true })
+  await expect(page.locator('.hotkey-editor')).toBeVisible()
+
+  const keySelect = page.locator('.hk-key-select')
+  await keySelect.selectOption('esc')
+  await expect(page.locator('.hk-key-input')).toHaveCount(0)
+
+  await keySelect.selectOption('__char__')
+  await expect(page.locator('.hk-key-input')).toHaveCount(1)
+})
