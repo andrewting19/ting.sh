@@ -18,6 +18,36 @@ async function getSessionName(page: import('@playwright/test').Page, id: string)
   return page.$eval(`[data-session-id="${id}"] .session-name`, el => el.textContent ?? '')
 }
 
+/** Read the PTY rows/cols by running `stty size` and parsing marked output. */
+async function getSttySize(page: import('@playwright/test').Page, id: string): Promise<{ rows: number; cols: number }> {
+  const marker = `__WT_SIZE_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}__`
+  await page.keyboard.type(`printf '${marker} '; stty size`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, marker)
+
+  const result = await page.waitForFunction(
+    ([sessionId, outputMarker]: [string, string]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entry = (window as any).__wt_terminals?.get(sessionId)
+      if (!entry) return null
+      const buf = entry.term.buffer.active
+      let found: { rows: number; cols: number } | null = null
+      for (let i = 0; i < buf.length; i++) {
+        const line = buf.getLine(i)?.translateToString(true) ?? ''
+        const idx = line.indexOf(outputMarker)
+        if (idx === -1) continue
+        const m = line.slice(idx + outputMarker.length).trim().match(/^(\d+)\s+(\d+)/)
+        if (m) found = { rows: Number(m[1]), cols: Number(m[2]) }
+      }
+      return found
+    },
+    [id, marker] as [string, string],
+    { timeout: 5000 },
+  )
+
+  return result.jsonValue() as Promise<{ rows: number; cols: number }>
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   // Clean slate: atomic kill-all avoids auto-attach cascade
@@ -291,6 +321,38 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
   // Session still in sidebar and terminal content replayed from server buffer
   await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible()
   await waitForPrompt(page, id)
+})
+
+test('shared session — desktop reclaims width after mobile resize', async ({ page, browser }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const desktopBefore = await getSttySize(page, id)
+
+  const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const mobile = await mobileContext.newPage()
+  try {
+    await mobile.goto('/')
+    await mobile.waitForSelector(`[data-session-id="${id}"]`, { timeout: 8000 })
+    await mobile.waitForFunction(
+      (sessionId: string) =>
+        document.querySelector('.session-item.active')?.getAttribute('data-session-id') === sessionId,
+      id,
+      { timeout: 5000 },
+    )
+    await waitForPrompt(mobile, id)
+
+    const mobileSize = await getSttySize(mobile, id)
+    expect(mobileSize.cols).toBeLessThan(desktopBefore.cols)
+
+    // Simulate returning to desktop and re-selecting the same session.
+    await page.bringToFront()
+    await page.click(`[data-session-id="${id}"]`)
+    const desktopAfter = await getSttySize(page, id)
+    expect(desktopAfter.cols).toBeGreaterThan(mobileSize.cols)
+  } finally {
+    await mobileContext.close()
+  }
 })
 
 test('url hash — switching session updates hash to session name', async ({ page }) => {

@@ -8,6 +8,7 @@
 - [x] Double cursor when switching — fixed (per-session terminals)
 - [x] New session blank until switch away/back — fixed (sessions before ready)
 - [x] Session name collisions after delete — fixed (champion name pool)
+- [x] Shared-session width stuck after phone use — fixed (foreground + same-session resize reclaim)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
@@ -26,7 +27,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 23 tests covering all key flows
+- [x] E2E test suite (Playwright) — 24 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<name>` deeplinks to session by name
@@ -37,6 +38,7 @@
 - [x] Mobile toolbar polish — hotkey editor key-type switching fixed, ALT hotkey sequences, mutually exclusive toolbar overlays
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
 - [x] iOS Safari scroll-on-text bug fixed (Canvas renderer forced on iOS + renderer guard test)
+- [x] Shared-session resize reclaim — active session click/foreground reapplies local PTY dimensions
 
 ## Up next (in order)
 

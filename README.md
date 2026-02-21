@@ -55,7 +55,8 @@ Working:
 - Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
 - URL hash routing — `#<name>` deeplinks directly to a session; auto-attaches to first on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
-- Automated E2E test suite (Playwright) — 23 tests, runs with `bun test`
+- Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
+- Automated E2E test suite (Playwright) — 24 tests, runs with `bun test`
 
 Missing / in progress:
 - Multi-machine dashboard

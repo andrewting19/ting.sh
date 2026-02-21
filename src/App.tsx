@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
@@ -88,6 +88,15 @@ export function App() {
     onMessage: handleMessage,
   })
 
+  const syncSessionSize = useCallback((id: string) => {
+    const container = containerRefs.current.get(id)
+    if (container) tm.ensureTerminal(id, container)
+    tm.setActive(id)
+    const dims = tm.getDimensions(id)
+    send({ type: 'resize', cols: dims.cols, rows: dims.rows })
+    return dims
+  }, [send, tm])
+
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
   useEffect(() => {
@@ -104,6 +113,7 @@ export function App() {
       attachingIdRef.current = id
       const container = containerRefs.current.get(id)
       if (container) tm.ensureTerminal(id, container)
+      tm.setActive(id)
       tm.reset(id)
       const dims = tm.getDimensions(id)
       send({ type: 'attach', id, ...dims })
@@ -116,13 +126,26 @@ export function App() {
   // yet when ready arrives (sessions broadcast hadn't been processed by React).
   useEffect(() => {
     if (!currentId) return
-    const container = containerRefs.current.get(currentId)
-    if (container) {
-      tm.ensureTerminal(currentId, container)
-      tm.setActive(currentId)
-      tm.focus(currentId)
+    syncSessionSize(currentId)
+    tm.focus(currentId)
+  }, [currentId, sessions.length, syncSessionSize, tm])
+
+  // If another client resized the shared PTY while this tab was in the
+  // background (e.g. phone <-> desktop), reclaim local dimensions on return.
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'hidden') return
+      const id = currentIdRef.current
+      if (!id) return
+      syncSessionSize(id)
     }
-  }, [currentId, sessions.length, tm])
+    document.addEventListener('visibilitychange', handler)
+    window.addEventListener('focus', handler)
+    return () => {
+      document.removeEventListener('visibilitychange', handler)
+      window.removeEventListener('focus', handler)
+    }
+  }, [syncSessionSize])
 
   // hashchange: if the user manually edits the URL hash, navigate to that session
   useEffect(() => {
@@ -264,6 +287,7 @@ export function App() {
 
   function attachSession(id: string) {
     if (id === currentIdRef.current) {
+      syncSessionSize(id)
       tm.focus(id)
       return
     }
