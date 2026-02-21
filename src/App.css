@@ -30,6 +30,9 @@ html, body, #root {
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  /* Prevent iOS rubber-band scroll on the outer page — only scrollable
+     children (.xterm-viewport, .session-list) should bounce, not the app. */
+  overscroll-behavior: none;
 }
 
 /* ── Layout ── */
@@ -39,6 +42,7 @@ html, body, #root {
   grid-template-rows: var(--header) 1fr;
   height: 100vh;
   height: 100dvh;
+  overscroll-behavior: none;
 }
 
 /* ── Header ── */
@@ -170,6 +174,7 @@ html, body, #root {
   padding: 5px 6px;
   scrollbar-width: thin;
   scrollbar-color: var(--bg3) transparent;
+  overscroll-behavior: contain; /* don't propagate scroll to page on iOS */
 }
 .session-list::-webkit-scrollbar { width: 4px; }
 .session-list::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
@@ -361,17 +366,27 @@ html, body, #root {
   pointer-events: auto;
 }
 
+/* Stop terminal scroll from propagating to the page on iOS — the xterm
+   viewport is the only scrollable area inside .main. */
+.xterm-viewport {
+  overscroll-behavior: contain;
+}
+
 /* xterm.js accessibility tree overrides the parent's user-select:none with
    user-select:text (for screen readers). On iOS, the accessibility layer sits
    at z-index:10 above the canvas and iOS's text-selection gesture recognizer
    uses it for hit testing even though pointer-events:none is set on the parent.
    Result: touches starting on text nodes are consumed as selection gestures
    instead of scroll gestures — scroll silently fails on those positions.
-   Override back to none; screen reader content is still accessible via
-   assistive tech APIs which don't depend on user-select. */
-.xterm .xterm-accessibility-tree {
-  -webkit-user-select: none;
-  user-select: none;
+
+   xterm.js also sets user-select:text via *inline styles* on individual <span>
+   children, so the class-level rule below needs !important to win. The * rule
+   covers those children. Screen reader content is still accessible via
+   assistive tech APIs (AX tree, VoiceOver) which don't depend on user-select. */
+.xterm .xterm-accessibility-tree,
+.xterm .xterm-accessibility-tree * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
 }
 
 /* cursor:text on .xterm signals to iOS that this is a text element,
