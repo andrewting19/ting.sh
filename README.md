@@ -61,6 +61,7 @@ Working:
 - Automated E2E test suite (Playwright) — 26 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
+- Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
 
 Missing / in progress:
 - Multi-machine dashboard
