@@ -38,7 +38,6 @@ function computeSequence(slot: HotkeySlot, extraMods?: { ctrl?: boolean; shift?:
 
   const key = slot.key.toLowerCase()
 
-  // Special named keys
   if (key === 'esc') return '\x1b'
   if (key === 'tab') {
     if (mods.has('shift')) return '\x1b[Z'
@@ -46,9 +45,7 @@ function computeSequence(slot: HotkeySlot, extraMods?: { ctrl?: boolean; shift?:
   }
   if (key === 'enter') return '\r'
 
-  // Ctrl + letter
   if (mods.has('ctrl') && key.length === 1) {
-    // ctrl+[ = ESC
     if (key === '[') return '\x1b'
     const code = key.toUpperCase().charCodeAt(0) - 64
     if (code >= 1 && code <= 26) return String.fromCharCode(code)
@@ -57,7 +54,7 @@ function computeSequence(slot: HotkeySlot, extraMods?: { ctrl?: boolean; shift?:
   return key
 }
 
-// ── Hotkey editor ─────────────────────────────────────────────────────────
+// ── Hotkey editor ─────────────────────────────────────────────────────────────
 
 const SPECIAL_KEYS = ['esc', 'tab', 'enter']
 
@@ -91,7 +88,7 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
   }
 
   return (
-    <div className="hotkey-editor-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="hotkey-editor-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="hotkey-editor">
         <div className="hotkey-editor-title">edit hotkey</div>
 
@@ -100,7 +97,8 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
             <button
               key={m}
               className={`hk-mod-btn${mods.has(m) ? ' active' : ''}`}
-              onPointerDown={(e) => { e.preventDefault(); toggleMod(m) }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => toggleMod(m)}
             >
               {m.toUpperCase()}
             </button>
@@ -140,13 +138,19 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
         <div className="hotkey-editor-preview">sends: {preview || '?'}</div>
 
         <div className="hotkey-editor-actions">
-          <button className="hk-action-btn danger" onPointerDown={(e) => { e.preventDefault(); onDelete(); onClose() }}>delete</button>
-          <button className="hk-action-btn" onPointerDown={(e) => { e.preventDefault(); onClose() }}>cancel</button>
-          <button className="hk-action-btn primary" onPointerDown={(e) => { e.preventDefault(); handleSave() }}>save</button>
+          <button className="hk-action-btn danger" onClick={() => { onDelete(); onClose() }}>delete</button>
+          <button className="hk-action-btn" onClick={onClose}>cancel</button>
+          <button className="hk-action-btn primary" onClick={handleSave}>save</button>
         </div>
       </div>
     </div>
   )
+}
+
+// ── Separator ─────────────────────────────────────────────────────────────────
+
+function Sep() {
+  return <div className="tb-sep" aria-hidden />
 }
 
 // ── Main toolbar ──────────────────────────────────────────────────────────────
@@ -192,7 +196,6 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
   }
 
   const deleteSlot = (id: string) => {
-    // Reset to default for that slot rather than removing it
     const def = DEFAULT_HOTKEYS.find(h => h.id === id) ?? DEFAULT_HOTKEYS[0]
     const next = hotkeys.map(h => h.id === id ? def : h)
     setHotkeys(next)
@@ -204,70 +207,104 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
   return (
     <>
       <div className="mobile-toolbar">
-        {/* Keyboard button */}
+
+        {/* ── Keyboard: must use onClick so the textarea stays focused after
+            the touch sequence ends. onMouseDown prevents the button element
+            from stealing focus (which would dismiss the keyboard). ── */}
         <button
           className="tb-btn tb-kbd"
-          onTouchStart={(e) => { e.preventDefault(); focusTerminal() }}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => focusTerminal()}
           title="Show keyboard"
         >
-          ⌨
+          <span className="tb-icon">⌨</span>
+          <span className="tb-label">kbd</span>
         </button>
 
-        {/* Scroll to bottom */}
         <button
           className="tb-btn"
-          onPointerDown={(e) => { e.preventDefault(); scrollToBottom() }}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => scrollToBottom()}
           title="Scroll to bottom"
         >
-          ⬇
+          <span className="tb-icon">↓</span>
         </button>
 
-        {/* ESC */}
+        <Sep />
+
+        {/* ── Text input keys ── */}
         <button
           className="tb-btn tb-key"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
           onPointerDown={(e) => { e.preventDefault(); sendInput('\x1b') }}
         >
           ESC
         </button>
 
-        {/* Enter */}
         <button
           className="tb-btn tb-key"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => { e.preventDefault(); sendInput('\t') }}
+        >
+          TAB
+        </button>
+
+        <button
+          className="tb-btn tb-key"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
           onPointerDown={(e) => { e.preventDefault(); sendInput('\r') }}
         >
           ↩
         </button>
 
-        {/* Arrow pad */}
+        <Sep />
+
+        {/* ── Arrow pad toggle ── */}
         <button
-          className={`tb-btn${arrowPadOpen ? ' active' : ''}`}
-          onPointerDown={(e) => { e.preventDefault(); setArrowPadOpen(o => !o) }}
+          className={`tb-btn${arrowPadOpen ? ' tb-active' : ''}`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setArrowPadOpen(o => !o)}
           title="Arrow keys"
         >
-          ✛
+          <span className="tb-dpad">⊕</span>
         </button>
 
-        {/* CTRL sticky */}
+        <Sep />
+
+        {/* ── Sticky modifiers ── */}
         <button
-          className={`tb-btn tb-mod${ctrlActive ? ' active' : ''}`}
-          onPointerDown={(e) => { e.preventDefault(); setCtrlActive(o => !o) }}
+          className={`tb-btn tb-mod${ctrlActive ? ' tb-active' : ''}`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setCtrlActive(o => !o)}
         >
-          CTRL
+          ^
         </button>
 
-        {/* SHIFT sticky */}
         <button
-          className={`tb-btn tb-mod${shiftActive ? ' active' : ''}`}
-          onPointerDown={(e) => { e.preventDefault(); setShiftActive(o => !o) }}
+          className={`tb-btn tb-mod${shiftActive ? ' tb-active' : ''}`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setShiftActive(o => !o)}
         >
-          SHF
+          ⇧
         </button>
 
-        {/* Hotkey slots */}
+        <Sep />
+
+        {/* ── Programmable hotkey slots ── */}
         {hotkeys.map(slot => (
           <button
             key={slot.id}
-            className={`tb-btn tb-hotkey${(ctrlActive || shiftActive) ? ' primed' : ''}`}
+            className={`tb-btn tb-hotkey${(ctrlActive || shiftActive) ? ' tb-primed' : ''}`}
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
             onPointerDown={(e) => { e.preventDefault(); startLongPress(slot) }}
             onPointerUp={(e) => {
               e.preventDefault()
@@ -280,14 +317,19 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
           </button>
         ))}
 
-        {/* Paste */}
+        <Sep />
+
+        {/* ── Paste ── */}
         <button
-          className={`tb-btn${pasteOpen ? ' active' : ''}`}
-          onPointerDown={(e) => { e.preventDefault(); setPasteOpen(o => !o) }}
+          className={`tb-btn tb-paste${pasteOpen ? ' tb-active' : ''}`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setPasteOpen(o => !o)}
           title="Paste"
         >
-          📋
+          paste
         </button>
+
       </div>
 
       {arrowPadOpen && (
@@ -299,7 +341,7 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
 
       {pasteOpen && (
         <PasteModal
-          onSend={(text) => { sendInput(text) }}
+          onSend={(text) => sendInput(text)}
           onClose={() => setPasteOpen(false)}
         />
       )}

@@ -13,17 +13,21 @@ export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
     const handler = (e: MouseEvent | TouchEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('touchstart', handler)
+    // Small delay so the open-tap doesn't immediately close
+    const t = setTimeout(() => {
+      document.addEventListener('pointerdown', handler)
+    }, 50)
     return () => {
-      document.removeEventListener('mousedown', handler)
-      document.removeEventListener('touchstart', handler)
+      clearTimeout(t)
+      document.removeEventListener('pointerdown', handler)
     }
   }, [onClose])
 
-  const btn = (label: string, seq: string, extra = '') => (
+  const ArrowBtn = ({ label, seq, className = '' }: { label: string; seq: string; className?: string }) => (
     <button
-      className={`arrow-btn${extra ? ' ' + extra : ''}`}
+      className={`arrow-btn${className ? ' ' + className : ''}`}
+      tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
       onPointerDown={(e) => { e.preventDefault(); onSend(seq) }}
     >
       {label}
@@ -35,17 +39,24 @@ export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
       <div className="arrow-pad-grid">
         <div className="arrow-pad-row">
           <div className="arrow-pad-empty" />
-          {btn('↑', '\x1b[A')}
+          <ArrowBtn label="↑" seq="\x1b[A" />
           <div className="arrow-pad-empty" />
         </div>
         <div className="arrow-pad-row">
-          {btn('←', '\x1b[D')}
-          <button className="arrow-btn arrow-close" onPointerDown={(e) => { e.preventDefault(); onClose() }}>✕</button>
-          {btn('→', '\x1b[C')}
+          <ArrowBtn label="←" seq="\x1b[D" />
+          <button
+            className="arrow-btn arrow-close"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClose}
+          >
+            ✕
+          </button>
+          <ArrowBtn label="→" seq="\x1b[C" />
         </div>
         <div className="arrow-pad-row">
           <div className="arrow-pad-empty" />
-          {btn('↓', '\x1b[B')}
+          <ArrowBtn label="↓" seq="\x1b[B" />
           <div className="arrow-pad-empty" />
         </div>
       </div>

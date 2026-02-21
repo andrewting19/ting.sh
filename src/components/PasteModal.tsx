@@ -22,7 +22,9 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    textareaRef.current?.focus()
+    // Small delay so the sheet animation settles before keyboard appears
+    const t = setTimeout(() => textareaRef.current?.focus(), 80)
+    return () => clearTimeout(t)
   }, [])
 
   function handleSend() {
@@ -41,54 +43,56 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   }
 
   return (
-    <div className="paste-modal-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="paste-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="paste-modal">
         <div className="paste-modal-header">
-          <span className="paste-modal-title">paste / send text</span>
-          <button className="paste-modal-close" onPointerDown={onClose}>✕</button>
+          <span className="paste-modal-title">send text</span>
+          <button className="paste-modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <textarea
-          ref={textareaRef}
-          className="paste-textarea"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder="Type or paste text here…"
-          rows={4}
-          autoCorrect="off"
-          autoCapitalize="none"
-          spellCheck={false}
-        />
+        <div className="paste-modal-body">
+          <textarea
+            ref={textareaRef}
+            className="paste-textarea"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="type or paste text here…"
+            rows={4}
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
 
-        <button
-          className="paste-send-btn"
-          onPointerDown={(e) => { e.preventDefault(); handleSend() }}
-          disabled={!text}
-        >
-          Send
-        </button>
+          <button
+            className="paste-send-btn"
+            onClick={handleSend}
+            disabled={!text}
+          >
+            Send
+          </button>
 
-        {history.length > 0 && (
-          <div className="paste-history">
-            <div className="paste-history-label">recent</div>
-            {history.map((item, i) => (
-              <div key={i} className="paste-history-item">
-                <button
-                  className="paste-history-text"
-                  onPointerDown={(e) => { e.preventDefault(); setText(item) }}
-                >
-                  {item.length > 60 ? item.slice(0, 60) + '…' : item}
-                </button>
-                <button
-                  className="paste-history-del"
-                  onPointerDown={(e) => { e.preventDefault(); deleteHistory(item) }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+          {history.length > 0 && (
+            <div className="paste-history">
+              <div className="paste-history-label">recent</div>
+              {history.map((item, i) => (
+                <div key={i} className="paste-history-item">
+                  <button
+                    className="paste-history-text"
+                    onClick={() => setText(item)}
+                  >
+                    {item.length > 60 ? item.slice(0, 60) + '…' : item}
+                  </button>
+                  <button
+                    className="paste-history-del"
+                    onClick={() => deleteHistory(item)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

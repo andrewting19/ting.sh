@@ -533,8 +533,8 @@ html, body, #root {
     grid-column: 1 / -1;
     grid-row: 3;
     align-items: center;
-    gap: 4px;
-    padding: 4px 6px;
+    gap: 3px;
+    padding: 7px 8px;
     background: var(--bg1);
     border-top: 1px solid var(--border);
     overflow-x: auto;
@@ -548,162 +548,262 @@ html, body, #root {
   .mobile-toolbar::-webkit-scrollbar { display: none; }
 }
 
-/* ── Toolbar buttons ── */
+/* ── Toolbar buttons ─────────────────────────────────────────────────────────
+   Base style. Active = sticky modifier engaged or overlay open.
+   Primed = modifier is active and a hotkey will combine with it.
+   ── */
 .tb-btn {
   flex-shrink: 0;
-  min-width: 44px;
-  height: 44px;
-  padding: 0 8px;
-  background: var(--bg3);
+  height: 38px;
+  min-width: 38px;
+  padding: 0 9px;
+  background: var(--bg2);
   border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--fg2);
+  border-radius: 5px;
+  color: var(--fg3);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
+  letter-spacing: .02em;
   cursor: pointer;
   touch-action: manipulation;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: background .1s, color .1s;
+  gap: 1px;
+  transition: color .1s, border-color .1s, background .1s;
+  -webkit-tap-highlight-color: transparent;
 }
-.tb-btn:active { opacity: 0.7; }
-.tb-btn.active { background: var(--blue); border-color: var(--blue); color: var(--bg0); }
-.tb-btn.primed { border-color: var(--blue); }
+.tb-btn:active {
+  background: var(--bg3);
+  transform: scale(0.93);
+}
+/* Active = overlay open or modifier latched */
+.tb-btn.tb-active {
+  background: rgba(122, 162, 247, 0.12);
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: 0 0 0 1px rgba(122,162,247,.15) inset;
+}
+/* Primed = a modifier is active, hotkey will add to it */
+.tb-btn.tb-primed {
+  border-color: rgba(122, 162, 247, .5);
+  color: var(--fg2);
+}
 
-.tb-kbd { font-size: 16px; }
-.tb-key { font-size: 11px; min-width: 48px; }
-.tb-mod { font-size: 10px; letter-spacing: .04em; }
-.tb-hotkey { font-size: 11px; min-width: 40px; }
+/* KBD — keyboard summon button, slightly more prominent */
+.tb-kbd {
+  min-width: 46px;
+  background: var(--bg3);
+  border-color: var(--border2);
+  color: var(--fg2);
+}
+.tb-icon  { font-size: 14px; line-height: 1; }
+.tb-label { font-size: 8px; letter-spacing: .06em; color: var(--fg3); text-transform: uppercase; }
 
-/* ── Arrow pad overlay ── */
+/* Key buttons (ESC TAB ↩) */
+.tb-key { min-width: 42px; font-size: 11px; }
+
+/* D-pad icon */
+.tb-dpad { font-size: 16px; line-height: 1; }
+
+/* Modifier buttons (^ ⇧) */
+.tb-mod { min-width: 34px; font-size: 14px; }
+
+/* Hotkey slots */
+.tb-hotkey { min-width: 36px; font-size: 11px; font-weight: 600; }
+
+/* Paste button */
+.tb-paste { min-width: 42px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+
+/* Separator between groups */
+.tb-sep {
+  flex-shrink: 0;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 3px;
+  border-radius: 1px;
+}
+
+/* ── Arrow pad overlay ────────────────────────────────────────────────────── */
 .arrow-pad-overlay {
   position: fixed;
-  bottom: calc(var(--toolbar, 52px) + 8px);
+  bottom: calc(var(--toolbar, 52px) + 10px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg2);
   border: 1px solid var(--border2);
-  border-radius: 10px;
-  padding: 8px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 0 1px rgba(122,162,247,.08);
   z-index: 60;
   touch-action: manipulation;
   -webkit-touch-callout: none;
 }
 
-.arrow-pad-grid { display: flex; flex-direction: column; gap: 4px; }
-.arrow-pad-row { display: flex; gap: 4px; align-items: center; }
-.arrow-pad-empty { width: 60px; height: 60px; }
+.arrow-pad-grid { display: flex; flex-direction: column; gap: 5px; }
+.arrow-pad-row  { display: flex; gap: 5px; align-items: center; }
+.arrow-pad-empty { width: 64px; height: 64px; }
 
 .arrow-btn {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   background: var(--bg3);
   border: 1px solid var(--border2);
   border-radius: 8px;
-  color: var(--fg);
-  font-size: 20px;
+  color: var(--fg2);
+  font-size: 22px;
   cursor: pointer;
   touch-action: manipulation;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: color .08s, background .08s;
+  -webkit-tap-highlight-color: transparent;
 }
-.arrow-btn:active { opacity: 0.6; }
-.arrow-close { font-size: 14px; color: var(--fg3); }
+.arrow-btn:active {
+  background: rgba(122,162,247,.15);
+  border-color: var(--blue);
+  color: var(--blue);
+  transform: scale(0.92);
+}
+.arrow-close {
+  font-size: 13px;
+  color: var(--fg3);
+  background: var(--bg2);
+}
 
-/* ── Paste modal ── */
+/* ── Paste modal ─────────────────────────────────────────────────────────── */
 .paste-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.6);
-  backdrop-filter: blur(2px);
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(3px);
   z-index: 80;
   display: flex;
   align-items: flex-end;
-  animation: fade-in .1s ease;
+  animation: fade-in .12s ease;
 }
 
 .paste-modal {
   width: 100%;
-  max-height: 80dvh;
+  max-height: 78dvh;
   background: var(--bg2);
   border-top: 1px solid var(--border2);
-  border-radius: 12px 12px 0 0;
-  padding: 16px;
+  border-left: none;
+  border-right: none;
+  border-radius: 14px 14px 0 0;
+  padding: 0 0 max(16px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  animation: slide-up .15s ease;
+  overflow: hidden;
+  animation: slide-up .18s cubic-bezier(.25,.46,.45,.94);
+  box-shadow: 0 -8px 40px rgba(0,0,0,.5);
+}
+
+/* drag handle */
+.paste-modal::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  margin: 10px auto 6px;
+  flex-shrink: 0;
 }
 
 .paste-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 16px 10px;
+  flex-shrink: 0;
 }
 .paste-modal-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--fg2);
-  letter-spacing: .04em;
+  color: var(--fg3);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 .paste-modal-close {
-  background: none;
-  border: none;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--fg3);
-  font-size: 14px;
+  font-size: 11px;
   cursor: pointer;
-  padding: 4px;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.paste-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .paste-textarea {
   width: 100%;
   background: var(--bg3);
   border: 1px solid var(--border2);
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--fg);
   font-family: var(--font);
   font-size: 13px;
-  padding: 8px 10px;
-  resize: vertical;
+  line-height: 1.5;
+  padding: 10px 12px;
+  resize: none;
   outline: none;
-  min-height: 80px;
+  min-height: 90px;
+  transition: border-color .12s;
 }
-.paste-textarea:focus { border-color: var(--blue); }
+.paste-textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(122,162,247,.12); }
+.paste-textarea::placeholder { color: var(--fg3); }
 
 .paste-send-btn {
+  width: 100%;
   background: var(--blue);
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--bg0);
   font-family: var(--font);
   font-size: 13px;
-  font-weight: 600;
-  padding: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: 11px;
   cursor: pointer;
   touch-action: manipulation;
-  transition: opacity .1s;
+  transition: opacity .1s, transform .08s;
+  -webkit-tap-highlight-color: transparent;
 }
-.paste-send-btn:disabled { opacity: .4; }
-.paste-send-btn:active { opacity: .7; }
+.paste-send-btn:disabled { opacity: .3; }
+.paste-send-btn:active:not(:disabled) { opacity: .8; transform: scale(0.98); }
 
 .paste-history {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-bottom: 8px;
 }
 .paste-history-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: .08em;
+  letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--fg3);
-  margin-bottom: 2px;
+  padding: 4px 0 2px;
 }
 .paste-history-item {
   display: flex;
@@ -711,8 +811,12 @@ html, body, #root {
   gap: 6px;
   background: var(--bg3);
   border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 6px 8px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: border-color .1s;
+}
+@media (hover: hover) {
+  .paste-history-item:hover { border-color: var(--border2); }
 }
 .paste-history-text {
   flex: 1;
@@ -727,6 +831,7 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
 }
 .paste-history-del {
   flex-shrink: 0;
@@ -735,16 +840,20 @@ html, body, #root {
   color: var(--fg3);
   font-size: 11px;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 2px 5px;
   touch-action: manipulation;
+  border-radius: 3px;
+}
+@media (hover: hover) {
+  .paste-history-del:hover { color: var(--red); }
 }
 
-/* ── Hotkey editor ── */
+/* ── Hotkey editor ────────────────────────────────────────────────────────── */
 .hotkey-editor-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.6);
-  backdrop-filter: blur(2px);
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(3px);
   z-index: 90;
   display: flex;
   align-items: center;
@@ -755,22 +864,24 @@ html, body, #root {
 .hotkey-editor {
   background: var(--bg2);
   border: 1px solid var(--border2);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 18px 16px;
   min-width: 260px;
   max-width: 320px;
   width: 90vw;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 16px 48px rgba(0,0,0,.6);
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.7);
   animation: slide-up .15s ease;
 }
 
 .hotkey-editor-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--fg);
+  color: var(--fg3);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .hotkey-editor-row {
@@ -781,17 +892,24 @@ html, body, #root {
 
 .hk-mod-btn {
   flex: 1;
-  padding: 8px 4px;
+  padding: 9px 4px;
   background: var(--bg3);
   border: 1px solid var(--border2);
   border-radius: 5px;
   color: var(--fg2);
   font-family: var(--font);
   font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;
+  transition: all .1s;
+  -webkit-tap-highlight-color: transparent;
 }
-.hk-mod-btn.active { background: var(--blue); border-color: var(--blue); color: var(--bg0); }
+.hk-mod-btn.active {
+  background: rgba(122,162,247,.15);
+  border-color: var(--blue);
+  color: var(--blue);
+}
 
 .hk-key-select, .hk-key-input, .hk-label-input {
   background: var(--bg3);
@@ -800,40 +918,54 @@ html, body, #root {
   color: var(--fg);
   font-family: var(--font);
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   outline: none;
   touch-action: manipulation;
+  transition: border-color .12s;
+}
+.hk-key-select:focus, .hk-key-input:focus, .hk-label-input:focus {
+  border-color: var(--blue);
 }
 .hk-key-select { flex: 1; }
-.hk-key-input { width: 48px; text-align: center; }
+.hk-key-input  { width: 50px; text-align: center; }
 .hk-label-input { flex: 1; }
 
 .hotkey-editor-preview {
   font-size: 11px;
-  color: var(--fg3);
-  background: var(--bg0);
-  border-radius: 4px;
-  padding: 6px 8px;
+  color: var(--blue);
+  background: rgba(122,162,247,.07);
+  border: 1px solid rgba(122,162,247,.15);
+  border-radius: 5px;
+  padding: 7px 10px;
   font-family: var(--font);
+  letter-spacing: .04em;
 }
 
 .hotkey-editor-actions {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .hk-action-btn {
-  padding: 6px 12px;
+  padding: 7px 14px;
   background: var(--bg3);
   border: 1px solid var(--border2);
   border-radius: 5px;
   color: var(--fg2);
   font-family: var(--font);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.hk-action-btn.primary { background: var(--blue); border-color: var(--blue); color: var(--bg0); font-weight: 600; }
-.hk-action-btn.danger { color: var(--red); border-color: var(--red); }
-.hk-action-btn:active { opacity: .7; }
+.hk-action-btn.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--bg0);
+  font-weight: 700;
+}
+.hk-action-btn.danger { color: var(--red); border-color: rgba(247,118,142,.3); }
+.hk-action-btn:active { opacity: .7; transform: scale(0.96); }
