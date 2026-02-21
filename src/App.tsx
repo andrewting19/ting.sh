@@ -9,6 +9,7 @@ import { makeKey, parseKey } from './types'
 import './App.css'
 
 const LOCAL_HOST_ID = 'local'
+type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
 
 export function App() {
   const [hosts] = useState<Host[]>([{ id: LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
@@ -32,7 +33,7 @@ export function App() {
   // Binary output always routes here (never to optimistic UI state).
   const attachedKeyRef = useRef<SessionKey | null>(null)
   // Latest in-flight attach request. Older ready responses are ignored.
-  const pendingAttachRequestIdRef = useRef<string | null>(null)
+  const pendingRequestRef = useRef<PendingRequest | null>(null)
   const pendingAttachTargetKeyRef = useRef<SessionKey | null>(null)
   const nextRequestSeqRef = useRef(0)
   // When we ignore a stale attach ready, drop binary until the newest attach
@@ -110,7 +111,7 @@ export function App() {
 
   const sendAttachRequest = useCallback((key: SessionKey) => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
-    pendingAttachRequestIdRef.current = requestId
+    pendingRequestRef.current = { hostId: parseKey(key).hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
     dropBinaryUntilReadyRef.current = false
     const dims = tm.getDimensions(key)
@@ -142,7 +143,7 @@ export function App() {
     if (status !== 'connected') return
     killedSessionKeys.current.clear()
     attachedKeyRef.current = null
-    pendingAttachRequestIdRef.current = null
+    pendingRequestRef.current = null
     pendingAttachTargetKeyRef.current = null
     dropBinaryUntilReadyRef.current = false
     send({ type: 'list' })
@@ -250,17 +251,18 @@ export function App() {
         let key: SessionKey | null = pendingAttachTargetKeyRef.current
         const requestId = typeof m.requestId === 'string' ? m.requestId : null
         if (requestId) {
-          const pending = pendingAttachRequestIdRef.current
+          const pending = pendingRequestRef.current
           if (!pending) return
-          if (requestId !== pending) {
+          if (requestId !== pending.requestId) {
             dropBinaryUntilReadyRef.current = true
             return
           }
-          pendingAttachRequestIdRef.current = null
+          pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
+          if (pending.kind === 'create') key = makeKey(pending.hostId, id)
         } else {
-          pendingAttachRequestIdRef.current = null
+          pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
         }
@@ -297,8 +299,8 @@ export function App() {
 
       case 'error': {
         const requestId = typeof m.requestId === 'string' ? m.requestId : null
-        if (!requestId || requestId !== pendingAttachRequestIdRef.current) break
-        pendingAttachRequestIdRef.current = null
+        if (!requestId || requestId !== pendingRequestRef.current?.requestId) break
+        pendingRequestRef.current = null
         pendingAttachTargetKeyRef.current = null
         dropBinaryUntilReadyRef.current = false
         const fallback = attachedKeyRef.current
@@ -321,7 +323,7 @@ export function App() {
         killedSessionKeys.current.add(key)
         if (attachedKeyRef.current === key) attachedKeyRef.current = null
         if (pendingAttachTargetKeyRef.current === key) {
-          pendingAttachRequestIdRef.current = null
+          pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
         }
@@ -361,7 +363,11 @@ export function App() {
     const dims = currentKeyRef.current
       ? tm.getDimensions(currentKeyRef.current)
       : { cols: 80, rows: 24 }
-    send({ type: 'create', ...(cwd ? { cwd } : {}), ...dims })
+    const requestId = `create-${++nextRequestSeqRef.current}`
+    pendingRequestRef.current = { hostId: localHostId, requestId, kind: 'create' }
+    pendingAttachTargetKeyRef.current = null
+    dropBinaryUntilReadyRef.current = false
+    send({ type: 'create', requestId, ...(cwd ? { cwd } : {}), ...dims })
   }
 
   function duplicateSession(sourceId: string) {
@@ -375,6 +381,11 @@ export function App() {
       syncSessionSize(key)
       tm.focus(key)
       return
+    }
+    const currentHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : null
+    const nextHostId = parseKey(key).hostId
+    if (currentHostId && currentHostId !== nextHostId) {
+      send({ type: 'detach' })
     }
     const container = containerRefs.current.get(key)
     if (container) tm.ensureTerminal(key, container)
