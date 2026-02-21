@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
-import { useWS } from './hooks/useWS'
+import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
-import type { Host, Session, SessionKey } from './types'
+import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
 import './App.css'
 
@@ -12,12 +12,12 @@ const LOCAL_HOST_ID = 'local'
 type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
 
 export function App() {
-  const [hosts] = useState<Host[]>([{ id: LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
+  const [hosts, setHosts] = useState<Host[]>([{ id: LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
   const [killTargetKey, setKillTargetKey] = useState<SessionKey | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const localHostId = hosts[0]?.id ?? LOCAL_HOST_ID
+  const localHostId = hosts.find(h => h.local)?.id ?? LOCAL_HOST_ID
   const sessions = hostSessions.get(localHostId) ?? []
   const currentId = currentKey ? parseKey(currentKey).sessionId : null
 
@@ -93,69 +93,129 @@ export function App() {
     return hostSessionsRef.current.get(hostId)?.find(s => s.id === sessionId) ?? null
   }, [])
 
-  const tm = useTerminalManager({
-    onData: (_sessionKey, data) => send({ type: 'input', data }),
-    onResize: (sessionKey, cols, rows) => {
-      if (sessionKey === currentKeyRef.current) send({ type: 'resize', cols, rows })
-    },
-  })
-
-  const { send, status } = useWS(`ws://${location.host}/ws`, {
-    onBinary: (data) => {
+  const { hostStatuses, connect, disconnect, send: sendToHost, forceClose } = useHostConnections({
+    onBinary: (hostId, data) => {
       if (dropBinaryUntilReadyRef.current) return
       const key = attachedKeyRef.current
-      if (key) tm.write(key, new Uint8Array(data))
+      if (!key) return
+      if (parseKey(key).hostId !== hostId) return
+      tm.write(key, new Uint8Array(data))
     },
-    onMessage: handleMessage,
+    onMessage: (hostId, msg) => handleMessage(hostId, msg),
+  })
+
+  const tm = useTerminalManager({
+    onData: (sessionKey, data) => {
+      if (sessionKey !== currentKeyRef.current) return
+      sendToHost(parseKey(sessionKey).hostId, { type: 'input', data })
+    },
+    onResize: (sessionKey, cols, rows) => {
+      if (sessionKey !== currentKeyRef.current) return
+      sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
+    },
   })
 
   const sendAttachRequest = useCallback((key: SessionKey) => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
-    pendingRequestRef.current = { hostId: parseKey(key).hostId, requestId, kind: 'attach' }
+    const { hostId, sessionId } = parseKey(key)
+    pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
     dropBinaryUntilReadyRef.current = false
     const dims = tm.getDimensions(key)
-    send({ type: 'attach', id: parseKey(key).sessionId, requestId, ...dims })
-  }, [send, tm])
+    sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
+  }, [sendToHost, tm])
 
   const syncSessionSize = useCallback((key: SessionKey) => {
     const container = containerRefs.current.get(key)
     if (container) tm.ensureTerminal(key, container)
     tm.setActive(key)
     const dims = tm.getDimensions(key)
-    send({ type: 'resize', cols: dims.cols, rows: dims.rows })
+    sendToHost(parseKey(key).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
     return dims
-  }, [send, tm])
+  }, [sendToHost, tm])
 
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
   useEffect(() => {
     if (!import.meta.env.DEV) return
-    ;(window as any).__wt_send = send
+    ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)
+    ;(window as any).__wt_ws_close = () => forceClose(localHostId)
     ;(window as any).__wt_get_attached_id = () => {
       const key = attachedKeyRef.current
       return key ? parseKey(key).sessionId : null
     }
-  }, [send])
+  }, [forceClose, localHostId, sendToHost])
 
-  // On (re)connect: request session list and re-attach current session
+  const toWsUrl = useCallback((baseUrl: string) => {
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const next = new URL(baseUrl)
+    next.protocol = wsProtocol
+    next.pathname = '/ws'
+    next.search = ''
+    next.hash = ''
+    return next.toString()
+  }, [])
+
   useEffect(() => {
-    if (status !== 'connected') return
-    killedSessionKeys.current.clear()
-    attachedKeyRef.current = null
-    pendingRequestRef.current = null
-    pendingAttachTargetKeyRef.current = null
-    dropBinaryUntilReadyRef.current = false
-    send({ type: 'list' })
-    const key = currentKeyRef.current
-    if (key) {
-      const container = containerRefs.current.get(key)
-      if (container) tm.ensureTerminal(key, container)
-      tm.setActive(key)
-      tm.reset(key)
-      sendAttachRequest(key)
+    for (const host of hosts) connect(host.id, toWsUrl(host.local ? location.origin : host.url))
+    for (const hostId of hostStatuses.keys()) {
+      if (!hosts.some(host => host.id === hostId)) disconnect(hostId)
     }
-  }, [status, send, sendAttachRequest, tm])
+  }, [connect, disconnect, hostStatuses, hosts, toWsUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadHosts = async () => {
+      try {
+        const res = await fetch('/api/host')
+        if (!res.ok) return
+        const json = await res.json() as { self: { id: string; name: string }; peers: Array<{ id: string; name: string; url: string }> }
+        if (cancelled) return
+        setHosts([
+          { id: LOCAL_HOST_ID, name: json.self.name || 'Local Host', url: location.origin, local: true },
+          ...json.peers.map(peer => ({ id: peer.id, name: peer.name, url: peer.url, local: false })),
+        ])
+      } catch {
+        // stay in single-host fallback mode
+      }
+    }
+    void loadHosts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const prevStatusesRef = useRef<Map<string, ConnectionStatus>>(new Map())
+  useEffect(() => {
+    for (const host of hosts) {
+      const prev = prevStatusesRef.current.get(host.id)
+      const next = hostStatuses.get(host.id)
+      if (next === 'connected' && prev !== 'connected') {
+        killedSessionKeys.current.clear()
+        sendToHost(host.id, { type: 'list' })
+        const key = currentKeyRef.current
+        if (key && parseKey(key).hostId === host.id) {
+          const container = containerRefs.current.get(key)
+          if (container) tm.ensureTerminal(key, container)
+          tm.setActive(key)
+          tm.reset(key)
+          sendAttachRequest(key)
+        }
+      }
+      if (prev === 'connected' && next !== 'connected') {
+        if (pendingRequestRef.current?.hostId === host.id) {
+          pendingRequestRef.current = null
+          pendingAttachTargetKeyRef.current = null
+          dropBinaryUntilReadyRef.current = false
+        }
+        if (attachedKeyRef.current && parseKey(attachedKeyRef.current).hostId === host.id) {
+          attachedKeyRef.current = null
+        }
+      }
+    }
+    prevStatusesRef.current = new Map(hostStatuses)
+  }, [hostStatuses, hosts, sendAttachRequest, sendToHost, tm])
 
   // When currentId changes (or sessions list grows), activate the terminal.
   // sessions.length is included so this re-runs when the new session's div
@@ -224,15 +284,26 @@ export function App() {
     return () => document.removeEventListener('keydown', handler, true)
   }, [localHostId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleMessage(msg: unknown) {
+  function handleMessage(hostId: string, msg: unknown) {
     const m = msg as Record<string, unknown>
     switch (m.type) {
+      case 'host-info': {
+        const name = typeof m.name === 'string' && m.name.trim().length > 0 ? m.name : null
+        if (!name) break
+        setHosts(prev => prev.map(host => host.id === hostId ? { ...host, name } : host))
+        break
+      }
+
       case 'sessions': {
-        const list = (m.list as Session[]).map(s => ({ ...s, hostId: localHostId }))
-        setHostSessions(new Map([[localHostId, list]]))
+        const list = (m.list as Session[]).map(s => ({ ...s, hostId }))
+        setHostSessions(prev => {
+          const next = new Map(prev)
+          next.set(hostId, list)
+          return next
+        })
         // After the first real sessions list arrives, navigate to the #hash
         // session if one is present in the URL (deeplink / bookmark support).
-        if (!hasHandledInitialHashRef.current && list.length > 0) {
+        if (!hasHandledInitialHashRef.current && list.length > 0 && (hostId === localHostId || hosts.length === 1)) {
           hasHandledInitialHashRef.current = true
           const hashVal = decodeURIComponent(location.hash.slice(1))
           // Match by name first, fall back to ID (for old bookmarks),
@@ -240,7 +311,7 @@ export function App() {
           const match = list.find(s => s.name === hashVal)
             ?? list.find(s => s.id === hashVal)
             ?? list[0]
-          attachSession(makeKey(localHostId, match.id))
+          attachSession(makeKey(hostId, match.id))
         }
         break
       }
@@ -253,7 +324,7 @@ export function App() {
         if (requestId) {
           const pending = pendingRequestRef.current
           if (!pending) return
-          if (requestId !== pending.requestId) {
+          if (requestId !== pending.requestId || pending.hostId !== hostId) {
             dropBinaryUntilReadyRef.current = true
             return
           }
@@ -266,7 +337,7 @@ export function App() {
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
         }
-        if (!key) key = makeKey(localHostId, id)
+        if (!key) key = makeKey(hostId, id)
         attachedKeyRef.current = key
         // Update sync ref immediately so binary routing is correct
         currentKeyRef.current = key
@@ -299,7 +370,7 @@ export function App() {
 
       case 'error': {
         const requestId = typeof m.requestId === 'string' ? m.requestId : null
-        if (!requestId || requestId !== pendingRequestRef.current?.requestId) break
+        if (!requestId || requestId !== pendingRequestRef.current?.requestId || hostId !== pendingRequestRef.current.hostId) break
         pendingRequestRef.current = null
         pendingAttachTargetKeyRef.current = null
         dropBinaryUntilReadyRef.current = false
@@ -319,7 +390,7 @@ export function App() {
 
       case 'session-exit': {
         const id = m.id as string
-        const key = makeKey(localHostId, id)
+        const key = makeKey(hostId, id)
         killedSessionKeys.current.add(key)
         if (attachedKeyRef.current === key) attachedKeyRef.current = null
         if (pendingAttachTargetKeyRef.current === key) {
@@ -330,8 +401,8 @@ export function App() {
         tm.destroy(key)
         setHostSessions(prev => {
           const next = new Map(prev)
-          const list = next.get(localHostId) ?? []
-          next.set(localHostId, list.filter(s => s.id !== id))
+          const list = next.get(hostId) ?? []
+          next.set(hostId, list.filter(s => s.id !== id))
           return next
         })
         if (currentKeyRef.current === key) {
@@ -339,19 +410,19 @@ export function App() {
           setCurrentKey(null)
           history.replaceState(null, '', location.pathname)
           // Auto-attach to nearest surviving session
-          const remaining = (hostSessionsRef.current.get(localHostId) ?? [])
-            .filter(s => s.id !== id && !killedSessionKeys.current.has(makeKey(localHostId, s.id)))
+          const remaining = (hostSessionsRef.current.get(hostId) ?? [])
+            .filter(s => s.id !== id && !killedSessionKeys.current.has(makeKey(hostId, s.id)))
           if (remaining.length > 0) {
             const order = sessionOrderRef.current
             const killedIdx = order.indexOf(key)
             const ordered = [...remaining].sort((a, b) => {
-              const ai = order.indexOf(makeKey(localHostId, a.id))
-              const bi = order.indexOf(makeKey(localHostId, b.id))
+              const ai = order.indexOf(makeKey(hostId, a.id))
+              const bi = order.indexOf(makeKey(hostId, b.id))
               return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
             })
             // Prefer the session that was right after the killed one; fall back to last
-            const next = ordered.find(s => order.indexOf(makeKey(localHostId, s.id)) > killedIdx) ?? ordered[ordered.length - 1]
-            attachSession(makeKey(localHostId, next.id))
+            const next = ordered.find(s => order.indexOf(makeKey(hostId, s.id)) > killedIdx) ?? ordered[ordered.length - 1]
+            attachSession(makeKey(hostId, next.id))
           }
         }
         break
@@ -363,11 +434,12 @@ export function App() {
     const dims = currentKeyRef.current
       ? tm.getDimensions(currentKeyRef.current)
       : { cols: 80, rows: 24 }
+    const targetHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
     const requestId = `create-${++nextRequestSeqRef.current}`
-    pendingRequestRef.current = { hostId: localHostId, requestId, kind: 'create' }
+    pendingRequestRef.current = { hostId: targetHostId, requestId, kind: 'create' }
     pendingAttachTargetKeyRef.current = null
     dropBinaryUntilReadyRef.current = false
-    send({ type: 'create', requestId, ...(cwd ? { cwd } : {}), ...dims })
+    sendToHost(targetHostId, { type: 'create', requestId, ...(cwd ? { cwd } : {}), ...dims })
   }
 
   function duplicateSession(sourceId: string) {
@@ -385,7 +457,7 @@ export function App() {
     const currentHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : null
     const nextHostId = parseKey(key).hostId
     if (currentHostId && currentHostId !== nextHostId) {
-      send({ type: 'detach' })
+      sendToHost(currentHostId, { type: 'detach' })
     }
     const container = containerRefs.current.get(key)
     if (container) tm.ensureTerminal(key, container)
@@ -405,7 +477,8 @@ export function App() {
   }
 
   function killSession(key: SessionKey) {
-    send({ type: 'kill', id: parseKey(key).sessionId })
+    const { hostId, sessionId } = parseKey(key)
+    sendToHost(hostId, { type: 'kill', id: sessionId })
     setKillTargetKey(null)
   }
 
@@ -417,7 +490,7 @@ export function App() {
       next.set(localHostId, list.map(s => s.id === id ? { ...s, name } : s))
       return next
     })
-    send({ type: 'rename', id, name })
+    sendToHost(localHostId, { type: 'rename', id, name })
     // Keep URL hash in sync if this is the current session
     if (key === currentKeyRef.current) {
       history.replaceState(null, '', '#' + encodeURIComponent(name))
@@ -441,7 +514,9 @@ export function App() {
   }
 
   function sendInput(data: string) {
-    send({ type: 'input', data })
+    const key = currentKeyRef.current
+    if (!key) return
+    sendToHost(parseKey(key).hostId, { type: 'input', data })
   }
 
   function scrollToBottom() {
@@ -453,6 +528,8 @@ export function App() {
   }
 
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
+  const sidebarHostId = currentKey ? parseKey(currentKey).hostId : localHostId
+  const status: ConnectionStatus = hostStatuses.get(sidebarHostId) ?? 'reconnecting'
 
   return (
     <div className="app">

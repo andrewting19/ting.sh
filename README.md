@@ -63,6 +63,7 @@ Working:
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
 - Host connection engine scaffolded: `useHostConnections` + imperative `WSConnection` with per-host reconnect/send lifecycle
+- App/terminal manager now run on host-scoped session keys and use multi-host WS transport plumbing (`useHostConnections`)
 
 Missing / in progress:
 - Multi-machine dashboard

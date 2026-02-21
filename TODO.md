@@ -47,7 +47,7 @@
 - [x] Multi-host phase 2: server identity (`hosts.json`, `/api/host`, `host-info`, `hostId`)
 - [x] Multi-host phase 3: shared types (`Host`, `SessionKey`, host-aware `Session`)
 - [x] Multi-host phase 4: `useHostConnections` hook
-- [ ] Multi-host phase 5: app + terminal manager host-aware refactor
+- [x] Multi-host phase 5: app + terminal manager host-aware refactor
 - [ ] Multi-host phase 6: host-grouped sidebar UI
 - [ ] Multi-host phase 7: polish (hash routing, host-local ordering, host shortcuts)
 

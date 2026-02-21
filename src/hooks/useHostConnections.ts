@@ -36,6 +36,10 @@ export class WSConnection {
     this.ws = null
   }
 
+  forceClose(): void {
+    this.ws?.close()
+  }
+
   private connect(): void {
     this.handlers.onStatusChange('reconnecting')
     const ws = new WebSocket(this.url)
@@ -116,6 +120,10 @@ export function useHostConnections(callbacks: HostConnectionCallbacks) {
     connectionsRef.current.get(hostId)?.send(obj)
   }, [])
 
+  const forceClose = useCallback((hostId: string) => {
+    connectionsRef.current.get(hostId)?.forceClose()
+  }, [])
+
   useEffect(() => () => {
     for (const connection of connectionsRef.current.values()) {
       connection.close()
@@ -123,5 +131,5 @@ export function useHostConnections(callbacks: HostConnectionCallbacks) {
     connectionsRef.current.clear()
   }, [])
 
-  return useMemo(() => ({ hostStatuses, connect, disconnect, send }), [hostStatuses, connect, disconnect, send])
+  return useMemo(() => ({ hostStatuses, connect, disconnect, send, forceClose }), [hostStatuses, connect, disconnect, send, forceClose])
 }
