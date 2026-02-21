@@ -86,7 +86,7 @@ test('descriptive name — what is being verified', async ({ page }) => {
 
 ## Gotchas
 
-- **React StrictMode double-mount**: The app uses StrictMode, so effects run twice in dev. The `useWS` hook has an `intentionallyClosed` flag to prevent orphaned reconnect timers from the first mount's cleanup.
+- **React StrictMode double-mount**: The app uses StrictMode, so effects run twice in dev. The host connection manager's `WSConnection` cleanup guards prevent orphaned reconnect timers/sockets from the first mount.
 
 - **Binary routing**: PTY output is routed to `attachingIdRef.current ?? currentIdRef.current`. After `killAllSessions`, if `currentIdRef` still points to a dead session, new session output goes to the wrong terminal. The sequential kill approach avoids this by letting each `session-exit` handler clean up refs before the next kill.
 

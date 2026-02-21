@@ -441,7 +441,7 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
   })
   await expect(page.locator('.status-dot.reconnecting')).toBeVisible({ timeout: 5000 })
 
-  // useWS retries every 1500ms, so allow up to 8s for reconnect
+  // WSConnection retries every 1500ms, so allow up to 8s for reconnect
   await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
 
   // Session still in sidebar and terminal content replayed from server buffer
