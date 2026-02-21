@@ -199,7 +199,6 @@ export function App() {
   const getSessionByKey = useCallback((key: SessionKey): Session | null => {
     const { hostId, sessionId } = parseKey(key)
     return hostSessionsRef.current.get(hostId)?.find(s => s.id === sessionId) ?? null
-  })
   }, [])
 
   const { hostStatuses, connect, disconnect, send: sendToHost, forceClose } = useHostConnections({
