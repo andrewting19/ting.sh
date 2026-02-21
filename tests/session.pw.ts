@@ -315,7 +315,7 @@ test('Alt+1 switches to first session', async ({ page }) => {
 
 test('session order persists across page reload', async ({ page }) => {
   const id1 = await newSession(page)
-  const id2 = await newSession(page)
+  await newSession(page)
   const id3 = await newSession(page)
   // No need to wait for terminal content — just need all 3 in sidebar
   await page.waitForFunction(
@@ -323,15 +323,28 @@ test('session order persists across page reload', async ({ page }) => {
     { timeout: 5000 },
   )
 
-  const orderBefore = await getSessions(page)
-  expect(orderBefore).toContain(id1)
+  // Drag id3 to the top (above id1) and verify the in-host reorder happened.
+  await page.dragAndDrop(`[data-session-id="${id3}"]`, `[data-session-id="${id1}"]`)
+  await page.waitForFunction(
+    ([dragged, target]: [string, string]) => {
+      const ids = [...document.querySelectorAll('[data-session-id]')]
+        .map(el => el.getAttribute('data-session-id')!)
+      const draggedIdx = ids.indexOf(dragged)
+      const targetIdx = ids.indexOf(target)
+      return draggedIdx !== -1 && targetIdx !== -1 && draggedIdx < targetIdx
+    },
+    [id3, id1] as [string, string],
+    { timeout: 5000 },
+  )
+  const reordered = await getSessions(page)
+  expect(reordered.indexOf(id3)).toBeLessThan(reordered.indexOf(id1))
 
   await page.reload()
   await page.waitForSelector('[data-session-id]', { timeout: 8000 })
 
   const orderAfter = await getSessions(page)
-  // All sessions still present in the same order
-  expect(orderAfter).toEqual(orderBefore)
+  // Reordered list should persist.
+  expect(orderAfter).toEqual(reordered)
 })
 
 test('duplicate session — spawns in same CWD, appears after source', async ({ page }) => {

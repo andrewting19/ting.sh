@@ -237,7 +237,6 @@ function HostSessionList({
         <>
           {sessions.map((s) => {
             const key = makeKey(hostId, s.id)
-            const draggedHostId = draggedKeyRef.current ? parseKey(draggedKeyRef.current).hostId : null
             return (
               <SessionItem
                 key={key}
@@ -256,7 +255,7 @@ function HostSessionList({
                 onLongPress={(x, y) => { if (!disabled) onContextMenu({ key, x, y }) }}
                 onDragStart={() => { if (!disabled) draggedKeyRef.current = key }}
                 onDragOver={(e) => {
-                  if (disabled || !draggedKeyRef.current || draggedHostId !== hostId || draggedKeyRef.current === key) return
+                  if (disabled || !draggedKeyRef.current || parseKey(draggedKeyRef.current).hostId !== hostId || draggedKeyRef.current === key) return
                   e.preventDefault()
                   onDragOverKey(key)
                 }}
