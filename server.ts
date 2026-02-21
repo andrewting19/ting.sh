@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { readlinkSync } from "fs";
+import { existsSync, readFileSync, readlinkSync } from "fs";
+import { hostname } from "os";
 import { sanitizeReplayBuffer } from "./serverBuffer";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
@@ -21,6 +22,111 @@ interface Session {
 interface WSData {
   sessionId: string | null;
 }
+
+interface HostInfo {
+  id: string;
+  name: string;
+}
+
+interface HostPeer extends HostInfo {
+  url: string;
+}
+
+interface HostConfig {
+  self: HostInfo;
+  peers: HostPeer[];
+}
+
+interface RawHostsConfig {
+  id?: unknown;
+  name?: unknown;
+  peers?: unknown;
+}
+
+interface RawHostPeer {
+  id?: unknown;
+  name?: unknown;
+  url?: unknown;
+}
+
+function parseHostId(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string`);
+  }
+  const id = value.trim();
+  if (id.includes(":")) {
+    throw new Error(`${field} cannot contain ":"`);
+  }
+  return id;
+}
+
+function parseHostName(value: unknown, fallback: string, field: string): string {
+  if (value == null) return fallback;
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function parseHostUrl(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string`);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${field} must be a valid absolute URL`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${field} must use http:// or https://`);
+  }
+  return parsed.toString().replace(/\/$/, "");
+}
+
+function loadHostConfig(): HostConfig {
+  const defaultHost = hostname();
+  const defaults: HostConfig = {
+    self: { id: defaultHost, name: defaultHost },
+    peers: [],
+  };
+  const configPath = "./hosts.json";
+  if (!existsSync(configPath)) return defaults;
+
+  let raw: RawHostsConfig;
+  try {
+    raw = JSON.parse(readFileSync(configPath, "utf-8")) as RawHostsConfig;
+  } catch (err) {
+    throw new Error(`Failed to parse hosts.json: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const selfId = parseHostId(raw.id, "hosts.json id");
+  const selfName = parseHostName(raw.name, selfId, "hosts.json name");
+  const seen = new Set<string>([selfId]);
+
+  const peersRaw = raw.peers ?? [];
+  if (!Array.isArray(peersRaw)) {
+    throw new Error("hosts.json peers must be an array");
+  }
+
+  const peers: HostPeer[] = peersRaw.map((peerRaw, idx) => {
+    const peer = peerRaw as RawHostPeer;
+    const id = parseHostId(peer.id, `hosts.json peers[${idx}].id`);
+    if (seen.has(id)) {
+      throw new Error(`hosts.json contains duplicate host id "${id}"`);
+    }
+    seen.add(id);
+    const name = parseHostName(peer.name, id, `hosts.json peers[${idx}].name`);
+    const url = parseHostUrl(peer.url, `hosts.json peers[${idx}].url`);
+    return { id, name, url };
+  });
+
+  return {
+    self: { id: selfId, name: selfName },
+    peers,
+  };
+}
+
+const HOST_CONFIG = loadHostConfig();
 
 // All 172 champions as of Feb 2026 (Zaahen is the most recent)
 const CHAMPION_NAMES = [
@@ -107,7 +213,7 @@ function scheduleCwdRefresh(session: Session) {
 }
 
 function sessionInfo(s: Session) {
-  return { id: s.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size, cwd: s.cwd };
+  return { id: s.id, hostId: HOST_CONFIG.self.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size, cwd: s.cwd };
 }
 
 function detachClient(ws: ServerWebSocket<WSData>): boolean {
@@ -222,6 +328,13 @@ const server = Bun.serve<WSData>({
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
 
+    if (url.pathname === "/api/host") {
+      return Response.json({
+        self: HOST_CONFIG.self,
+        peers: HOST_CONFIG.peers,
+      });
+    }
+
     // Serve built frontend (production: bun run build && bun run start)
     const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Bun.file(`./dist${filePath}`);
@@ -231,7 +344,13 @@ const server = Bun.serve<WSData>({
   },
 
   websocket: {
-    open(_ws) {},
+    open(ws) {
+      safeSend(ws, JSON.stringify({
+        type: "host-info",
+        id: HOST_CONFIG.self.id,
+        name: HOST_CONFIG.self.name,
+      }));
+    },
 
     message(ws, msg) {
       // Binary = terminal input from client (shouldn't happen but ignore)
