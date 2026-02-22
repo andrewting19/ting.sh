@@ -5,7 +5,7 @@
     {
       "id": "dev-server",
       "name": "Dev Server",
-      "url": "http://dev-server.tail1234.ts.net:7681"
+      "url": "http://dev-server.example-tailnet.ts.net:7681"
     }
   ]
 }
