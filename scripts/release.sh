@@ -26,7 +26,7 @@ bun run build
 
 # Create release tarball
 TARBALL="ting.sh-v${NEW_VERSION}.tar.gz"
-tar czf "$TARBALL" \
+COPYFILE_DISABLE=1 tar czf "$TARBALL" \
   server.ts \
   serverBuffer.ts \
   VERSION \

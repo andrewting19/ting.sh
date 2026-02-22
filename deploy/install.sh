@@ -16,6 +16,12 @@ if ! command -v bun &>/dev/null; then
   export PATH="$HOME/.bun/bin:$PATH"
 fi
 
+# Ensure bun is on the system PATH for systemd
+BUN_PATH=$(command -v bun)
+if [ "$BUN_PATH" != "/usr/local/bin/bun" ]; then
+  ln -sf "$BUN_PATH" /usr/local/bin/bun
+fi
+
 echo "==> Bun version: $(bun --version)"
 
 # 2. Determine latest release
