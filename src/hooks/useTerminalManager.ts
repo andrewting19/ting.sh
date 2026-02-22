@@ -21,6 +21,10 @@ interface TerminalEntry {
   // Safari/iOS canvas renderer can occasionally leave stale glyphs for one
   // frame during rapid redraw + scroll. Coalesce full repaints to the next rAF.
   fullRefreshRaf: number | null
+  // Programmatic term.focus() can emit CSI I/O when an app enabled focus
+  // reporting (?1004h). Suppress only the immediate focus/blur report so the
+  // shell prompt doesn't get literal "^[[I" inserted during session switches.
+  suppressFocusReportUntil: number
 }
 
 interface Callbacks {
@@ -59,6 +63,8 @@ const TERMINAL_OPTIONS = {
     brightWhite:   '#c0caf5',
   },
 }
+
+const PROGRAMMATIC_FOCUS_REPORT_SUPPRESS_MS = 150
 
 function isIOSDevice(): boolean {
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
@@ -190,6 +196,13 @@ export function useTerminalManager(callbacks: Callbacks) {
   // Always-fresh callbacks via ref — no stale closure issues
   const cbRef = useRef(callbacks)
   cbRef.current = callbacks
+  const forwardTerminalData = useCallback((sessionKey: SessionKey, data: string) => {
+    if (data === '\x1b[I' || data === '\x1b[O') {
+      const entry = entriesRef.current.get(sessionKey)
+      if (entry && performance.now() <= entry.suppressFocusReportUntil) return
+    }
+    if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
+  }, [])
 
   // Create a Terminal instance without opening it (no container yet).
   // xterm.js processes write() calls into its internal VT buffer even before
@@ -209,13 +222,13 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
 
     term.onData((data) => {
-      if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
+      forwardTerminalData(sessionKey, data)
     })
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, fullRefreshRaf: null })
-  }, [])
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, fullRefreshRaf: null, suppressFocusReportUntil: 0 })
+  }, [forwardTerminalData])
 
   const ensureTerminal = useCallback((sessionKey: SessionKey, container: HTMLElement) => {
     const existing = entriesRef.current.get(sessionKey)
@@ -255,7 +268,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     scheduleFullRefresh(sessionKey)
 
     term.onData((data) => {
-      if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
+      forwardTerminalData(sessionKey, data)
     })
 
     const ro = new ResizeObserver(() => {
@@ -265,9 +278,9 @@ export function useTerminalManager(callbacks: Callbacks) {
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container), fullRefreshRaf: null })
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container), fullRefreshRaf: null, suppressFocusReportUntil: 0 })
     scheduleFullRefresh(sessionKey)
-  }, [scheduleFullRefresh])
+  }, [forwardTerminalData, scheduleFullRefresh])
 
   // Switch the WebGL renderer to the newly active terminal.
   // Inactive terminals don't need GPU acceleration — they're invisible.
@@ -306,11 +319,12 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
   }, [scheduleFullRefresh])
 
-  const write = useCallback((sessionKey: SessionKey, data: Uint8Array) => {
+  const write = useCallback((sessionKey: SessionKey, data: Uint8Array, onFlushed?: () => void) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.write(data, () => {
       scheduleFullRefresh(sessionKey)
+      onFlushed?.()
     })
   }, [scheduleFullRefresh])
 
@@ -321,8 +335,18 @@ export function useTerminalManager(callbacks: Callbacks) {
     scheduleFullRefresh(sessionKey)
   }, [scheduleFullRefresh])
 
+  const scrollToBottom = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    entry.term.scrollToBottom()
+    scheduleFullRefresh(sessionKey)
+  }, [scheduleFullRefresh])
+
   const focus = useCallback((sessionKey: SessionKey) => {
-    entriesRef.current.get(sessionKey)?.term.focus()
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    entry.suppressFocusReportUntil = performance.now() + PROGRAMMATIC_FOCUS_REPORT_SUPPRESS_MS
+    entry.term.focus()
   }, [])
 
   const getDimensions = useCallback((sessionKey: SessionKey) => {
@@ -355,7 +379,7 @@ export function useTerminalManager(callbacks: Callbacks) {
   // this memo never re-computes. Without this, effects in App.tsx that list
   // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, focus, getDimensions, getApplicationCursorKeysMode, destroy }),
-    [primeTerminal, ensureTerminal, setActive, write, reset, focus, getDimensions, getApplicationCursorKeysMode, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, destroy]
   )
 }

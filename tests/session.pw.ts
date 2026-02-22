@@ -137,6 +137,30 @@ test('switch sessions — scrollback not duplicated on return', async ({ page })
   expect(countAfter).toBe(countBefore)
 })
 
+test('switch sessions — programmatic focus does not inject ^[[I', async ({ page }) => {
+  const id1 = await newSession(page)
+  await waitForPrompt(page, id1)
+  const id2 = await newSession(page)
+  await waitForPrompt(page, id2)
+
+  await switchToSession(page, id1)
+  await waitForPrompt(page, id1)
+
+  // Enable xterm focus reporting in the shell. If our app sends a programmatic
+  // focus-in event during session switching, readline will echo it as "^[[I".
+  await page.keyboard.type("printf '\\e[?1004h'")
+  await page.keyboard.press('Enter')
+  await waitForPrompt(page, id1)
+
+  await switchToSession(page, id2)
+  await waitForPrompt(page, id2)
+  await switchToSession(page, id1)
+  await waitForPrompt(page, id1)
+
+  const text = await getTerminalText(page, id1)
+  expect(text).not.toContain('^[[I')
+})
+
 test('switch during noisy output — old session bytes do not leak', async ({ page }) => {
   const id1 = await newSession(page)
   await waitForPrompt(page, id1)

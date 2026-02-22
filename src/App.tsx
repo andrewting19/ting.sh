@@ -121,6 +121,10 @@ export function App() {
   // When we ignore a stale attach ready, drop binary until the newest attach
   // is confirmed so replay from the stale attach cannot contaminate terminals.
   const dropBinaryUntilReadyRef = useRef(false)
+  // Attach/reset replays can leave xterm's viewport at an arbitrary position
+  // (notably top after reconnect/hot-reload). Scroll to latest output after the
+  // first binary frame for each attach request is flushed.
+  const scrollToBottomAfterAttachBinaryRef = useRef<SessionKey | null>(null)
 
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceKeyRef = useRef<SessionKey | null>(null)
@@ -248,7 +252,14 @@ export function App() {
       const key = attachedKeyRef.current
       if (!key) return
       if (parseKey(key).hostId !== hostId) return
-      tm.write(key, new Uint8Array(data))
+      const shouldScrollToBottom = scrollToBottomAfterAttachBinaryRef.current === key
+      tm.write(key, new Uint8Array(data), shouldScrollToBottom
+        ? () => {
+            if (scrollToBottomAfterAttachBinaryRef.current !== key) return
+            scrollToBottomAfterAttachBinaryRef.current = null
+            tm.scrollToBottom(key)
+          }
+        : undefined)
     },
     onMessage: (hostId, msg) => handleMessage(hostId, msg),
   })
@@ -339,6 +350,7 @@ export function App() {
     pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
     dropBinaryUntilReadyRef.current = false
+    scrollToBottomAfterAttachBinaryRef.current = key
     const dims = tm.getDimensions(key)
     sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
   }, [sendToHost, tm])
@@ -481,6 +493,9 @@ export function App() {
           pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
+          if (scrollToBottomAfterAttachBinaryRef.current && parseKey(scrollToBottomAfterAttachBinaryRef.current).hostId === host.id) {
+            scrollToBottomAfterAttachBinaryRef.current = null
+          }
         }
         if (attachedKeyRef.current && parseKey(attachedKeyRef.current).hostId === host.id) {
           attachedKeyRef.current = null
@@ -656,6 +671,7 @@ export function App() {
         pendingRequestRef.current = null
         pendingAttachTargetKeyRef.current = null
         dropBinaryUntilReadyRef.current = false
+        scrollToBottomAfterAttachBinaryRef.current = null
         const fallback = attachedKeyRef.current
         currentKeyRef.current = fallback
         setCurrentKey(fallback)
@@ -679,6 +695,9 @@ export function App() {
           pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
+        }
+        if (scrollToBottomAfterAttachBinaryRef.current === key) {
+          scrollToBottomAfterAttachBinaryRef.current = null
         }
         tm.destroy(key)
         setHostSessions(prev => {

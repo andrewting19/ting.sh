@@ -26,6 +26,8 @@
 - [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 - [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
 - [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
+- [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
+- [x] Reconnect/hot-reload attach replay could leave xterm viewport at top of buffer — fixed (scroll to bottom after first attach replay binary flush)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
@@ -44,7 +46,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 28 tests covering all key flows
+- [x] E2E test suite (Playwright) — 29 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
