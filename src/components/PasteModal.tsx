@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 const HISTORY_KEY = 'wt_paste_history'
 const MAX_HISTORY = 10
@@ -21,10 +21,14 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   const [history, setHistory] = useState<string[]>(loadHistory)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    // Small delay so the sheet animation settles before keyboard appears
-    const t = setTimeout(() => textareaRef.current?.focus(), 80)
-    return () => clearTimeout(t)
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    try {
+      textarea.focus({ preventScroll: true })
+    } catch {
+      textarea.focus()
+    }
   }, [])
 
   function handleSend() {
@@ -54,6 +58,7 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
           <textarea
             ref={textareaRef}
             className="paste-textarea"
+            autoFocus
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="type or paste text here…"

@@ -23,6 +23,7 @@
 - [x] Mobile D-pad arrows sent wrong sequence in app-cursor mode TUIs — fixed (read xterm `applicationCursorKeysMode` and emit `ESC O*` when needed)
 - [x] Mobile keyboard covered terminal bottom + toolbar while typing — fixed (VisualViewport keyboard inset drives terminal/toolbar/overlay bottom offsets)
 - [x] Mobile paste/hotkey inputs zoomed page on focus (iOS) — fixed (mobile form control font size raised to 16px in toolbar modals)
+- [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

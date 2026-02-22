@@ -601,12 +601,15 @@ html, body, #root {
     bottom: var(--mobile-keyboard-inset);
   }
 
-  /* iOS Safari auto-zooms focused form controls <16px. Keep toolbar modals
-     usable by bumping mobile input text size while preserving desktop density. */
-  .paste-textarea,
-  .hk-key-select,
-  .hk-key-input,
-  .hk-label-input {
+  /* iOS Safari auto-zooms focused form controls <16px. Use more-specific
+     selectors so these mobile overrides beat the later component rules.
+     Include xterm's hidden helper textarea so the toolbar keyboard button
+     doesn't zoom the whole page when it focuses the terminal. */
+  .paste-modal .paste-textarea,
+  .hotkey-editor .hk-key-select,
+  .hotkey-editor .hk-key-input,
+  .hotkey-editor .hk-label-input,
+  .xterm .xterm-helper-textarea {
     font-size: 16px;
   }
 }
