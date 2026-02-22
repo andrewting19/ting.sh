@@ -19,6 +19,7 @@
 - [x] Peer WS scheme inherited from page protocol — fixed (derive ws/wss from each host URL instead)
 - [x] Deprecated `useWS` hook still present — fixed (remove dead hook and keep WS lifecycle in `useHostConnections`)
 - [x] `server.ts` control-path `any` usage — fixed (typed JSON guards + typed field coercion helpers)
+- [x] Dev mode could leave Vite up with a dead WS backend — fixed (`bun run dev` now uses `concurrently -k` to fail fast when either process exits)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,vite -c cyan,magenta \"bun run dev:server\" \"bun run dev:client\"",
+    "dev": "concurrently -k -n server,vite -c cyan,magenta \"bun run dev:server\" \"bun run dev:client\"",
     "dev:server": "bun run --hot server.ts",
     "dev:client": "vite",
     "build": "vite build",

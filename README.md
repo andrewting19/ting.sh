@@ -50,6 +50,7 @@ Working:
 - Champion names for auto-generated sessions (all 172 LoL champions)
 - Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
+- Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
