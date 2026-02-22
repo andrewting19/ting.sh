@@ -545,4 +545,4 @@ const server = Bun.serve<WSData>({
   },
 });
 
-console.log(`web-terminal listening on http://localhost:${server.port}`);
+console.log(`ting.sh listening on http://localhost:${server.port}`);

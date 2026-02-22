@@ -1,4 +1,4 @@
-# web-terminal
+# ting.sh
 
 A self-hosted web terminal so I can use my development machine from anywhere — phone, tablet, or another computer — as long as I'm on my Tailscale network.
 

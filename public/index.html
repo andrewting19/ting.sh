@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>web-terminal</title>
+  <title>ting.sh</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
@@ -478,7 +478,7 @@ function handleMessage(msg) {
       renderSidebar();
       break;
     case 'error':
-      console.error('[web-terminal]', msg.message);
+      console.error('[ting.sh]', msg.message);
       break;
   }
 }
