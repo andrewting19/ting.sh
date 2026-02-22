@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync, readlinkSync } from "fs";
+import { existsSync, readFileSync, readlinkSync, writeFileSync, mkdirSync } from "fs";
 import { hostname } from "os";
+import { join } from "path";
 import { sanitizeReplayBuffer } from "./serverBuffer";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
@@ -365,6 +366,10 @@ const server = Bun.serve<WSData>({
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
 
+    if (url.pathname === "/api/version") {
+      return Response.json({ version: getCurrentVersion() ?? "dev" });
+    }
+
     if (url.pathname === "/api/host") {
       return Response.json({
         self: HOST_CONFIG.self,
@@ -546,3 +551,91 @@ const server = Bun.serve<WSData>({
 });
 
 console.log(`ting.sh listening on http://localhost:${server.port}`);
+
+// --- Auto-update ---
+// Polls GitHub releases, downloads new version, extracts over current install,
+// then exits so systemd restarts with the new code.
+// Disabled in dev (no VERSION file) or when AUTO_UPDATE=false.
+
+const AUTO_UPDATE_REPO = process.env.AUTO_UPDATE_REPO ?? "andrewting19/ting.sh";
+const AUTO_UPDATE_INTERVAL = parseInt(process.env.AUTO_UPDATE_INTERVAL ?? String(5 * 60_000)); // 5 min default
+const AUTO_UPDATE_ENABLED = (process.env.AUTO_UPDATE ?? "true") !== "false";
+
+function getCurrentVersion(): string | null {
+  try {
+    return readFileSync("./VERSION", "utf-8").trim();
+  } catch {
+    return null;
+  }
+}
+
+async function checkForUpdate(): Promise<void> {
+  const current = getCurrentVersion();
+  if (!current) return; // no VERSION file = dev mode, skip
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${AUTO_UPDATE_REPO}/releases/latest`, {
+      headers: { "Accept": "application/vnd.github+json" },
+    });
+    if (!res.ok) return;
+
+    const data = await res.json() as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> };
+    const tag = data.tag_name;
+    if (!tag) return;
+
+    const latest = tag.replace(/^v/, "");
+    if (latest === current) return;
+
+    console.log(`[auto-update] new version available: v${latest} (current: v${current})`);
+
+    // Find the tarball asset
+    const asset = data.assets?.find(a => a.name.endsWith(".tar.gz"));
+    if (!asset) {
+      console.log("[auto-update] no tarball asset found in release");
+      return;
+    }
+
+    // Download and extract over current directory
+    console.log(`[auto-update] downloading ${asset.name}...`);
+    const tarRes = await fetch(asset.browser_download_url);
+    if (!tarRes.ok || !tarRes.body) {
+      console.log("[auto-update] download failed");
+      return;
+    }
+
+    // Write to temp file, then extract
+    const tmpPath = join(".", `.update-${latest}.tar.gz`);
+    const tarBytes = new Uint8Array(await tarRes.arrayBuffer());
+    writeFileSync(tmpPath, tarBytes);
+
+    const extract = Bun.spawn(["tar", "xzf", tmpPath, "-C", "."], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await extract.exited;
+
+    if (extract.exitCode !== 0) {
+      const stderr = await new Response(extract.stderr).text();
+      console.log(`[auto-update] extract failed: ${stderr}`);
+      try { Bun.spawn(["rm", "-f", tmpPath]); } catch { /* ignore */ }
+      return;
+    }
+
+    try { Bun.spawn(["rm", "-f", tmpPath]); } catch { /* ignore */ }
+
+    console.log(`[auto-update] updated to v${latest}, restarting...`);
+    process.exit(0); // systemd restarts us
+  } catch (err) {
+    console.log(`[auto-update] check failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+if (AUTO_UPDATE_ENABLED) {
+  // Check once on startup (after a short delay to let the server settle)
+  setTimeout(checkForUpdate, 10_000);
+  // Then periodically
+  setInterval(checkForUpdate, AUTO_UPDATE_INTERVAL);
+  console.log(`[auto-update] enabled, checking ${AUTO_UPDATE_REPO} every ${AUTO_UPDATE_INTERVAL / 60_000}min`);
+} else {
+  console.log("[auto-update] disabled");
+}

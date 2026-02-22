@@ -72,7 +72,8 @@
 ## Backlog
 
 - [ ] Multi-machine dashboard — each Tailscale machine runs its own server, one page lists all
-- [ ] Auto-update — server polls for new version, restarts itself
+- [x] Auto-update — server polls GitHub releases, downloads new tarball, extracts in-place, exits for systemd restart
+- [x] Deployment tooling — systemd unit, install script (`curl | sh`), release script (`bun run release`)
 - [ ] Custom launch command per session — start directly into `claude`, `ssh host`, etc.
 - [ ] Search in scrollback — `xterm-addon-search`
 - [ ] Font size adjustment in UI

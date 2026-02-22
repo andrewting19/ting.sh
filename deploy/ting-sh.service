@@ -1,0 +1,17 @@
+[Unit]
+Description=ting.sh — self-hosted web terminal
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ting.sh
+ExecStart=/usr/local/bin/bun run server.ts
+Restart=always
+RestartSec=2
+Environment=PORT=7681
+Environment=SHELL=/bin/bash
+EnvironmentFile=-/opt/ting.sh/.env
+
+[Install]
+WantedBy=multi-user.target

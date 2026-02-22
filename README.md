@@ -82,6 +82,10 @@ Working:
 - Manual two-host production verification passed (create/attach/input/kill/reconnect across `server-a` + `server-b`)
 - Legacy single-host `useWS` hook removed; host transport now flows only through `useHostConnections` / `WSConnection`
 - Server control-message parsing now uses typed guards (no `any` in `server.ts` request handling paths)
+- Auto-update — server polls GitHub releases, downloads new tarball, extracts in-place, exits for systemd restart
+- `GET /api/version` — returns current running version
+- Release tooling — `bun run release` bumps version, builds, tags, and publishes a GitHub release
+- systemd unit template and `curl | sh` install script for VPS deployment
 
 Missing / in progress:
 - Multi-machine dashboard
