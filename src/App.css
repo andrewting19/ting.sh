@@ -814,6 +814,7 @@ html, body, #root {
 
 .paste-modal-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 16px;
   display: flex;
@@ -862,6 +863,10 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-height: 0;
+  max-height: min(28dvh, 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: 8px;
 }
 .paste-history-label {

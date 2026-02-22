@@ -25,6 +25,7 @@
 - [x] Mobile paste/hotkey inputs zoomed page on focus (iOS) — fixed (mobile form control font size raised to 16px in toolbar modals)
 - [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 - [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
+- [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

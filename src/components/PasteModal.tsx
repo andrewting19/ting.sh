@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 
 const HISTORY_KEY = 'wt_paste_history'
 const MAX_HISTORY = 10
+const MIN_DRAFT_HISTORY_CHARS = 12
 
 function loadHistory(): string[] {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') } catch { return [] }
@@ -21,6 +22,24 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   const [history, setHistory] = useState<string[]>(loadHistory)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  function pushHistory(item: string) {
+    setHistory(prev => {
+      const next = [item, ...prev.filter(h => h !== item)].slice(0, MAX_HISTORY)
+      saveHistory(next)
+      return next
+    })
+  }
+
+  function maybeSaveDraft(item: string) {
+    if (item.trim().length < MIN_DRAFT_HISTORY_CHARS) return
+    pushHistory(item)
+  }
+
+  function handleClose() {
+    maybeSaveDraft(text)
+    onClose()
+  }
+
   useLayoutEffect(() => {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -34,9 +53,7 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   function handleSend() {
     if (!text) return
     onSend(text)
-    const next = [text, ...history.filter(h => h !== text)].slice(0, MAX_HISTORY)
-    setHistory(next)
-    saveHistory(next)
+    pushHistory(text)
     setText('')
   }
 
@@ -47,11 +64,11 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
   }
 
   return (
-    <div className="paste-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="paste-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
       <div className="paste-modal">
         <div className="paste-modal-header">
           <span className="paste-modal-title">send text</span>
-          <button className="paste-modal-close" onClick={onClose}>✕</button>
+          <button className="paste-modal-close" onClick={handleClose}>✕</button>
         </div>
 
         <div className="paste-modal-body">
