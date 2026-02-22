@@ -509,8 +509,8 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
   const id = await newSession(page)
   await waitForPrompt(page, id)
 
-  // Confirm connected before dropping
-  await expect(page.locator('.status-dot.connected')).toBeVisible()
+  // Confirm connected before dropping (use .first() — multi-host has multiple dots)
+  await expect(page.locator('.status-dot.connected').first()).toBeVisible()
 
   // Close the WebSocket from the client side — setOffline doesn't reliably
   // affect localhost connections in all browsers/Playwright versions.
@@ -518,10 +518,10 @@ test('WS reconnect — session survives network drop', async ({ page }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).__wt_ws_close?.()
   })
-  await expect(page.locator('.status-dot.reconnecting')).toBeVisible({ timeout: 5000 })
+  await expect(page.locator('.status-dot.reconnecting').first()).toBeVisible({ timeout: 5000 })
 
   // WSConnection retries every 1500ms, so allow up to 8s for reconnect
-  await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
+  await expect(page.locator('.status-dot.connected').first()).toBeVisible({ timeout: 8000 })
 
   // Session still in sidebar and terminal content replayed from server buffer
   await expect(page.locator(`[data-session-id="${id}"]`)).toBeVisible()

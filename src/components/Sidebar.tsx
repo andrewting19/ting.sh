@@ -70,6 +70,7 @@ export function Sidebar({
 
   return (
     <nav className={`sidebar${isOpen ? ' open' : ''}`}>
+      <div className="sidebar-brand">ting.sh</div>
       {singleHost ? (
         <>
           <div className="sidebar-top">

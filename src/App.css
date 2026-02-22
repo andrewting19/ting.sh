@@ -100,6 +100,14 @@ html, body, #root {
   overflow: hidden;
 }
 
+.sidebar-brand {
+  padding: 12px 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg1);
+  letter-spacing: .02em;
+}
+
 .sidebar-top {
   display: flex;
   flex-direction: column;

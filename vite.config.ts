@@ -9,6 +9,7 @@ export default defineConfig({
     allowedHosts: true, // allow any hostname (Tailscale hostnames, etc.)
     proxy: {
       '/ws': { target: `ws://localhost:${process.env.WS_PORT ?? '7681'}`, ws: true },
+      '/api': { target: `http://localhost:${process.env.WS_PORT ?? '7681'}` },
     },
   },
   build: {
