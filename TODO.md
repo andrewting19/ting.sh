@@ -14,6 +14,7 @@
 - [x] Duplicate output after reconnect/hot reload — fixed (ignore stale WS events + hot-reload regression test)
 - [x] Host-scoped drag reorder intermittently no-op'd — fixed (read dragged host from live ref inside drag handlers + reorder persistence regression test)
 - [x] Cross-site WS hijack risk — fixed (`/ws` now rejects mismatched `Origin`, allows absent origin for non-browser clients)
+- [x] Peer host stayed stuck on `reconnecting` — fixed (`/ws` Origin check now trusts configured peer origins, not strict same-origin only)
 - [x] Local host stayed hardcoded as `local` — fixed (reconcile local host id/name from `host-info` and `/api/host`)
 - [x] Peer WS scheme inherited from page protocol — fixed (derive ws/wss from each host URL instead)
 - [x] Deprecated `useWS` hook still present — fixed (remove dead hook and keep WS lifecycle in `useHostConnections`)
@@ -48,6 +49,7 @@
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
 - [x] iOS Safari scroll-on-text bug fixed (Canvas renderer forced on iOS + renderer guard test)
 - [x] Shared-session resize reclaim — active session click/foreground reapplies local PTY dimensions
+- [x] Manual multi-host production verification (two real servers) — create/attach/input/kill/offline-reconnect validated end-to-end
 
 ## Up next (in order)
 - [x] Multi-host phase 1: protocol hardening (`detach`, list subscribers, `requestId` echo)

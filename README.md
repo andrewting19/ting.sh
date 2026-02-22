@@ -60,7 +60,7 @@ Working:
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
-- WebSocket CSWSH hardening — `/ws` upgrade now validates browser `Origin` and rejects cross-origin upgrades (non-browser clients without `Origin` still allowed)
+- WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
 - Automated E2E test suite (Playwright) — 28 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
@@ -70,6 +70,7 @@ Working:
 - Sidebar now supports host-grouped sections with per-host connection status and host-scoped drag/drop interactions
 - Local host identity reconciliation — local host ID/name now follows server `host-info`/`/api/host` values instead of staying hardcoded as `local`
 - Peer WS URL derivation now follows each peer base URL scheme (`http→ws`, `https→wss`) instead of the current page protocol
+- Manual two-host production verification passed (create/attach/input/kill/reconnect across `server-a` + `server-b`)
 - Legacy single-host `useWS` hook removed; host transport now flows only through `useHostConnections` / `WSConnection`
 - Server control-message parsing now uses typed guards (no `any` in `server.ts` request handling paths)
 
