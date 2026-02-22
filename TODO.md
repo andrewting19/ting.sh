@@ -21,6 +21,7 @@
 - [x] `server.ts` control-path `any` usage — fixed (typed JSON guards + typed field coercion helpers)
 - [x] Dev mode could leave Vite up with a dead WS backend — fixed (`bun run dev` now uses `concurrently -k` to fail fast when either process exits)
 - [x] Mobile D-pad arrows sent wrong sequence in app-cursor mode TUIs — fixed (read xterm `applicationCursorKeysMode` and emit `ESC O*` when needed)
+- [x] Mobile keyboard covered terminal bottom + toolbar while typing — fixed (VisualViewport keyboard inset drives terminal/toolbar/overlay bottom offsets)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

@@ -17,6 +17,7 @@
   --font:     'JetBrains Mono', 'Fira Code', monospace;
   --sidebar:  210px;
   --header:   38px;
+  --mobile-keyboard-inset: 0px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -577,8 +578,10 @@ html, body, #root {
 
   .mobile-toolbar {
     display: flex;
-    grid-column: 1 / -1;
-    grid-row: 3;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--mobile-keyboard-inset);
     align-items: center;
     gap: 3px;
     padding: 7px 8px;
@@ -593,6 +596,10 @@ html, body, #root {
     z-index: 10;
   }
   .mobile-toolbar::-webkit-scrollbar { display: none; }
+
+  .terminal-area {
+    bottom: var(--mobile-keyboard-inset);
+  }
 }
 
 /* ── Toolbar buttons ─────────────────────────────────────────────────────────
@@ -677,7 +684,7 @@ html, body, #root {
 /* ── Arrow pad overlay ────────────────────────────────────────────────────── */
 .arrow-pad-overlay {
   position: fixed;
-  bottom: calc(var(--toolbar, 52px) + 10px);
+  bottom: calc(var(--toolbar, 52px) + var(--mobile-keyboard-inset, 0px) + 10px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg2);
@@ -726,6 +733,7 @@ html, body, #root {
 .paste-modal-backdrop {
   position: fixed;
   inset: 0;
+  padding-bottom: var(--mobile-keyboard-inset, 0px);
   background: rgba(0,0,0,.65);
   backdrop-filter: blur(3px);
   z-index: 80;

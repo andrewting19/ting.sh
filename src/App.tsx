@@ -80,6 +80,18 @@ function normalizeHostName(value: unknown, fallback: string): string {
   return name || fallback
 }
 
+function getMobileKeyboardInset(): number {
+  if (typeof window === 'undefined') return 0
+  if (!window.matchMedia('(max-width: 640px)').matches) return 0
+  const vv = window.visualViewport
+  if (!vv) return 0
+  // Layout viewport minus visible viewport = obscured bottom inset (keyboard on iOS).
+  const raw = Math.round(window.innerHeight - vv.height - vv.offsetTop)
+  if (raw <= 0) return 0
+  // Ignore small browser-chrome / viewport jitter changes.
+  return raw >= 80 ? raw : 0
+}
+
 export function App() {
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
@@ -406,6 +418,44 @@ export function App() {
 
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // Mobile keyboard avoidance: move fixed overlays/toolbar above the on-screen
+  // keyboard and shrink the terminal area so xterm remains visible while typing.
+  useEffect(() => {
+    let raf = 0
+    let last = -1
+    const root = document.documentElement
+
+    const applyInset = () => {
+      raf = 0
+      const next = getMobileKeyboardInset()
+      if (next === last) return
+      last = next
+      root.style.setProperty('--mobile-keyboard-inset', `${next}px`)
+    }
+
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(applyInset)
+    }
+
+    applyInset()
+
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', schedule)
+    vv?.addEventListener('scroll', schedule)
+    window.addEventListener('resize', schedule)
+    window.addEventListener('orientationchange', schedule)
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      vv?.removeEventListener('resize', schedule)
+      vv?.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('orientationchange', schedule)
+      root.style.setProperty('--mobile-keyboard-inset', '0px')
     }
   }, [])
 
