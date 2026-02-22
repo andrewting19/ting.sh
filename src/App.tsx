@@ -456,16 +456,34 @@ export function App() {
     }
   }, [])
 
-  // Header clock — updates DOM directly via ref to avoid re-rendering the app tree
+  // Header clock + sky indicator — updates DOM directly via ref to avoid re-renders
   const clockRef = useRef<HTMLDivElement>(null)
+  const skyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     function tick() {
-      if (!clockRef.current) return
       const now = new Date()
-      const h = String(now.getHours()).padStart(2, '0')
-      const m = String(now.getMinutes()).padStart(2, '0')
-      const s = String(now.getSeconds()).padStart(2, '0')
-      clockRef.current.textContent = `${h}:${m}:${s}`
+      if (clockRef.current) {
+        const h = String(now.getHours()).padStart(2, '0')
+        const m = String(now.getMinutes()).padStart(2, '0')
+        const s = String(now.getSeconds()).padStart(2, '0')
+        clockRef.current.textContent = `${h}:${m}:${s}`
+      }
+      if (skyRef.current) {
+        // Sun altitude as fraction of day: 0=midnight, 0.5=noon
+        const frac = (now.getHours() + now.getMinutes() / 60) / 24
+        // Sky phases: night(0-5), dawn(5-7), day(7-17), dusk(17-19), night(19-24)
+        const el = skyRef.current
+        el.className = 'sky-indicator'
+        if (frac < 5/24 || frac >= 20/24) {
+          el.classList.add('sky-night')
+        } else if (frac < 7/24) {
+          el.classList.add('sky-dawn')
+        } else if (frac < 17.5/24) {
+          el.classList.add('sky-day')
+        } else {
+          el.classList.add('sky-dusk')
+        }
+      }
     }
     tick()
     const id = setInterval(tick, 1000)
@@ -909,7 +927,10 @@ export function App() {
         </button>
         <div className="wordmark"><span className="prompt">$</span> ting<span className="dot">.</span>sh<span className="cursor" /></div>
         <div className="header-spacer" />
-        <div className="header-clock" ref={clockRef} />
+        <div className="header-time">
+          <div className="sky-indicator" ref={skyRef} />
+          <div className="header-clock" ref={clockRef} />
+        </div>
       </header>
 
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
