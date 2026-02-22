@@ -59,6 +59,7 @@ Working:
 - Mobile keyboard avoidance (VisualViewport): terminal area, toolbar, arrow pad, and paste sheet now lift above the on-screen keyboard while typing
 - iOS mobile focus zoom suppression hardened — toolbar modal inputs (paste + hotkey editor) now use mobile-specific selectors that win over later component styles, and xterm's hidden helper textarea is also forced to 16px so the ⌨ button doesn't zoom the page
 - Mobile paste sheet now focuses the textarea immediately on open (instead of delayed focus) so the keyboard opens with the sheet more reliably on iOS
+- iOS canvas renderer repaint hardening — coalesced full-screen refreshes after rapid write/fit cycles reduce transient stale glyphs during noisy output (e.g. spinner redraws while scrollback is advancing)
 - URL hash routing — `#<hostId>/<name>` deeplinks directly to a session (legacy `#<name>` still supported for local); auto-attaches on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY

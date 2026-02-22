@@ -18,6 +18,9 @@ interface TerminalEntry {
   opened: boolean
   // Cleanup fn for iOS momentum scroll listeners; null on non-iOS.
   momentumCleanup: (() => void) | null
+  // Safari/iOS canvas renderer can occasionally leave stale glyphs for one
+  // frame during rapid redraw + scroll. Coalesce full repaints to the next rAF.
+  fullRefreshRaf: number | null
 }
 
 interface Callbacks {
@@ -162,6 +165,20 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
 
 export function useTerminalManager(callbacks: Callbacks) {
   const entriesRef = useRef<Map<SessionKey, TerminalEntry>>(new Map())
+  const scheduleFullRefresh = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry || !entry.opened || !entry.canvasAddon) return
+    if (!isIOSDevice()) return
+    if (entry.fullRefreshRaf !== null) return
+
+    entry.fullRefreshRaf = requestAnimationFrame(() => {
+      entry.fullRefreshRaf = null
+      // Only repaint the visible terminal to avoid extra work on hidden panes.
+      if (activeIdRef.current !== sessionKey) return
+      const rows = entry.term.rows
+      if (rows > 0) entry.term.refresh(0, rows - 1)
+    })
+  }, [])
 
   // Expose terminal entries on window in dev mode so Playwright tests can
   // read terminal buffer content without scraping the canvas.
@@ -197,7 +214,7 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null })
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, fullRefreshRaf: null })
   }, [])
 
   const ensureTerminal = useCallback((sessionKey: SessionKey, container: HTMLElement) => {
@@ -209,11 +226,13 @@ export function useTerminalManager(callbacks: Callbacks) {
         existing.term.open(container)
         existing.fitAddon.fit()
         existing.opened = true
+        scheduleFullRefresh(sessionKey)
         existing.momentumCleanup = attachIOSScroll(container)
         // Replace stub RO with real one that reacts to container size changes
         existing.ro.disconnect()
         const ro = new ResizeObserver(() => {
           existing.fitAddon.fit()
+          scheduleFullRefresh(sessionKey)
           cbRef.current.onResize(sessionKey, existing.term.cols, existing.term.rows)
         })
         ro.observe(container)
@@ -233,6 +252,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
     term.open(container)
     fitAddon.fit()
+    scheduleFullRefresh(sessionKey)
 
     term.onData((data) => {
       if (activeIdRef.current === sessionKey) cbRef.current.onData(sessionKey, data)
@@ -240,12 +260,14 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     const ro = new ResizeObserver(() => {
       fitAddon.fit()
+      scheduleFullRefresh(sessionKey)
       cbRef.current.onResize(sessionKey, term.cols, term.rows)
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container) })
-  }, [])
+    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container), fullRefreshRaf: null })
+    scheduleFullRefresh(sessionKey)
+  }, [scheduleFullRefresh])
 
   // Switch the WebGL renderer to the newly active terminal.
   // Inactive terminals don't need GPU acceleration — they're invisible.
@@ -278,16 +300,26 @@ export function useTerminalManager(callbacks: Callbacks) {
     }
 
     // Re-fit in case the container was invisible when last resized
-    if (entry?.opened) entry.fitAddon.fit()
-  }, [])
+    if (entry?.opened) {
+      entry.fitAddon.fit()
+      scheduleFullRefresh(sessionKey)
+    }
+  }, [scheduleFullRefresh])
 
   const write = useCallback((sessionKey: SessionKey, data: Uint8Array) => {
-    entriesRef.current.get(sessionKey)?.term.write(data)
-  }, [])
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    entry.term.write(data, () => {
+      scheduleFullRefresh(sessionKey)
+    })
+  }, [scheduleFullRefresh])
 
   const reset = useCallback((sessionKey: SessionKey) => {
-    entriesRef.current.get(sessionKey)?.term.reset()
-  }, [])
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    entry.term.reset()
+    scheduleFullRefresh(sessionKey)
+  }, [scheduleFullRefresh])
 
   const focus = useCallback((sessionKey: SessionKey) => {
     entriesRef.current.get(sessionKey)?.term.focus()
@@ -307,6 +339,10 @@ export function useTerminalManager(callbacks: Callbacks) {
     if (!entry) return
     entry.ro.disconnect()
     entry.momentumCleanup?.()
+    if (entry.fullRefreshRaf !== null) {
+      cancelAnimationFrame(entry.fullRefreshRaf)
+      entry.fullRefreshRaf = null
+    }
     entry.webglAddon?.dispose()
     entry.canvasAddon?.dispose()
     entry.term.dispose()
