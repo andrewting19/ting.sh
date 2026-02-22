@@ -16,7 +16,7 @@
   --yellow:   #e0af68;
   --font:     'JetBrains Mono', 'Fira Code', monospace;
   --sidebar:  210px;
-  --header:   38px;
+  --header:   30px;
   --mobile-keyboard-inset: 0px;
 }
 
@@ -84,12 +84,38 @@ html, body, #root {
 }
 
 .wordmark {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: .02em;
-  color: var(--fg1);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
-.wordmark span { color: var(--blue); }
+.wordmark .prompt { color: var(--fg3); }
+.wordmark .dot { color: var(--cyan); }
+.wordmark .cursor {
+  display: inline-block;
+  width: 6px;
+  height: 13px;
+  background: var(--cyan);
+  margin-left: 1px;
+  opacity: .8;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.header-spacer { flex: 1; }
+
+.header-clock {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--fg3);
+  letter-spacing: .06em;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Sidebar ── */
 .sidebar {

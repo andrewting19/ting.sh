@@ -30,7 +30,7 @@ export default defineConfig({
   webServer: {
     // SHELL=/bin/bash: tests must not depend on the user's interactive shell
     // config (.zshrc plugins, slow DNS lookups, etc.). Bash starts instantly.
-    command: `concurrently -n server,vite -c cyan,magenta "SHELL=/bin/bash PORT=${wsPort} bun run --hot server.ts" "VITE_PORT=${vitePort} WS_PORT=${wsPort} vite"`,
+    command: `concurrently -n server,vite -c cyan,magenta "SHELL=/bin/bash PORT=${wsPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} WS_PORT=${wsPort} vite"`,
     url: `http://localhost:${vitePort}`,
     reuseExistingServer: false,
     timeout: 20_000,

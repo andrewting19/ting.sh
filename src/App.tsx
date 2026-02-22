@@ -456,6 +456,22 @@ export function App() {
     }
   }, [])
 
+  // Header clock — updates DOM directly via ref to avoid re-rendering the app tree
+  const clockRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function tick() {
+      if (!clockRef.current) return
+      const now = new Date()
+      const h = String(now.getHours()).padStart(2, '0')
+      const m = String(now.getMinutes()).padStart(2, '0')
+      const s = String(now.getSeconds()).padStart(2, '0')
+      clockRef.current.textContent = `${h}:${m}:${s}`
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
   // Mobile keyboard avoidance: move fixed overlays/toolbar above the on-screen
   // keyboard and shrink the terminal area so xterm remains visible while typing.
   useEffect(() => {
@@ -891,7 +907,9 @@ export function App() {
         <button className="hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
           <span /><span /><span />
         </button>
-        <div className="wordmark">ting<span>.</span>sh</div>
+        <div className="wordmark"><span className="prompt">$</span> ting<span className="dot">.</span>sh<span className="cursor" /></div>
+        <div className="header-spacer" />
+        <div className="header-clock" ref={clockRef} />
       </header>
 
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}

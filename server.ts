@@ -127,8 +127,8 @@ function loadHostConfig(): HostConfig {
     self: { id: defaultHost, name: defaultHost },
     peers: [],
   };
-  const configPath = "./hosts.json";
-  if (!existsSync(configPath)) return defaults;
+  const configPath = process.env.HOSTS_FILE ?? "./hosts.json";
+  if (configPath === "none" || !existsSync(configPath)) return defaults;
 
   let raw: RawHostsConfig;
   try {

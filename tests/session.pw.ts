@@ -544,7 +544,7 @@ test('server hot reload — reconnect does not duplicate output', async ({ page 
   utimesSync('server.ts', now, now)
 
   await page.locator('.status-dot.reconnecting').waitFor({ state: 'visible', timeout: 1500 }).catch(() => {})
-  await expect(page.locator('.status-dot.connected')).toBeVisible({ timeout: 8000 })
+  await expect(page.locator('.status-dot.connected').first()).toBeVisible({ timeout: 8000 })
 
   await switchToSession(page, id)
   await waitForTerminal(page, id, marker)
