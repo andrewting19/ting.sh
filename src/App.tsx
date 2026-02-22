@@ -891,7 +891,7 @@ export function App() {
         <button className="hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
           <span /><span /><span />
         </button>
-        <div className="wordmark">web<span>—</span>terminal</div>
+        <div className="wordmark">ting<span>.</span>sh</div>
       </header>
 
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}

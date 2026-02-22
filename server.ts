@@ -114,7 +114,11 @@ function isAllowedWsOrigin(req: Request, trustedPeerHostnames: Set<string>): boo
   // Multi-host UI connects directly to peer /ws endpoints from the local page,
   // so allow origins whose hostname matches a configured peer (any port — dev
   // server and prod server may use different ports on the same machine).
-  return trustedPeerHostnames.has(origin.hostname);
+  if (trustedPeerHostnames.has(origin.hostname)) return true;
+  // Also trust localhost/loopback — the peer's browser always appears as
+  // localhost when running locally, regardless of the Tailscale hostname.
+  if (origin.hostname === "localhost" || origin.hostname === "127.0.0.1") return true;
+  return false;
 }
 
 function loadHostConfig(): HostConfig {
