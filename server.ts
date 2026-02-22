@@ -302,7 +302,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
   };
 
   const proc = Bun.spawn([SHELL], {
-    ...(cwd ? { cwd } : {}),
+    cwd: cwd || process.env.HOME || undefined,
     env: { ...process.env, TERM: "xterm-256color" },
     terminal: {
       cols,
@@ -646,3 +646,4 @@ if (AUTO_UPDATE_ENABLED) {
 } else {
   console.log("[auto-update] disabled");
 }
+
