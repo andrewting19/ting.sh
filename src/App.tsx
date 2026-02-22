@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
+import { getArrowSequence, type ArrowDirection } from './components/ArrowPad'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
 import type { ConnectionStatus, Host, Session, SessionKey } from './types'
@@ -758,6 +759,16 @@ export function App() {
     sendToHost(parseKey(key).hostId, { type: 'input', data })
   }
 
+  function sendArrowInput(direction: ArrowDirection) {
+    const key = currentKeyRef.current
+    if (!key) return
+    const applicationCursorKeysMode = tm.getApplicationCursorKeysMode(key)
+    sendToHost(parseKey(key).hostId, {
+      type: 'input',
+      data: getArrowSequence(direction, applicationCursorKeysMode),
+    })
+  }
+
   function scrollToBottom() {
     const key = currentKeyRef.current
     if (!key) return
@@ -832,6 +843,7 @@ export function App() {
       <MobileToolbar
         currentId={currentKey ? parseKey(currentKey).sessionId : null}
         sendInput={sendInput}
+        sendArrowInput={sendArrowInput}
         focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
         scrollToBottom={scrollToBottom}
       />

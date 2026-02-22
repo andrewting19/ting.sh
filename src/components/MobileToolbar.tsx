@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowPad } from './ArrowPad'
+import { ArrowPad, getArrowSequence, type ArrowDirection } from './ArrowPad'
 import { PasteModal } from './PasteModal'
 
 // ── Hotkey data model ────────────────────────────────────────────────────────
@@ -173,11 +173,12 @@ function Sep() {
 interface MobileToolbarProps {
   currentId: string | null
   sendInput: (data: string) => void
+  sendArrowInput?: (direction: ArrowDirection) => void
   focusTerminal: () => void
   scrollToBottom: () => void
 }
 
-export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBottom }: MobileToolbarProps) {
+export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal, scrollToBottom }: MobileToolbarProps) {
   const [ctrlActive, setCtrlActive] = useState(false)
   const [shiftActive, setShiftActive] = useState(false)
   const [arrowPadOpen, setArrowPadOpen] = useState(false)
@@ -370,7 +371,13 @@ export function MobileToolbar({ currentId, sendInput, focusTerminal, scrollToBot
 
       {arrowPadOpen && (
         <ArrowPad
-          onSend={sendInput}
+          onSendArrow={(direction) => {
+            if (sendArrowInput) {
+              sendArrowInput(direction)
+              return
+            }
+            sendInput(getArrowSequence(direction))
+          }}
           onClose={() => setArrowPadOpen(false)}
         />
       )}

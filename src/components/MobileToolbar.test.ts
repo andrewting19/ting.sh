@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { getArrowSequence } from './ArrowPad'
 import { computeSequence, type HotkeySlot } from './MobileToolbar'
 
 function slot(overrides: Partial<HotkeySlot>): HotkeySlot {
@@ -22,4 +23,14 @@ test('computeSequence handles shift+tab mapping', () => {
 test('computeSequence applies alt as ESC prefix', () => {
   expect(computeSequence(slot({ modifiers: ['alt'], key: 'c' }))).toBe('\x1bc')
   expect(computeSequence(slot({ modifiers: ['alt', 'ctrl'], key: 'c' }))).toBe('\x1b\x03')
+})
+
+test('arrow pad uses normal cursor-key sequences by default', () => {
+  expect(getArrowSequence('up')).toBe('\x1b[A')
+  expect(getArrowSequence('left')).toBe('\x1b[D')
+})
+
+test('arrow pad can emit application cursor-key sequences', () => {
+  expect(getArrowSequence('up', true)).toBe('\x1bOA')
+  expect(getArrowSequence('right', true)).toBe('\x1bOC')
 })

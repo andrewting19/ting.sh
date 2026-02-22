@@ -1,11 +1,23 @@
 import { useEffect, useRef } from 'react'
 
+export type ArrowDirection = 'up' | 'down' | 'left' | 'right'
+
+export function getArrowSequence(direction: ArrowDirection, applicationCursorKeysMode = false): string {
+  const prefix = applicationCursorKeysMode ? '\x1bO' : '\x1b['
+  switch (direction) {
+    case 'up': return `${prefix}A`
+    case 'down': return `${prefix}B`
+    case 'right': return `${prefix}C`
+    case 'left': return `${prefix}D`
+  }
+}
+
 interface ArrowPadProps {
-  onSend: (seq: string) => void
+  onSendArrow: (direction: ArrowDirection) => void
   onClose: () => void
 }
 
-export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
+export function ArrowPad({ onSendArrow, onClose }: ArrowPadProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   // Close on outside tap
@@ -23,12 +35,12 @@ export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
     }
   }, [onClose])
 
-  const ArrowBtn = ({ label, seq, className = '' }: { label: string; seq: string; className?: string }) => (
+  const ArrowBtn = ({ label, direction, className = '' }: { label: string; direction: ArrowDirection; className?: string }) => (
     <button
       className={`arrow-btn${className ? ' ' + className : ''}`}
       tabIndex={-1}
       onMouseDown={(e) => e.preventDefault()}
-      onPointerDown={(e) => { e.preventDefault(); onSend(seq) }}
+      onPointerDown={(e) => { e.preventDefault(); onSendArrow(direction) }}
     >
       {label}
     </button>
@@ -39,11 +51,11 @@ export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
       <div className="arrow-pad-grid">
         <div className="arrow-pad-row">
           <div className="arrow-pad-empty" />
-          <ArrowBtn label="↑" seq="\x1b[A" />
+          <ArrowBtn label="↑" direction="up" />
           <div className="arrow-pad-empty" />
         </div>
         <div className="arrow-pad-row">
-          <ArrowBtn label="←" seq="\x1b[D" />
+          <ArrowBtn label="←" direction="left" />
           <button
             className="arrow-btn arrow-close"
             tabIndex={-1}
@@ -52,11 +64,11 @@ export function ArrowPad({ onSend, onClose }: ArrowPadProps) {
           >
             ✕
           </button>
-          <ArrowBtn label="→" seq="\x1b[C" />
+          <ArrowBtn label="→" direction="right" />
         </div>
         <div className="arrow-pad-row">
           <div className="arrow-pad-empty" />
-          <ArrowBtn label="↓" seq="\x1b[B" />
+          <ArrowBtn label="↓" direction="down" />
           <div className="arrow-pad-empty" />
         </div>
       </div>

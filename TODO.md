@@ -20,6 +20,7 @@
 - [x] Deprecated `useWS` hook still present — fixed (remove dead hook and keep WS lifecycle in `useHostConnections`)
 - [x] `server.ts` control-path `any` usage — fixed (typed JSON guards + typed field coercion helpers)
 - [x] Dev mode could leave Vite up with a dead WS backend — fixed (`bun run dev` now uses `concurrently -k` to fail fast when either process exits)
+- [x] Mobile D-pad arrows sent wrong sequence in app-cursor mode TUIs — fixed (read xterm `applicationCursorKeysMode` and emit `ESC O*` when needed)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
