@@ -175,9 +175,11 @@ interface MobileToolbarProps {
   sendInput: (data: string) => void
   sendArrowInput?: (direction: ArrowDirection) => void
   focusTerminal: () => void
+  openTextSelection: () => void
+  textSelectionOpen?: boolean
 }
 
-export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal }: MobileToolbarProps) {
+export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal, openTextSelection, textSelectionOpen = false }: MobileToolbarProps) {
   const [ctrlActive, setCtrlActive] = useState(false)
   const [shiftActive, setShiftActive] = useState(false)
   const [arrowPadOpen, setArrowPadOpen] = useState(false)
@@ -236,6 +238,13 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
     setArrowPadOpen(false)
     setEditingSlot(null)
     setPasteOpen(o => !o)
+  }
+
+  const openSelection = () => {
+    setArrowPadOpen(false)
+    setPasteOpen(false)
+    setEditingSlot(null)
+    openTextSelection()
   }
 
   if (!currentId) return null
@@ -344,6 +353,16 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
         <Sep />
 
         {/* ── Paste ── */}
+        <button
+          className={`tb-btn tb-select${textSelectionOpen ? ' tb-active' : ''}`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={openSelection}
+          title="Select and copy terminal text"
+        >
+          select
+        </button>
+
         <button
           className={`tb-btn tb-paste${pasteOpen ? ' tb-active' : ''}`}
           tabIndex={-1}

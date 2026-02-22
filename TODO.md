@@ -54,6 +54,7 @@
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
 - [x] Mobile toolbar — keyboard button, ESC, Enter, arrow pad, sticky CTRL/SHIFT, 3 programmable hotkeys, paste modal with history
+- [x] Mobile text selection mode — toolbar opens a native textarea scrollback snapshot for touch-friendly select/copy
 - [x] Shared scroll-to-latest overlay button (desktop + mobile) — appears when scrolled up and jumps back to live output
 - [x] Mobile toolbar polish — hotkey editor key-type switching fixed, ALT hotkey sequences, mutually exclusive toolbar overlays
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only

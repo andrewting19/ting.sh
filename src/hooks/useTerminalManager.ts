@@ -380,6 +380,21 @@ export function useTerminalManager(callbacks: Callbacks) {
     return entriesRef.current.get(sessionKey)?.term.modes.applicationCursorKeysMode ?? false
   }, [])
 
+  const getBufferText = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return ''
+
+    const buffer = entry.term.buffer.active
+    let out = ''
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      if (!line) continue
+      if (i > 0 && !line.isWrapped) out += '\n'
+      out += line.translateToString(true)
+    }
+    return out
+  }, [])
+
   const destroy = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
@@ -402,7 +417,7 @@ export function useTerminalManager(callbacks: Callbacks) {
   // this memo never re-computes. Without this, effects in App.tsx that list
   // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, destroy }),
-    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, getBufferText, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getApplicationCursorKeysMode, getBufferText, destroy]
   )
 }

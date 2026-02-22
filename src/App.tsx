@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
+import { SelectionModal } from './components/SelectionModal'
 import { getArrowSequence, type ArrowDirection } from './components/ArrowPad'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
@@ -143,6 +144,8 @@ export function App() {
   }))
   sessionOrderByHostRef.current = sessionOrderByHost
   const [showScrollToBottomByKey, setShowScrollToBottomByKey] = useState<Record<string, boolean>>({})
+  const [textSelectionOpen, setTextSelectionOpen] = useState(false)
+  const [textSelectionSnapshot, setTextSelectionSnapshot] = useState('')
 
   useEffect(() => {
     for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
@@ -589,6 +592,10 @@ export function App() {
     }
   }, [syncSessionSize])
 
+  useEffect(() => {
+    setTextSelectionOpen(false)
+  }, [currentKey])
+
   // hashchange: if the user manually edits the URL hash, navigate to that session
   useEffect(() => {
     const handler = () => {
@@ -907,6 +914,20 @@ export function App() {
     tm.scrollToBottom(key)
   }
 
+  function refreshTextSelectionSnapshot() {
+    const key = currentKeyRef.current
+    if (!key) {
+      setTextSelectionSnapshot('')
+      return
+    }
+    setTextSelectionSnapshot(tm.getBufferText(key))
+  }
+
+  function openTextSelection() {
+    refreshTextSelectionSnapshot()
+    setTextSelectionOpen(true)
+  }
+
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
   const showScrollToBottomOverlay = !!(currentKey && showScrollToBottomByKey[currentKey])
   const terminalEntries = useMemo(() => {
@@ -993,7 +1014,17 @@ export function App() {
         sendInput={sendInput}
         sendArrowInput={sendArrowInput}
         focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
+        openTextSelection={openTextSelection}
+        textSelectionOpen={textSelectionOpen}
       />
+
+      {textSelectionOpen && (
+        <SelectionModal
+          text={textSelectionSnapshot}
+          onRefresh={refreshTextSelectionSnapshot}
+          onClose={() => setTextSelectionOpen(false)}
+        />
+      )}
 
       {killTarget && (
         <Modal
