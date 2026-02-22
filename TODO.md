@@ -26,6 +26,7 @@
 - [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 - [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
 - [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
+- [x] Mobile sidebar list was hard to scroll — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
 - [x] Reconnect/hot-reload attach replay could leave xterm viewport at top of buffer — fixed (scroll to bottom after first attach replay binary flush)
 
@@ -46,7 +47,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 30 tests covering all key flows
+- [x] E2E test suite (Playwright) — 31 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
@@ -76,6 +77,8 @@
 - [ ] Multi-machine dashboard — each Tailscale machine runs its own server, one page lists all
 - [x] Auto-update — server polls GitHub releases, downloads new tarball, extracts in-place, exits for systemd restart
 - [x] Deployment tooling — systemd unit, install script (`curl | sh`), release script (`bun run release`)
+- [ ] Session persistence across restarts — detach PTYs into own process group (`setsid`) so they survive server restart/update
+- [ ] Auto-update: only restart when idle (zero active sessions) to avoid killing running work
 - [ ] Custom launch command per session — start directly into `claude`, `ssh host`, etc.
 - [ ] Search in scrollback — `xterm-addon-search`
 - [ ] Font size adjustment in UI

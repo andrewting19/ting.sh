@@ -40,9 +40,30 @@ Install on any Linux VPS (installs Bun, downloads latest release, sets up system
 curl -fsSL https://raw.githubusercontent.com/andrewting19/ting.sh/main/deploy/install.sh | sudo bash
 ```
 
-Configure multi-host by creating `/opt/ting.sh/hosts.json` (see `hosts.example.json`), then `systemctl restart ting-sh`.
-
 Release a new version: `bun run release` (or `release:minor` / `release:major`). All VPS auto-update within 5 minutes.
+
+**Note:** auto-update restarts the server, which kills all running PTY sessions. Session persistence across restarts is on the roadmap.
+
+### Multi-host setup
+
+Each machine needs a `hosts.json` that identifies itself and lists its peers. All URLs must use **full Tailscale MagicDNS hostnames** (e.g. `machine-name.tail1234.ts.net`), not short hostnames — browsers send the full hostname as the Origin header, and the CSWSH check matches against it.
+
+Find your MagicDNS suffix with `tailscale dns status` (look for "suffix = ...").
+
+Example `/opt/ting.sh/hosts.json` for a machine called `dev-server`:
+
+```json
+{
+  "id": "dev-server",
+  "name": "Dev Server",
+  "peers": [
+    { "id": "macbook", "name": "MacBook", "url": "http://macbook.tail1234.ts.net:7681" },
+    { "id": "vps", "name": "Cloud VPS", "url": "http://vps.tail1234.ts.net:7681" }
+  ]
+}
+```
+
+Every machine in the fleet needs its own `hosts.json` with the other machines as peers. After creating/editing: `systemctl restart ting-sh`.
 
 **Environment variables** (set in `/opt/ting.sh/.env` or systemd unit):
 - `PORT` — server port (default: 7681)
@@ -73,6 +94,7 @@ Working:
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
+- Mobile sidebar scrolling hardening — touch scrolling now works reliably on session lists (touch rows no longer expose drag-reorder, scroll containers get explicit touch/flex overflow sizing)
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
 - Mobile toolbar (iOS): ⌨ keyboard button, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
 - Mobile text selection mode (toolbar `select`) — opens a scrollback snapshot in a native textarea sheet for reliable touch selection/copy and drag-to-scroll selection expansion
@@ -92,7 +114,7 @@ Working:
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 30 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 31 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
