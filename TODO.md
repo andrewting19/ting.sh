@@ -96,3 +96,7 @@
 - **Champion names** — memorable, unique, no collisions after delete
 - **Client-side ordering** — display preference only, localStorage; server order irrelevant
 - **OSC title auto-naming** — deliberately skipped; would conflict with champion names + CWD subtitle
+- **GitHub releases + systemd for deployment** — no Docker, no registry. ~190KB tarball, 11MB memory at idle
+- **Auto-update via GitHub releases API** — server polls, downloads, extracts, exits for systemd restart
+- **CSWSH hostname-only matching** — peer origins matched by hostname (any port) since dev/prod use different ports
+- **localhost always trusted** — servers only accessible over Tailscale anyway, no public exposure

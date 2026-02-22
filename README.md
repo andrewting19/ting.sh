@@ -32,6 +32,26 @@ Tmux session detection is supported as an optional future feature (for interop w
 Dev: `bun run dev` — Vite on :4321 with HMR, WS server on :7681, proxied transparently
 Prod: `bun run build && bun run start` — single Bun server on :7681 serves everything
 
+## Deployment
+
+Install on any Linux VPS (installs Bun, downloads latest release, sets up systemd):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andrewting19/ting.sh/main/deploy/install.sh | sudo bash
+```
+
+Configure multi-host by creating `/opt/ting.sh/hosts.json` (see `hosts.example.json`), then `systemctl restart ting-sh`.
+
+Release a new version: `bun run release` (or `release:minor` / `release:major`). All VPS auto-update within 5 minutes.
+
+**Environment variables** (set in `/opt/ting.sh/.env` or systemd unit):
+- `PORT` — server port (default: 7681)
+- `SHELL` — shell to spawn (default: system shell)
+- `HOSTS_FILE` — path to hosts.json, or `none` to disable (default: `./hosts.json`)
+- `AUTO_UPDATE` — set to `false` to disable (default: enabled)
+- `AUTO_UPDATE_INTERVAL` — poll interval in ms (default: 300000 / 5min)
+- `AUTO_UPDATE_REPO` — GitHub repo to poll (default: `andrewting19/ting.sh`)
+
 ## Current state
 
 Working:
@@ -89,8 +109,7 @@ Working:
 - systemd unit template and `curl | sh` install script for VPS deployment
 
 Missing / in progress:
-- Multi-machine dashboard
-- Auto-update mechanism
+- Multi-machine dashboard (auto-discovery from Tailscale)
 
 ## Known limitations
 
