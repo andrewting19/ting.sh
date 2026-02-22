@@ -97,7 +97,7 @@ function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-function isAllowedWsOrigin(req: Request, trustedPeerOrigins: Set<string>): boolean {
+function isAllowedWsOrigin(req: Request, trustedPeerHostnames: Set<string>): boolean {
   const originHeader = req.headers.get("origin");
   // Allow non-browser clients (no Origin header).
   if (!originHeader) return true;
@@ -112,8 +112,9 @@ function isAllowedWsOrigin(req: Request, trustedPeerOrigins: Set<string>): boole
   }
   if (origin.origin === target.origin) return true;
   // Multi-host UI connects directly to peer /ws endpoints from the local page,
-  // so allow origins of configured peers in addition to same-origin upgrades.
-  return trustedPeerOrigins.has(origin.origin);
+  // so allow origins whose hostname matches a configured peer (any port — dev
+  // server and prod server may use different ports on the same machine).
+  return trustedPeerHostnames.has(origin.hostname);
 }
 
 function loadHostConfig(): HostConfig {
@@ -159,7 +160,9 @@ function loadHostConfig(): HostConfig {
 }
 
 const HOST_CONFIG = loadHostConfig();
-const TRUSTED_PEER_ORIGINS = new Set(HOST_CONFIG.peers.map((peer) => new URL(peer.url).origin));
+// Trust peer hostnames regardless of port — the peer UI may be served on a
+// different port (e.g. Vite :4321 in dev) from the production server (:7681).
+const TRUSTED_PEER_HOSTNAMES = new Set(HOST_CONFIG.peers.map((peer) => new URL(peer.url).hostname));
 
 // All 172 champions as of Feb 2026 (Zaahen is the most recent)
 const CHAMPION_NAMES = [
@@ -359,7 +362,7 @@ const server = Bun.serve<WSData>({
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
-      if (!isAllowedWsOrigin(req, TRUSTED_PEER_ORIGINS)) {
+      if (!isAllowedWsOrigin(req, TRUSTED_PEER_HOSTNAMES)) {
         return new Response("Forbidden", { status: 403 });
       }
       if (server.upgrade(req, { data: { sessionId: null } })) return;
