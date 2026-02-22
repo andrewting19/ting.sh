@@ -297,6 +297,61 @@ test('terminal input produces output', async ({ page }) => {
   expect(text).toContain('wt_output_test')
 })
 
+test('scroll-to-latest overlay appears when scrolled up and jumps to bottom', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const marker = `overlay_${Date.now()}`
+  await page.keyboard.type(`for i in {1..250}; do echo ${marker}_$i; done`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, `${marker}_250`)
+
+  await page.evaluate((sessionId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wt = (window as any).__wt_terminals
+    if (!wt) throw new Error('__wt_terminals unavailable')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let entry = wt.get(sessionId) as any
+    if (!entry) {
+      for (const key of wt.keys() as Iterable<string>) {
+        if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entry = wt.get(key) as any
+          break
+        }
+      }
+    }
+    if (!entry) throw new Error(`terminal entry not found for ${sessionId}`)
+    entry.term.scrollLines(-100)
+  }, id)
+
+  const overlay = page.locator('.scroll-bottom-overlay-btn')
+  await expect(overlay).toBeVisible({ timeout: 3000 })
+
+  await overlay.click()
+
+  await page.waitForFunction((sessionId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wt = (window as any).__wt_terminals
+    if (!wt) return false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let entry = wt.get(sessionId) as any
+    if (!entry) {
+      for (const key of wt.keys() as Iterable<string>) {
+        if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entry = wt.get(key) as any
+          break
+        }
+      }
+    }
+    if (!entry) return false
+    const buf = entry.term.buffer.active
+    return buf.viewportY === buf.baseY
+  }, id, { timeout: 3000 })
+  await expect(overlay).toBeHidden({ timeout: 3000 })
+})
+
 test('Alt+T creates a new session', async ({ page }) => {
   const before = await getSessions(page)
   await page.keyboard.press('Alt+t')

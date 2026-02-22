@@ -46,14 +46,15 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 29 tests covering all key flows
+- [x] E2E test suite (Playwright) — 30 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
 - [x] Auto-attach to first session when no hash in URL
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
-- [x] Mobile toolbar — keyboard button, scroll-to-bottom, ESC, Enter, arrow pad, sticky CTRL/SHIFT, 3 programmable hotkeys, paste modal with history
+- [x] Mobile toolbar — keyboard button, ESC, Enter, arrow pad, sticky CTRL/SHIFT, 3 programmable hotkeys, paste modal with history
+- [x] Shared scroll-to-latest overlay button (desktop + mobile) — appears when scrolled up and jumps back to live output
 - [x] Mobile toolbar polish — hotkey editor key-type switching fixed, ALT hotkey sequences, mutually exclusive toolbar overlays
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
 - [x] iOS Safari scroll-on-text bug fixed (Canvas renderer forced on iOS + renderer guard test)

@@ -30,6 +30,7 @@ interface TerminalEntry {
 interface Callbacks {
   onData: (sessionKey: SessionKey, data: string) => void
   onResize: (sessionKey: SessionKey, cols: number, rows: number) => void
+  onScrollStateChange: (sessionKey: SessionKey, showScrollToBottom: boolean) => void
 }
 
 const TERMINAL_OPTIONS = {
@@ -65,6 +66,7 @@ const TERMINAL_OPTIONS = {
 }
 
 const PROGRAMMATIC_FOCUS_REPORT_SUPPRESS_MS = 150
+const SCROLL_TO_BOTTOM_BUTTON_THRESHOLD_LINES = 4
 
 function isIOSDevice(): boolean {
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
@@ -196,6 +198,13 @@ export function useTerminalManager(callbacks: Callbacks) {
   // Always-fresh callbacks via ref — no stale closure issues
   const cbRef = useRef(callbacks)
   cbRef.current = callbacks
+  const emitScrollState = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    const buffer = entry.term.buffer.active
+    const linesFromBottom = Math.max(0, buffer.baseY - buffer.viewportY)
+    cbRef.current.onScrollStateChange(sessionKey, linesFromBottom >= SCROLL_TO_BOTTOM_BUTTON_THRESHOLD_LINES)
+  }, [])
   const forwardTerminalData = useCallback((sessionKey: SessionKey, data: string) => {
     if (data === '\x1b[I' || data === '\x1b[O') {
       const entry = entriesRef.current.get(sessionKey)
@@ -224,11 +233,15 @@ export function useTerminalManager(callbacks: Callbacks) {
     term.onData((data) => {
       forwardTerminalData(sessionKey, data)
     })
+    term.onScroll(() => {
+      emitScrollState(sessionKey)
+    })
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
     entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, fullRefreshRaf: null, suppressFocusReportUntil: 0 })
-  }, [forwardTerminalData])
+    emitScrollState(sessionKey)
+  }, [emitScrollState, forwardTerminalData])
 
   const ensureTerminal = useCallback((sessionKey: SessionKey, container: HTMLElement) => {
     const existing = entriesRef.current.get(sessionKey)
@@ -250,6 +263,7 @@ export function useTerminalManager(callbacks: Callbacks) {
         })
         ro.observe(container)
         existing.ro = ro
+        emitScrollState(sessionKey)
       }
       return
     }
@@ -270,6 +284,9 @@ export function useTerminalManager(callbacks: Callbacks) {
     term.onData((data) => {
       forwardTerminalData(sessionKey, data)
     })
+    term.onScroll(() => {
+      emitScrollState(sessionKey)
+    })
 
     const ro = new ResizeObserver(() => {
       fitAddon.fit()
@@ -280,7 +297,8 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container), fullRefreshRaf: null, suppressFocusReportUntil: 0 })
     scheduleFullRefresh(sessionKey)
-  }, [forwardTerminalData, scheduleFullRefresh])
+    emitScrollState(sessionKey)
+  }, [emitScrollState, forwardTerminalData, scheduleFullRefresh])
 
   // Switch the WebGL renderer to the newly active terminal.
   // Inactive terminals don't need GPU acceleration — they're invisible.
@@ -316,31 +334,35 @@ export function useTerminalManager(callbacks: Callbacks) {
     if (entry?.opened) {
       entry.fitAddon.fit()
       scheduleFullRefresh(sessionKey)
+      emitScrollState(sessionKey)
     }
-  }, [scheduleFullRefresh])
+  }, [emitScrollState, scheduleFullRefresh])
 
   const write = useCallback((sessionKey: SessionKey, data: Uint8Array, onFlushed?: () => void) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.write(data, () => {
       scheduleFullRefresh(sessionKey)
+      emitScrollState(sessionKey)
       onFlushed?.()
     })
-  }, [scheduleFullRefresh])
+  }, [emitScrollState, scheduleFullRefresh])
 
   const reset = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.reset()
     scheduleFullRefresh(sessionKey)
-  }, [scheduleFullRefresh])
+    emitScrollState(sessionKey)
+  }, [emitScrollState, scheduleFullRefresh])
 
   const scrollToBottom = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.scrollToBottom()
     scheduleFullRefresh(sessionKey)
-  }, [scheduleFullRefresh])
+    emitScrollState(sessionKey)
+  }, [emitScrollState, scheduleFullRefresh])
 
   const focus = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
@@ -361,6 +383,7 @@ export function useTerminalManager(callbacks: Callbacks) {
   const destroy = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
+    cbRef.current.onScrollStateChange(sessionKey, false)
     entry.ro.disconnect()
     entry.momentumCleanup?.()
     if (entry.fullRefreshRaf !== null) {

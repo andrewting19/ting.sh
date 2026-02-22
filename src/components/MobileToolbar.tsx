@@ -175,10 +175,9 @@ interface MobileToolbarProps {
   sendInput: (data: string) => void
   sendArrowInput?: (direction: ArrowDirection) => void
   focusTerminal: () => void
-  scrollToBottom: () => void
 }
 
-export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal, scrollToBottom }: MobileToolbarProps) {
+export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal }: MobileToolbarProps) {
   const [ctrlActive, setCtrlActive] = useState(false)
   const [shiftActive, setShiftActive] = useState(false)
   const [arrowPadOpen, setArrowPadOpen] = useState(false)
@@ -258,18 +257,6 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
           <span className="tb-icon">⌨</span>
           <span className="tb-label">kbd</span>
         </button>
-
-        <button
-          className="tb-btn"
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => scrollToBottom()}
-          title="Scroll to bottom"
-        >
-          <span className="tb-icon">↓</span>
-        </button>
-
-        <Sep />
 
         {/* ── Text input keys ── */}
         <button

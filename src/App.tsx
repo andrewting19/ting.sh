@@ -142,6 +142,7 @@ export function App() {
     [LEGACY_LOCAL_HOST_ID]: readHostSessionOrder(LEGACY_LOCAL_HOST_ID, true),
   }))
   sessionOrderByHostRef.current = sessionOrderByHost
+  const [showScrollToBottomByKey, setShowScrollToBottomByKey] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
@@ -273,6 +274,18 @@ export function App() {
       if (sessionKey !== currentKeyRef.current) return
       sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
     },
+    onScrollStateChange: (sessionKey, showScrollToBottom) => {
+      setShowScrollToBottomByKey(prev => {
+        const current = !!prev[sessionKey]
+        if (current === showScrollToBottom) return prev
+        if (!showScrollToBottom) {
+          const next = { ...prev }
+          delete next[sessionKey]
+          return next
+        }
+        return { ...prev, [sessionKey]: true }
+      })
+    },
   })
 
   const reconcileLocalHostIdentity = useCallback((connectionHostId: string, reportedId: string, reportedName: string) => {
@@ -323,6 +336,16 @@ export function App() {
       const next: SessionOrderByHost = { ...prev, [nextLocalId]: merged }
       delete next[connectionHostId]
       return next
+    })
+    setShowScrollToBottomByKey(prev => {
+      let changed = false
+      const next: Record<string, boolean> = {}
+      for (const [key, value] of Object.entries(prev)) {
+        const mapped = remapSessionKeyHost(key, connectionHostId, nextLocalId) ?? key
+        next[mapped] = value
+        if (mapped !== key) changed = true
+      }
+      return changed ? next : prev
     })
 
     currentKeyRef.current = remapSessionKeyHost(currentKeyRef.current, connectionHostId, nextLocalId)
@@ -699,6 +722,12 @@ export function App() {
         if (scrollToBottomAfterAttachBinaryRef.current === key) {
           scrollToBottomAfterAttachBinaryRef.current = null
         }
+        setShowScrollToBottomByKey(prev => {
+          if (!prev[key]) return prev
+          const next = { ...prev }
+          delete next[key]
+          return next
+        })
         tm.destroy(key)
         setHostSessions(prev => {
           const next = new Map(prev)
@@ -841,12 +870,11 @@ export function App() {
   function scrollToBottom() {
     const key = currentKeyRef.current
     if (!key) return
-    const container = containerRefs.current.get(key)
-    const viewport = container?.querySelector('.xterm-viewport') as HTMLElement | null
-    if (viewport) viewport.scrollTop = viewport.scrollHeight
+    tm.scrollToBottom(key)
   }
 
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
+  const showScrollToBottomOverlay = !!(currentKey && showScrollToBottomByKey[currentKey])
   const terminalEntries = useMemo(() => {
     const next: Array<{ key: SessionKey; session: Session }> = []
     for (const host of hosts) {
@@ -907,6 +935,18 @@ export function App() {
             )
           })}
         </div>
+        {currentKey && showScrollToBottomOverlay && (
+          <button
+            className="scroll-bottom-overlay-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={scrollToBottom}
+            title="Scroll to latest output"
+            aria-label="Scroll to latest output"
+          >
+            <span className="scroll-bottom-overlay-icon" aria-hidden>↓</span>
+            <span className="scroll-bottom-overlay-label">latest</span>
+          </button>
+        )}
       </main>
 
       <MobileToolbar
@@ -914,7 +954,6 @@ export function App() {
         sendInput={sendInput}
         sendArrowInput={sendArrowInput}
         focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
-        scrollToBottom={scrollToBottom}
       />
 
       {killTarget && (

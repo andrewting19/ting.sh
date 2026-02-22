@@ -54,7 +54,8 @@ Working:
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
-- Mobile toolbar (iOS): ⌨ keyboard button, scroll-to-bottom, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
+- Mobile toolbar (iOS): ⌨ keyboard button, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
+- Shared scroll-to-latest overlay button (desktop + mobile) — bottom-centered pill appears when the active terminal is scrolled up and jumps back to live output
 - Mobile D-pad arrows now respect xterm application-cursor mode (`ESC O A/B/C/D`) for TUIs that require it (falls back to normal `ESC [ A/B/C/D`)
 - Mobile keyboard avoidance (VisualViewport): terminal area, toolbar, arrow pad, and paste sheet now lift above the on-screen keyboard while typing
 - iOS mobile focus zoom suppression hardened — toolbar modal inputs (paste + hotkey editor) now use mobile-specific selectors that win over later component styles, and xterm's hidden helper textarea is also forced to 16px so the ⌨ button doesn't zoom the page
@@ -70,7 +71,7 @@ Working:
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 29 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 30 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
