@@ -94,7 +94,7 @@ Working:
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
-- Mobile sidebar scrolling hardening — touch scrolling now works reliably on session lists (touch rows no longer expose drag-reorder, scroll containers get explicit touch/flex overflow sizing)
+- Mobile sidebar scrolling hardening — touch scrolling now works reliably in single-host and multi-host grouped sidebars (touch rows no longer expose drag-reorder, scroll containers get explicit touch sizing, host sections no longer flex-shrink and clip rows)
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
 - Mobile toolbar (iOS): ⌨ keyboard button, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
 - Mobile text selection mode (toolbar `select`) — opens a scrollback snapshot in a native textarea sheet for reliable touch selection/copy and drag-to-scroll selection expansion

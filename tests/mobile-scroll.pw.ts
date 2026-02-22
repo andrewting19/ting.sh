@@ -217,6 +217,32 @@ test('touch swipe down scrolls terminal up (scrollTop decreases)', async ({ page
     .toBeLessThan(scrollTopBefore)
 })
 
+test('mobile sidebar rows are not draggable (touch scroll is not hijacked)', async ({ page }) => {
+  for (let i = 0; i < 8; i++) {
+    const id = await newSessionMobile(page)
+    await waitForPrompt(page, id)
+  }
+
+  await page.click('.hamburger')
+  await expect(page.locator('.sidebar')).toHaveClass(/open/)
+
+  const info = await page.evaluate(() => {
+    const list = document.querySelector<HTMLElement>('.sidebar.open .session-list')
+    const firstItem = document.querySelector<HTMLElement>('.sidebar.open .session-item')
+    if (!list) throw new Error('no open sidebar .session-list')
+    if (!firstItem) throw new Error('no open sidebar .session-item')
+    return {
+      itemDraggable: firstItem.draggable,
+      itemAttr: firstItem.getAttribute('draggable'),
+      touchAction: getComputedStyle(list).touchAction,
+    }
+  })
+
+  expect(info.itemDraggable).toBe(false)
+  expect(info.itemAttr).toBe('false')
+  expect(info.touchAction).toBe('pan-y')
+})
+
 test('opening paste closes arrow pad and keeps it closed', async ({ page }) => {
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)

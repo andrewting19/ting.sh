@@ -22,6 +22,13 @@ interface Props {
 
 interface CtxMenu { key: SessionKey; x: number; y: number }
 
+function supportsPointerDragReorder(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true
+  // Touch dragging on draggable session rows interferes with native sidebar
+  // scrolling on mobile; keep drag reorder for mouse/trackpad devices.
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+}
+
 export function Sidebar({
   hosts,
   hostSessions,
@@ -321,6 +328,7 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
+  const canDragReorder = supportsPointerDragReorder()
 
   function startLongPress(e: React.PointerEvent) {
     longPressFiredRef.current = false
@@ -361,7 +369,7 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
     <div
       className={`session-item ${active ? 'active' : ''} ${isDragOver ? 'drag-over' : ''} ${disabled ? 'disabled' : ''}`}
       data-session-id={dataSessionId}
-      draggable={!isEditing && !disabled}
+      draggable={!isEditing && !disabled && canDragReorder}
       onClick={() => {
         if (longPressFiredRef.current) { longPressFiredRef.current = false; return }
         if (!disabled) onAttach()

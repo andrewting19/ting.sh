@@ -26,7 +26,7 @@
 - [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 - [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
 - [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
-- [x] Mobile sidebar list was hard to scroll — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling)
+- [x] Mobile sidebar list was hard to scroll (incl. multi-host grouped sections clipping) — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling + host groups no longer flex-shrink)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
 - [x] Reconnect/hot-reload attach replay could leave xterm viewport at top of buffer — fixed (scroll to bottom after first attach replay binary flush)
 

@@ -155,6 +155,7 @@ html, body, #root {
   background: var(--bg1);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -234,7 +235,10 @@ html, body, #root {
 
 .host-groups {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -242,6 +246,9 @@ html, body, #root {
 }
 
 .host-group {
+  /* In the multi-host column layout, flex items can shrink vertically.
+     With overflow:hidden this clips session rows and makes them unreachable. */
+  flex-shrink: 0;
   border: 1px solid var(--border2);
   border-radius: 6px;
   background: var(--bg1);
@@ -280,7 +287,10 @@ html, body, #root {
 /* ── Session list ── */
 .session-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 5px 6px;
   scrollbar-width: thin;
   scrollbar-color: var(--bg3) transparent;
