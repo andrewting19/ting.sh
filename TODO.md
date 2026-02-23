@@ -26,6 +26,7 @@
 - [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
 - [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
 - [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
+- [x] Mobile paste modal required leaving the sheet to send Enter after `Send` — fixed (compact `↩` button next to `Send` emits CR in-place)
 - [x] Mobile sidebar list was hard to scroll (incl. multi-host grouped sections clipping) — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling + host groups no longer flex-shrink)
 - [x] Mobile toolbar overflowed horizontally on narrow phones — fixed (7-button primary row + collapsible macro tray for modifiers/hotkeys/select)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
@@ -56,6 +57,7 @@
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
 - [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
 - [x] Mobile toolbar — fixed-width primary row (macro/ESC/TAB/arrows/paste/Enter/keyboard) plus macro tray for sticky CTRL/SHIFT, 3 programmable hotkeys, and `select`
+- [x] Mobile paste modal — `Send` action row includes compact `↩` button to send Enter without leaving the sheet
 - [x] Mobile text selection mode — toolbar opens a native textarea scrollback snapshot for touch-friendly select/copy
 - [x] Shared scroll-to-latest overlay button (desktop + mobile) — appears when scrolled up and jumps back to live output
 - [x] Mobile toolbar polish — hotkey editor key-type switching fixed, ALT hotkey sequences, mutually exclusive toolbar overlays

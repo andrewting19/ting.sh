@@ -1175,8 +1175,15 @@ html, body, #root {
 .paste-textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(122,162,247,.12); }
 .paste-textarea::placeholder { color: var(--fg3); }
 
+.paste-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .paste-send-btn {
-  width: 100%;
+  flex: 1;
+  width: auto;
   background: var(--blue);
   border: none;
   border-radius: 7px;
@@ -1193,6 +1200,29 @@ html, body, #root {
 }
 .paste-send-btn:disabled { opacity: .3; }
 .paste-send-btn:active:not(:disabled) { opacity: .8; transform: scale(0.98); }
+
+.paste-enter-btn {
+  width: 46px;
+  flex-shrink: 0;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  color: var(--fg2);
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background .1s, border-color .1s, color .1s, transform .08s;
+  -webkit-tap-highlight-color: transparent;
+}
+.paste-enter-btn:active {
+  background: rgba(122,162,247,.12);
+  border-color: rgba(122,162,247,.45);
+  color: var(--blue);
+  transform: scale(0.97);
+}
 
 .paste-history {
   display: flex;

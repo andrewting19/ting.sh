@@ -57,6 +57,10 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
     setText('')
   }
 
+  function handleSendEnter() {
+    onSend('\r')
+  }
+
   function deleteHistory(item: string) {
     const next = history.filter(h => h !== item)
     setHistory(next)
@@ -85,13 +89,23 @@ export function PasteModal({ onSend, onClose }: PasteModalProps) {
             spellCheck={false}
           />
 
-          <button
-            className="paste-send-btn"
-            onClick={handleSend}
-            disabled={!text}
-          >
-            Send
-          </button>
+          <div className="paste-actions">
+            <button
+              className="paste-send-btn"
+              onClick={handleSend}
+              disabled={!text}
+            >
+              Send
+            </button>
+            <button
+              className="paste-enter-btn"
+              onClick={handleSendEnter}
+              aria-label="Send Enter key"
+              title="Send Enter key"
+            >
+              ↩
+            </button>
+          </div>
 
           {history.length > 0 && (
             <div className="paste-history">

@@ -254,6 +254,10 @@ test('opening paste closes arrow pad and keeps it closed', async ({ page }) => {
   await expect(page.locator('.paste-modal')).toHaveCount(1)
   await expect(page.locator('.arrow-pad-overlay')).toHaveCount(0)
 
+  await expect(page.locator('.paste-enter-btn')).toBeVisible()
+  await page.click('.paste-enter-btn')
+  await expect(page.locator('.paste-modal')).toHaveCount(1)
+
   await page.click('.paste-modal-close')
   await expect(page.locator('.paste-modal')).toHaveCount(0)
   await expect(page.locator('.arrow-pad-overlay')).toHaveCount(0)

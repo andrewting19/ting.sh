@@ -103,7 +103,7 @@ Working:
 - Mobile keyboard avoidance (VisualViewport): terminal area, toolbar, arrow pad, and paste sheet now lift above the on-screen keyboard while typing
 - iOS mobile focus zoom suppression hardened — toolbar modal inputs (paste + hotkey editor) now use mobile-specific selectors that win over later component styles, and xterm's hidden helper textarea is also forced to 16px so the ⌨ button doesn't zoom the page
 - Mobile paste sheet now focuses the textarea immediately on open (instead of delayed focus) so the keyboard opens with the sheet more reliably on iOS
-- Mobile paste sheet now saves longer unsent drafts into paste history on close, and long history lists scroll inside a capped panel so the textarea/send controls stay visible above the keyboard
+- Mobile paste sheet now saves longer unsent drafts into paste history on close, long history lists scroll inside a capped panel so the textarea/send controls stay visible above the keyboard, and a compact `↩` button can send Enter without leaving the sheet
 - iOS canvas renderer repaint hardening — coalesced full-screen refreshes after rapid write/fit cycles reduce transient stale glyphs during noisy output (e.g. spinner redraws while scrollback is advancing)
 - URL hash routing — `#<hostId>/<name>` deeplinks directly to a session (legacy `#<name>` still supported for local); auto-attaches on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
