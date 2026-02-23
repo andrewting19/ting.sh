@@ -138,6 +138,12 @@ Missing / in progress:
 
 **Sessions don't survive hard restarts.** PTY processes are OS child processes of the server — when the server process dies (crash, kill, machine reboot), the kernel sends SIGHUP to all children and they die. The `globalThis` trick only preserves sessions across Bun `--hot` module reloads (same process, module re-evaluated). True cross-restart persistence would require detaching PTYs into their own process group (like tmux does with `setsid`), which is a significant architectural change.
 
+**Some full-screen TUIs can intentionally wipe xterm scrollback during redraw (observed with Claude Code).** This can look like a random "flicker/scroll jump" bug where the viewport suddenly snaps and the `latest` button cannot stay at the bottom. In the observed case, the PTY stream included `CSI 2J` (clear screen), `CSI 3J` (clear scrollback), and `CSI H` (cursor home) in the **normal buffer** (not an attach/reconnect path, and not a client-side replay/reset bug). xterm.js is behaving correctly by collapsing scrollback and resetting the viewport after `CSI 3J`.
+
+This appears inconsistent because the TUI does not emit the same redraw sequence every frame. Some frames are incremental (no `CSI 3J`), while others trigger a full redraw path that clears scrollback.
+
+If this becomes a recurring UX issue, the safest mitigation is an **opt-in compatibility mode** that ignores only `CSI 3J` (clear scrollback) on the client, ideally via xterm parser hooks (`parser.registerCsiHandler` for `CSI J` with param `3`). Do not blindly auto-scroll after every redraw; that fights the app and causes jank. Trade-off: ignoring `CSI 3J` means apps (or `clear`/`reset`) can no longer intentionally clear scrollback in that mode.
+
 ## Future ideas
 
 ### Multiplayer
