@@ -162,12 +162,6 @@ function HotkeyEditor({ slot, onSave, onDelete, onClose }: HotkeyEditorProps) {
   )
 }
 
-// ── Separator ─────────────────────────────────────────────────────────────────
-
-function Sep() {
-  return <div className="tb-sep" aria-hidden />
-}
-
 // ── Main toolbar ──────────────────────────────────────────────────────────────
 
 interface MobileToolbarProps {
@@ -180,6 +174,7 @@ interface MobileToolbarProps {
 }
 
 export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal, openTextSelection, textSelectionOpen = false }: MobileToolbarProps) {
+  const [macroTrayOpen, setMacroTrayOpen] = useState(false)
   const [ctrlActive, setCtrlActive] = useState(false)
   const [shiftActive, setShiftActive] = useState(false)
   const [arrowPadOpen, setArrowPadOpen] = useState(false)
@@ -229,18 +224,28 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
   }
 
   const toggleArrowPad = () => {
+    setMacroTrayOpen(false)
     setPasteOpen(false)
     setEditingSlot(null)
     setArrowPadOpen(o => !o)
   }
 
   const togglePaste = () => {
+    setMacroTrayOpen(false)
     setArrowPadOpen(false)
     setEditingSlot(null)
     setPasteOpen(o => !o)
   }
 
+  const toggleMacroTray = () => {
+    setArrowPadOpen(false)
+    setPasteOpen(false)
+    setEditingSlot(null)
+    setMacroTrayOpen(o => !o)
+  }
+
   const openSelection = () => {
+    setMacroTrayOpen(false)
     setArrowPadOpen(false)
     setPasteOpen(false)
     setEditingSlot(null)
@@ -249,130 +254,150 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
 
   if (!currentId) return null
 
+  const modifiersActive = ctrlActive || shiftActive
+  const macroSummary = `${ctrlActive ? '^' : ''}${shiftActive ? '⇧' : ''}` || 'macro'
+
   return (
     <>
       <div className="mobile-toolbar">
+        {macroTrayOpen && (
+          <div className="mobile-toolbar-tray" id="mobile-macro-tray">
+            <div className="mobile-toolbar-tray-grid">
+              {/* ── Sticky modifiers ── */}
+              <button
+                className={`tb-btn tb-mod${ctrlActive ? ' tb-active' : ''}`}
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setCtrlActive(o => !o)}
+                title="Toggle Ctrl modifier"
+              >
+                ^
+              </button>
 
-        {/* ── Keyboard: must use onClick so the textarea stays focused after
-            the touch sequence ends. onMouseDown prevents the button element
-            from stealing focus (which would dismiss the keyboard). ── */}
-        <button
-          className="tb-btn tb-kbd"
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => focusTerminal()}
-          title="Show keyboard"
-        >
-          <span className="tb-icon">⌨</span>
-          <span className="tb-label">kbd</span>
-        </button>
+              <button
+                className={`tb-btn tb-mod${shiftActive ? ' tb-active' : ''}`}
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShiftActive(o => !o)}
+                title="Toggle Shift modifier"
+              >
+                ⇧
+              </button>
 
-        {/* ── Text input keys ── */}
-        <button
-          className="tb-btn tb-key"
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => { e.preventDefault(); sendInput('\x1b') }}
-        >
-          ESC
-        </button>
+              {/* ── Programmable hotkey slots ── */}
+              {hotkeys.map(slot => (
+                <button
+                  key={slot.id}
+                  className={`tb-btn tb-hotkey${modifiersActive ? ' tb-primed' : ''}`}
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => { e.preventDefault(); startLongPress(slot) }}
+                  onPointerUp={(e) => {
+                    e.preventDefault()
+                    if (longPressRef.current) { cancelLongPress(); fireHotkey(slot) }
+                  }}
+                  onPointerLeave={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                  title={`Run macro ${slot.label}`}
+                >
+                  {slot.label}
+                </button>
+              ))}
 
-        <button
-          className="tb-btn tb-key"
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => { e.preventDefault(); sendInput('\t') }}
-        >
-          TAB
-        </button>
+              <button
+                className={`tb-btn tb-select${textSelectionOpen ? ' tb-active' : ''}`}
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={openSelection}
+                title="Select and copy terminal text"
+              >
+                select
+              </button>
+            </div>
+          </div>
+        )}
 
-        <button
-          className="tb-btn tb-key"
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => { e.preventDefault(); sendInput('\r') }}
-        >
-          ↩
-        </button>
-
-        <Sep />
-
-        {/* ── Arrow pad toggle ── */}
-        <button
-          className={`tb-btn${arrowPadOpen ? ' tb-active' : ''}`}
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={toggleArrowPad}
-          title="Arrow keys"
-        >
-          <span className="tb-dpad">⊕</span>
-        </button>
-
-        <Sep />
-
-        {/* ── Sticky modifiers ── */}
-        <button
-          className={`tb-btn tb-mod${ctrlActive ? ' tb-active' : ''}`}
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setCtrlActive(o => !o)}
-        >
-          ^
-        </button>
-
-        <button
-          className={`tb-btn tb-mod${shiftActive ? ' tb-active' : ''}`}
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setShiftActive(o => !o)}
-        >
-          ⇧
-        </button>
-
-        <Sep />
-
-        {/* ── Programmable hotkey slots ── */}
-        {hotkeys.map(slot => (
+        <div className="mobile-toolbar-main">
           <button
-            key={slot.id}
-            className={`tb-btn tb-hotkey${(ctrlActive || shiftActive) ? ' tb-primed' : ''}`}
+            className={`tb-btn tb-macro-toggle${macroTrayOpen ? ' tb-active' : ''}${modifiersActive ? ' tb-primed' : ''}`}
             tabIndex={-1}
             onMouseDown={(e) => e.preventDefault()}
-            onPointerDown={(e) => { e.preventDefault(); startLongPress(slot) }}
-            onPointerUp={(e) => {
-              e.preventDefault()
-              if (longPressRef.current) { cancelLongPress(); fireHotkey(slot) }
-            }}
-            onPointerLeave={cancelLongPress}
-            onPointerCancel={cancelLongPress}
+            onClick={toggleMacroTray}
+            title="Macros and shortcuts"
+            aria-expanded={macroTrayOpen}
+            aria-controls="mobile-macro-tray"
           >
-            {slot.label}
+            <span className="tb-icon">⌘</span>
+            <span className="tb-label">{macroSummary}</span>
           </button>
-        ))}
 
-        <Sep />
+          {/* ── Text input keys ── */}
+          <button
+            className="tb-btn tb-key"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => { e.preventDefault(); sendInput('\x1b') }}
+            title="Escape"
+          >
+            ESC
+          </button>
 
-        {/* ── Paste ── */}
-        <button
-          className={`tb-btn tb-select${textSelectionOpen ? ' tb-active' : ''}`}
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openSelection}
-          title="Select and copy terminal text"
-        >
-          select
-        </button>
+          <button
+            className="tb-btn tb-key"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => { e.preventDefault(); sendInput('\t') }}
+            title="Tab"
+          >
+            TAB
+          </button>
 
-        <button
-          className={`tb-btn tb-paste${pasteOpen ? ' tb-active' : ''}`}
-          tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={togglePaste}
-          title="Paste"
-        >
-          paste
-        </button>
+          {/* ── Arrow pad toggle ── */}
+          <button
+            className={`tb-btn${arrowPadOpen ? ' tb-active' : ''}`}
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={toggleArrowPad}
+            title="Arrow keys"
+          >
+            <span className="tb-dpad">⊕</span>
+          </button>
 
+          {/* ── Paste ── */}
+          <button
+            className={`tb-btn tb-paste${pasteOpen ? ' tb-active' : ''}`}
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={togglePaste}
+            title="Paste"
+          >
+            paste
+          </button>
+
+          <button
+            className="tb-btn tb-key tb-enter"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => { e.preventDefault(); sendInput('\r') }}
+            title="Enter"
+          >
+            ↩
+          </button>
+
+          {/* ── Keyboard: must use onClick so the textarea stays focused after
+              the touch sequence ends. onMouseDown prevents the button element
+              from stealing focus (which would dismiss the keyboard). ── */}
+          <button
+            className="tb-btn tb-kbd"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => focusTerminal()}
+            title="Show keyboard"
+          >
+            <span className="tb-icon">⌨</span>
+            <span className="tb-label">kbd</span>
+          </button>
+        </div>
       </div>
 
       {arrowPadOpen && (

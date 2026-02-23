@@ -699,20 +699,100 @@ html, body, #root {
     left: 0;
     right: 0;
     bottom: var(--mobile-keyboard-inset);
-    align-items: center;
-    gap: 3px;
-    padding: 7px 8px;
-    background: var(--bg1);
-    border-top: 1px solid var(--border);
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 0;
+    overflow: visible;
     -webkit-touch-callout: none;
     user-select: none;
     -webkit-user-select: none;
     z-index: 10;
+    pointer-events: none;
   }
-  .mobile-toolbar::-webkit-scrollbar { display: none; }
+  .mobile-toolbar > * { pointer-events: auto; }
+
+  .mobile-toolbar-main {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 4px;
+    padding: 7px 8px;
+    background: var(--bg1);
+    border-top: 1px solid var(--border);
+  }
+
+  .mobile-toolbar-tray {
+    margin: 0 8px;
+    padding: 6px;
+    background: var(--bg1);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.38);
+    animation: fade-in .12s ease;
+  }
+
+  .mobile-toolbar-tray-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    align-items: stretch;
+  }
+
+  .mobile-toolbar-main .tb-btn,
+  .mobile-toolbar-tray-grid .tb-btn {
+    min-width: 0;
+    width: 100%;
+    padding: 0 4px;
+  }
+
+  .mobile-toolbar-main .tb-btn {
+    height: 38px;
+  }
+
+  .mobile-toolbar-tray-grid .tb-btn {
+    height: 36px;
+  }
+
+  .mobile-toolbar-main .tb-key {
+    font-size: 10px;
+    letter-spacing: .03em;
+  }
+
+  .mobile-toolbar-main .tb-paste,
+  .mobile-toolbar-tray-grid .tb-select {
+    font-size: 9px;
+    letter-spacing: .03em;
+  }
+
+  .mobile-toolbar-main .tb-kbd,
+  .mobile-toolbar-main .tb-macro-toggle {
+    gap: 0;
+  }
+
+  .mobile-toolbar-main .tb-kbd .tb-icon,
+  .mobile-toolbar-main .tb-macro-toggle .tb-icon {
+    font-size: 13px;
+  }
+
+  .mobile-toolbar-main .tb-kbd .tb-label,
+  .mobile-toolbar-main .tb-macro-toggle .tb-label {
+    font-size: 7px;
+    letter-spacing: .05em;
+  }
+
+  .mobile-toolbar-main .tb-dpad {
+    font-size: 14px;
+  }
+
+  .mobile-toolbar-tray-grid .tb-hotkey {
+    font-size: 10px;
+    letter-spacing: .01em;
+  }
+
+  .mobile-toolbar-tray-grid .tb-mod {
+    font-size: 13px;
+  }
 
   .terminal-area {
     bottom: var(--mobile-keyboard-inset);
@@ -790,6 +870,14 @@ html, body, #root {
   background: var(--bg3);
   border-color: var(--border2);
   color: var(--fg2);
+}
+.tb-enter {
+  background: var(--bg3);
+  color: var(--fg2);
+}
+.tb-macro-toggle.tb-active .tb-label,
+.tb-macro-toggle.tb-primed .tb-label {
+  color: currentColor;
 }
 .tb-icon  { font-size: 14px; line-height: 1; }
 .tb-label { font-size: 8px; letter-spacing: .06em; color: var(--fg3); text-transform: uppercase; }

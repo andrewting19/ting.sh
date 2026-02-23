@@ -96,8 +96,8 @@ Working:
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - Mobile sidebar scrolling hardening — touch scrolling now works reliably in single-host and multi-host grouped sidebars (touch rows no longer expose drag-reorder, scroll containers get explicit touch sizing, host sections no longer flex-shrink and clip rows)
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
-- Mobile toolbar (iOS): ⌨ keyboard button, ESC, Enter, arrow pad (↑↓←→), sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), paste modal with history, coordinated overlay toggles
-- Mobile text selection mode (toolbar `select`) — opens a scrollback snapshot in a native textarea sheet for reliable touch selection/copy and drag-to-scroll selection expansion
+- Mobile toolbar (iOS): non-scrolling primary row (macro, ESC, TAB, arrows, paste, Enter, ⌨) plus expandable macro tray for sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), and `select`, with coordinated overlay toggles
+- Mobile text selection mode (toolbar macro tray `select`) — opens a scrollback snapshot in a native textarea sheet for reliable touch selection/copy and drag-to-scroll selection expansion
 - Shared scroll-to-latest overlay button (desktop + mobile) — bottom-centered pill appears when the active terminal is scrolled up and jumps back to live output
 - Mobile D-pad arrows now respect xterm application-cursor mode (`ESC O A/B/C/D`) for TUIs that require it (falls back to normal `ESC [ A/B/C/D`)
 - Mobile keyboard avoidance (VisualViewport): terminal area, toolbar, arrow pad, and paste sheet now lift above the on-screen keyboard while typing

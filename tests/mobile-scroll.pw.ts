@@ -263,6 +263,9 @@ test('hotkey editor can switch from special key back to char mode', async ({ pag
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
+  await page.click("button[title='Macros and shortcuts']")
+  await expect(page.locator('.mobile-toolbar-tray')).toHaveCount(1)
+
   const hotkey = page.locator('.tb-hotkey').first()
   await hotkey.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true, pointerId: 1, bubbles: true })
   await page.waitForTimeout(550)
