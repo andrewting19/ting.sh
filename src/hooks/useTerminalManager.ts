@@ -259,6 +259,7 @@ export function useTerminalManager(callbacks: Callbacks) {
         const ro = new ResizeObserver(() => {
           existing.fitAddon.fit()
           scheduleFullRefresh(sessionKey)
+          emitScrollState(sessionKey)
           cbRef.current.onResize(sessionKey, existing.term.cols, existing.term.rows)
         })
         ro.observe(container)
@@ -291,6 +292,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     const ro = new ResizeObserver(() => {
       fitAddon.fit()
       scheduleFullRefresh(sessionKey)
+      emitScrollState(sessionKey)
       cbRef.current.onResize(sessionKey, term.cols, term.rows)
     })
     ro.observe(container)

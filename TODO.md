@@ -31,7 +31,7 @@
 - [x] Mobile sidebar list was hard to scroll (incl. multi-host grouped sections clipping) — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling + host groups no longer flex-shrink)
 - [x] Mobile toolbar overflowed horizontally on narrow phones — fixed (7-button primary row + collapsible macro tray for modifiers/hotkeys/select)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
-- [x] Reconnect/hot-reload attach replay could leave xterm viewport at top of buffer — fixed (scroll to bottom after first attach replay binary flush)
+- [x] Attach replay/session-switch viewport could land at top and sometimes miss the `Latest` overlay after fit/resize races — fixed (defer attach auto-scroll until replay flush/layout settles + recompute scroll-overlay state after terminal fits/resizes)
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server

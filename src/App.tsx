@@ -123,8 +123,9 @@ export function App() {
   // is confirmed so replay from the stale attach cannot contaminate terminals.
   const dropBinaryUntilReadyRef = useRef(false)
   // Attach/reset replays can leave xterm's viewport at an arbitrary position
-  // (notably top after reconnect/hot-reload). Scroll to latest output after the
-  // first binary frame for each attach request is flushed.
+  // (notably top after reconnect/hot-reload). Keep a pending "jump to latest"
+  // marker for attach requests and clear it once the first replay/output frame
+  // has flushed and we've had a chance to settle resize/fit work.
   const scrollToBottomAfterAttachBinaryRef = useRef<SessionKey | null>(null)
 
   // When set, the next ready response is a duplicate — insert after this ID
@@ -261,7 +262,15 @@ export function App() {
         ? () => {
             if (scrollToBottomAfterAttachBinaryRef.current !== key) return
             scrollToBottomAfterAttachBinaryRef.current = null
-            tm.scrollToBottom(key)
+            // Let sidebar-close/layout resize + fit() settle before forcing the
+            // viewport to latest output; otherwise a follow-up fit can snap the
+            // terminal back to the top while leaving overlay state stale.
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (currentKeyRef.current !== key) return
+                tm.scrollToBottom(key)
+              })
+            })
           }
         : undefined)
     },
