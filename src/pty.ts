@@ -19,7 +19,7 @@ export interface PtySpawnOptions {
 
 export function defaultShell(): string {
   if (process.platform === "win32") {
-    return process.env.COMSPEC || "powershell.exe";
+    return process.env.SHELL || process.env.COMSPEC || "powershell.exe";
   }
   return process.env.SHELL || "zsh";
 }
