@@ -163,10 +163,30 @@ function loadHostConfig(): HostConfig {
   };
 }
 
-const HOST_CONFIG = loadHostConfig();
+let HOST_CONFIG = loadHostConfig();
 // Trust peer hostnames regardless of port — the peer UI may be served on a
 // different port (e.g. Vite :4321 in dev) from the production server (:7681).
-const TRUSTED_PEER_HOSTNAMES = new Set(HOST_CONFIG.peers.map((peer) => new URL(peer.url).hostname));
+let TRUSTED_PEER_HOSTNAMES = new Set(HOST_CONFIG.peers.map((peer) => new URL(peer.url).hostname));
+
+// Hot-reload hosts.json on change
+const hostsConfigPath = process.env.HOSTS_FILE ?? "./hosts.json";
+if (hostsConfigPath !== "none" && existsSync(hostsConfigPath)) {
+  const { watch } = await import("fs");
+  let debounce: ReturnType<typeof setTimeout> | null = null;
+  watch(hostsConfigPath, () => {
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      try {
+        const updated = loadHostConfig();
+        HOST_CONFIG = updated;
+        TRUSTED_PEER_HOSTNAMES = new Set(updated.peers.map((peer) => new URL(peer.url).hostname));
+        console.log(`[hosts] reloaded hosts.json (${updated.peers.length} peers)`);
+      } catch (err) {
+        console.error(`[hosts] failed to reload hosts.json:`, err instanceof Error ? err.message : err);
+      }
+    }, 200);
+  });
+}
 
 // All 172 champions as of Feb 2026 (Zaahen is the most recent)
 const CHAMPION_NAMES = [
