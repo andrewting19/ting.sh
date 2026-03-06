@@ -18,10 +18,27 @@ export interface PtySpawnOptions {
 }
 
 export function defaultShell(): string {
+  if (process.platform === "win32") {
+    return process.env.COMSPEC || "powershell.exe";
+  }
   return process.env.SHELL || "zsh";
 }
 
+type SpawnPtyFn = (options: PtySpawnOptions) => PtyProcess;
+let spawnPtyWin: SpawnPtyFn | null = null;
+
+if (process.platform === "win32") {
+  try {
+    const mod = require("./pty-windows") as { spawnPty: SpawnPtyFn };
+    spawnPtyWin = mod.spawnPty;
+  } catch {
+    // node-pty is optional and may be unavailable depending on platform/build.
+  }
+}
+
 export function spawnPty(options: PtySpawnOptions): PtyProcess {
-  // Phase 2: add win32 branch → "./pty-windows"
+  if (process.platform === "win32" && spawnPtyWin) {
+    return spawnPtyWin(options);
+  }
   return spawnPtyUnix(options);
 }
