@@ -24,16 +24,33 @@ echo "$NEW_VERSION" > VERSION
 # Build frontend
 bun run build
 
-# Create release tarball
-TARBALL="ting.sh-v${NEW_VERSION}.tar.gz"
-COPYFILE_DISABLE=1 tar czf "$TARBALL" \
-  server.ts \
-  serverBuffer.ts \
-  VERSION \
-  hosts.example.json \
+# Create release archives
+if ! command -v zip >/dev/null 2>&1; then
+  echo "ERROR: zip command is required to create Windows release artifacts"
+  exit 1
+fi
+
+RELEASE_FILES=(
+  server.ts
+  serverBuffer.ts
+  src/pty.ts
+  src/pty-unix.ts
+  src/pty-windows.ts
+  package.json
+  bun.lock
+  VERSION
+  hosts.example.json
   dist/
+)
+
+TARBALL="ting.sh-v${NEW_VERSION}.tar.gz"
+ZIPFILE="ting.sh-v${NEW_VERSION}.zip"
+
+COPYFILE_DISABLE=1 tar czf "$TARBALL" "${RELEASE_FILES[@]}"
+zip -rq -X "$ZIPFILE" "${RELEASE_FILES[@]}"
 
 echo "Built $TARBALL"
+echo "Built $ZIPFILE"
 
 # Commit version bump
 git add VERSION
@@ -42,9 +59,9 @@ git tag "v${NEW_VERSION}"
 git push origin main --tags
 
 # Create GitHub release
-gh release create "v${NEW_VERSION}" "$TARBALL" \
+gh release create "v${NEW_VERSION}" "$TARBALL" "$ZIPFILE" \
   --title "v${NEW_VERSION}" \
   --generate-notes
 
-rm "$TARBALL"
+rm "$TARBALL" "$ZIPFILE"
 echo "Released v${NEW_VERSION}"
