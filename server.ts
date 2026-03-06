@@ -3,15 +3,15 @@ import { existsSync, readFileSync, readlinkSync, writeFileSync, mkdirSync } from
 import { hostname } from "os";
 import { join } from "path";
 import { sanitizeReplayBuffer } from "./serverBuffer";
+import { defaultShell, spawnPty, type PtyProcess } from "./src/pty";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
-const SHELL = process.env.SHELL ?? "zsh";
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024)); // 10MB by default
 
 interface Session {
   id: string;
   name: string;
-  proc: ReturnType<typeof Bun.spawn> | null;
+  proc: PtyProcess | null;
   buffer: Buffer;
   bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
@@ -301,32 +301,37 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     cwdTimer: null,
   };
 
-  const proc = Bun.spawn([SHELL], {
-    cwd: cwd || process.env.HOME || undefined,
-    env: { ...process.env, TERM: "xterm-256color" },
-    terminal: {
-      cols,
-      rows,
-      data(_terminal, data) {
-        // Append to scrollback buffer (capped)
-        const combined = Buffer.concat([session.buffer, data]);
-        if (combined.length > MAX_BUFFER) {
-          session.buffer = combined.subarray(combined.length - MAX_BUFFER);
-          session.bufferTrimmed = true;
-        } else {
-          session.buffer = combined;
-        }
+  const env = Object.fromEntries(
+    Object.entries({ ...process.env, TERM: "xterm-256color" }).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
+  );
 
-        // Broadcast raw bytes to all attached clients
-        for (const ws of session.clients) ws.sendBinary(data);
-      },
-      exit() {
-        if (session.cwdTimer) clearTimeout(session.cwdTimer);
-        sessions.delete(id);
-        const msg = JSON.stringify({ type: "session-exit", id });
-        for (const ws of session.clients) ws.send(msg);
-        broadcastSessions();
-      },
+  const proc = spawnPty({
+    shell: defaultShell(),
+    cwd: cwd || process.env.HOME || undefined,
+    cols,
+    rows,
+    env,
+    onData(data) {
+      // Append to scrollback buffer (capped)
+      const combined = Buffer.concat([session.buffer, data]);
+      if (combined.length > MAX_BUFFER) {
+        session.buffer = combined.subarray(combined.length - MAX_BUFFER);
+        session.bufferTrimmed = true;
+      } else {
+        session.buffer = combined;
+      }
+
+      // Broadcast raw bytes to all attached clients
+      for (const ws of session.clients) ws.sendBinary(data);
+    },
+    onExit() {
+      if (session.cwdTimer) clearTimeout(session.cwdTimer);
+      sessions.delete(id);
+      const msg = JSON.stringify({ type: "session-exit", id });
+      for (const ws of session.clients) ws.send(msg);
+      broadcastSessions();
     },
   });
 
@@ -486,7 +491,7 @@ const server = Bun.serve<WSData>({
           // Resize to match client dimensions
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
-          if (cols && rows) s.proc?.terminal?.resize(cols, rows);
+          if (cols && rows) s.proc?.resize(cols, rows);
 
           ws.send(JSON.stringify({
             type: "ready",
@@ -504,7 +509,7 @@ const server = Bun.serve<WSData>({
         case "input": {
           const input = asString(data.data);
           if (!session || input === null) return;
-          session.proc?.terminal?.write(input);
+          session.proc?.write(input);
           // Enter key — schedule a CWD refresh after the command has time to run
           if (input === "\r") scheduleCwdRefresh(session);
           break;
@@ -514,7 +519,7 @@ const server = Bun.serve<WSData>({
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
           if (!session || !cols || !rows) return;
-          session.proc?.terminal?.resize(cols, rows);
+          session.proc?.resize(cols, rows);
           break;
         }
 
@@ -538,7 +543,6 @@ const server = Bun.serve<WSData>({
           sessions.delete(id);
           const exitMsg = JSON.stringify({ type: "session-exit", id });
           for (const c of s.clients) c.send(exitMsg);
-          s.proc?.terminal?.close();
           s.proc?.kill();
           broadcastSessions();
           break;
@@ -646,4 +650,3 @@ if (AUTO_UPDATE_ENABLED) {
 } else {
   console.log("[auto-update] disabled");
 }
-
