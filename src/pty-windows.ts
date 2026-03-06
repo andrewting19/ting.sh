@@ -13,24 +13,32 @@ export function spawnPty(options: PtySpawnOptions): PtyProcess {
     rows: options.rows,
   });
 
+  let exited = false;
+
   proc.onData((data) => {
     options.onData(encoder.encode(data));
   });
 
   proc.onExit(() => {
+    exited = true;
     options.onExit();
   });
 
   return {
     pid: proc.pid,
     write(data) {
-      proc.write(typeof data === "string" ? data : decoder.decode(data));
+      if (exited) return;
+      try {
+        proc.write(typeof data === "string" ? data : decoder.decode(data));
+      } catch { /* socket already closed */ }
     },
     resize(cols, rows) {
-      proc.resize(cols, rows);
+      if (exited) return;
+      try { proc.resize(cols, rows); } catch { /* ignore */ }
     },
     kill() {
-      proc.kill();
+      if (exited) return;
+      try { proc.kill(); } catch { /* ignore */ }
     },
   };
 }
