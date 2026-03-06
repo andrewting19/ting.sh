@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync, readlinkSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, readlinkSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
 import { hostname } from "os";
 import { join } from "path";
 import { sanitizeReplayBuffer } from "./serverBuffer";
@@ -240,6 +240,9 @@ const listSubscribers = new Set<ServerWebSocket<WSData>>();
 //        after the user presses Enter (not on a tight poll).
 async function getCwd(pid: number): Promise<string | null> {
   try {
+    if (process.platform === "win32") {
+      return null; // Windows CWD detection not yet implemented
+    }
     if (process.platform === "linux") {
       return readlinkSync(`/proc/${pid}/cwd`);
     }
@@ -603,6 +606,7 @@ function getCurrentVersion(): string | null {
 async function checkForUpdate(): Promise<void> {
   const current = getCurrentVersion();
   if (!current) return; // no VERSION file = dev mode, skip
+  const isWindows = process.platform === "win32";
 
   try {
     const res = await fetch(`https://api.github.com/repos/${AUTO_UPDATE_REPO}/releases/latest`, {
@@ -619,40 +623,50 @@ async function checkForUpdate(): Promise<void> {
 
     console.log(`[auto-update] new version available: v${latest} (current: v${current})`);
 
-    // Find the tarball asset
-    const asset = data.assets?.find(a => a.name.endsWith(".tar.gz"));
+    const asset = data.assets?.find(a => (isWindows ? a.name.endsWith(".zip") : a.name.endsWith(".tar.gz")));
     if (!asset) {
-      console.log("[auto-update] no tarball asset found in release");
+      console.log(`[auto-update] no ${isWindows ? "zip" : "tar.gz"} asset found in release`);
       return;
     }
 
     // Download and extract over current directory
     console.log(`[auto-update] downloading ${asset.name}...`);
-    const tarRes = await fetch(asset.browser_download_url);
-    if (!tarRes.ok || !tarRes.body) {
+    const releaseRes = await fetch(asset.browser_download_url);
+    if (!releaseRes.ok || !releaseRes.body) {
       console.log("[auto-update] download failed");
       return;
     }
 
     // Write to temp file, then extract
-    const tmpPath = join(".", `.update-${latest}.tar.gz`);
-    const tarBytes = new Uint8Array(await tarRes.arrayBuffer());
-    writeFileSync(tmpPath, tarBytes);
+    const ext = isWindows ? ".zip" : ".tar.gz";
+    const tmpPath = join(".", `.update-${latest}${ext}`);
+    const releaseBytes = new Uint8Array(await releaseRes.arrayBuffer());
+    writeFileSync(tmpPath, releaseBytes);
 
-    const extract = Bun.spawn(["tar", "xzf", tmpPath, "-C", "."], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const extract = isWindows
+      ? Bun.spawn(
+          [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            `Expand-Archive -Path '${tmpPath}' -DestinationPath '.' -Force`,
+          ],
+          { stdout: "pipe", stderr: "pipe" }
+        )
+      : Bun.spawn(["tar", "xzf", tmpPath, "-C", "."], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
     await extract.exited;
 
     if (extract.exitCode !== 0) {
       const stderr = await new Response(extract.stderr).text();
       console.log(`[auto-update] extract failed: ${stderr}`);
-      try { Bun.spawn(["rm", "-f", tmpPath]); } catch { /* ignore */ }
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
       return;
     }
 
-    try { Bun.spawn(["rm", "-f", tmpPath]); } catch { /* ignore */ }
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
 
     console.log(`[auto-update] updated to v${latest}, restarting...`);
     process.exit(0); // systemd restarts us
