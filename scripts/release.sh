@@ -40,6 +40,7 @@ RELEASE_FILES=(
   bun.lock
   VERSION
   hosts.example.json
+  deploy/
   dist/
 )
 

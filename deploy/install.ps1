@@ -16,7 +16,28 @@ function Write-Step {
   Write-Host "==> $Message"
 }
 
+function Invoke-External {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter()][string[]]$Arguments = @()
+  )
+
+  & $FilePath @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE: $FilePath $($Arguments -join ' ')"
+  }
+}
+
+function Assert-Administrator {
+  $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+  if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "This installer must run in an elevated PowerShell session (Run as Administrator)."
+  }
+}
+
 Write-Step "Installing ting.sh"
+Assert-Administrator
 
 # 1. Install Bun if not present
 $bunCommand = Get-Command bun -ErrorAction SilentlyContinue
@@ -72,10 +93,89 @@ Remove-Item -Path $zipPath -Force
 # 4. Write version marker
 Set-Content -Path (Join-Path $InstallDir "CURRENT_VERSION") -Value $latestTag -NoNewline
 
+# 5. Install dependencies in release dir
+Write-Step "Installing runtime dependencies (bun install)"
+Push-Location $InstallDir
+try {
+  Invoke-External -FilePath $bunPath -Arguments @("install")
+}
+finally {
+  Pop-Location
+}
+
+# 6. Download and install NSSM
+$nssmVersion = "2.24"
+$nssmZipUrl = "https://nssm.cc/release/nssm-$nssmVersion.zip"
+$nssmZipPath = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}.zip" -f [guid]::NewGuid().ToString("N"))
+$nssmTempDir = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}" -f [guid]::NewGuid().ToString("N"))
+$nssmInstallDir = Join-Path $InstallDir "nssm"
+
+Write-Step "Downloading NSSM $nssmVersion"
+Invoke-WebRequest -Uri $nssmZipUrl -OutFile $nssmZipPath
+
+Write-Step "Extracting NSSM"
+New-Item -ItemType Directory -Path $nssmTempDir -Force | Out-Null
+Expand-Archive -Path $nssmZipPath -DestinationPath $nssmTempDir -Force
+Remove-Item -Path $nssmZipPath -Force
+
+$nssmExtractedDir = Join-Path $nssmTempDir "nssm-$nssmVersion"
+if (-not (Test-Path $nssmExtractedDir)) {
+  throw "NSSM extraction failed: expected $nssmExtractedDir"
+}
+
+if (Test-Path $nssmInstallDir) {
+  Remove-Item -Path $nssmInstallDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $nssmInstallDir -Force | Out-Null
+Copy-Item -Path (Join-Path $nssmExtractedDir "*") -Destination $nssmInstallDir -Recurse -Force
+Remove-Item -Path $nssmTempDir -Recurse -Force
+
+$nssmArch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
+$nssmExe = Join-Path $nssmInstallDir "$nssmArch\\nssm.exe"
+if (-not (Test-Path $nssmExe)) {
+  throw "NSSM executable not found: $nssmExe"
+}
+
+# 7. Register and start the Windows service
+$serviceName = "ting.sh"
+$logsDir = Join-Path $InstallDir "logs"
+$stdoutLog = Join-Path $logsDir "service-stdout.log"
+$stderrLog = Join-Path $logsDir "service-stderr.log"
+
+New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+if (-not (Test-Path $stdoutLog)) { New-Item -ItemType File -Path $stdoutLog | Out-Null }
+if (-not (Test-Path $stderrLog)) { New-Item -ItemType File -Path $stderrLog | Out-Null }
+
+$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if (-not $existingService) {
+  Write-Step "Creating Windows service '$serviceName'"
+  Invoke-External -FilePath $nssmExe -Arguments @("install", $serviceName, $bunPath, "run", "server.ts")
+}
+elseif ($existingService.Status -ne "Stopped") {
+  Write-Step "Stopping existing service '$serviceName'"
+  Stop-Service -Name $serviceName -Force
+  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+}
+
+Write-Step "Configuring service '$serviceName'"
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "Application", $bunPath)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppDirectory", $InstallDir)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppParameters", "run server.ts")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppExit", "Default", "Restart")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "Start", "SERVICE_AUTO_START")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppStdout", $stdoutLog)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppStderr", $stderrLog)
+
+Write-Step "Starting service '$serviceName'"
+Start-Service -Name $serviceName
+(Get-Service -Name $serviceName).WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+
+$service = Get-Service -Name $serviceName
+Write-Step "Service status: $($service.Status)"
 Write-Step "ting.sh $latestTag installed to $InstallDir"
-Write-Host ""
-Write-Host "Run it manually:"
-Write-Host "  cd \"$InstallDir\""
-Write-Host "  bun run server.ts"
-Write-Host ""
-Write-Host "Optional configuration: set env vars like PORT, SHELL, HOSTS_FILE before starting."
+Write-Host "Logs:"
+Write-Host "  Stdout: $stdoutLog"
+Write-Host "  Stderr: $stderrLog"
+Write-Host "Service management:"
+Write-Host "  Get-Service -Name '$serviceName'"
+Write-Host "  Restart-Service -Name '$serviceName'"
