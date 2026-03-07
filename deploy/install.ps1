@@ -36,6 +36,57 @@ function Assert-Administrator {
   }
 }
 
+function Ensure-BundledNode {
+  param([Parameter(Mandatory = $true)][string]$InstallDir)
+
+  $nodeDir = Join-Path $InstallDir "node"
+  $nodeExe = Join-Path $nodeDir "node.exe"
+  if (Test-Path $nodeExe) {
+    Write-Step "Bundled Node version: $(& $nodeExe --version)"
+    return
+  }
+
+  $arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+  $fileName = "win-$arch-zip"
+  $index = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json"
+  $release = $index | Where-Object { $_.lts -and $_.files -contains $fileName } | Select-Object -First 1
+  if (-not $release) {
+    throw "Could not find a Node.js LTS release for $fileName"
+  }
+
+  $version = $release.version
+  $zipName = "node-$version-win-$arch.zip"
+  $zipUrl = "https://nodejs.org/dist/$version/$zipName"
+  $zipPath = Join-Path $env:TEMP ("node-$version-{0}.zip" -f [guid]::NewGuid().ToString("N"))
+  $tempDir = Join-Path $env:TEMP ("node-$version-{0}" -f [guid]::NewGuid().ToString("N"))
+
+  Write-Step "Downloading bundled Node.js $version"
+  Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+
+  Write-Step "Extracting bundled Node.js"
+  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+  Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+  Remove-Item -Path $zipPath -Force
+
+  $extractedDir = Join-Path $tempDir "node-$version-win-$arch"
+  if (-not (Test-Path $extractedDir)) {
+    throw "Node.js extraction failed: expected $extractedDir"
+  }
+
+  if (Test-Path $nodeDir) {
+    Remove-Item -Path $nodeDir -Recurse -Force
+  }
+  New-Item -ItemType Directory -Path $nodeDir -Force | Out-Null
+  Copy-Item -Path (Join-Path $extractedDir "*") -Destination $nodeDir -Recurse -Force
+  Remove-Item -Path $tempDir -Recurse -Force
+
+  if (-not (Test-Path $nodeExe)) {
+    throw "Bundled Node.js executable not found: $nodeExe"
+  }
+
+  Write-Step "Bundled Node version: $(& $nodeExe --version)"
+}
+
 Write-Step "Installing ting.sh"
 Assert-Administrator
 
@@ -80,7 +131,16 @@ if (-not $zipAsset) {
   throw "No .zip asset found in release $latestTag"
 }
 
-# 3. Download and extract
+# 3. Stop existing service before touching files
+$serviceName = "ting.sh"
+$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if ($existingService -and $existingService.Status -ne "Stopped") {
+  Write-Step "Stopping existing service '$serviceName'"
+  Stop-Service -Name $serviceName -Force
+  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+}
+
+# 4. Download and extract
 $zipPath = Join-Path $env:TEMP ("ting.sh-$latestTag-{0}.zip" -f [guid]::NewGuid().ToString("N"))
 Write-Step "Downloading $($zipAsset.name)"
 Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $zipPath
@@ -90,10 +150,13 @@ Write-Step "Extracting to $InstallDir"
 Expand-Archive -Path $zipPath -DestinationPath $InstallDir -Force
 Remove-Item -Path $zipPath -Force
 
-# 4. Write version marker
+# 5. Write version marker
 Set-Content -Path (Join-Path $InstallDir "CURRENT_VERSION") -Value $latestTag -NoNewline
 
-# 5. Install dependencies in release dir
+# 6. Ensure bundled Node.js exists for the PTY sidecar runtime
+Ensure-BundledNode -InstallDir $InstallDir
+
+# 7. Install dependencies in release dir
 Write-Step "Installing runtime dependencies (bun install)"
 Push-Location $InstallDir
 try {
@@ -103,16 +166,7 @@ finally {
   Pop-Location
 }
 
-# 6. Stop existing service before touching files
-$serviceName = "ting.sh"
-$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-if ($existingService -and $existingService.Status -ne "Stopped") {
-  Write-Step "Stopping existing service '$serviceName'"
-  Stop-Service -Name $serviceName -Force
-  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
-}
-
-# 7. Download and install NSSM (skip if already present)
+# 8. Download and install NSSM (skip if already present)
 $nssmVersion = "2.24"
 $nssmInstallDir = Join-Path $InstallDir "nssm"
 $nssmArch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
@@ -147,7 +201,7 @@ if (-not (Test-Path $nssmExe)) {
   throw "NSSM executable not found: $nssmExe"
 }
 
-# 8. Register and start the Windows service
+# 9. Register and start the Windows service
 $logsDir = Join-Path $InstallDir "logs"
 $stdoutLog = Join-Path $logsDir "service-stdout.log"
 $stderrLog = Join-Path $logsDir "service-stderr.log"

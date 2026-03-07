@@ -18,14 +18,14 @@ Agentboard is close but has two fundamental constraints this project doesn't wan
 1. **Tmux-coupled** — sessions are tmux windows. The terminal is proxied through tmux's `pipe-pane` / `send-keys` API rather than owning the PTY directly. This is why scrollback is glitchy and rendering artifacts appear.
 2. **Agent-focused UI** — one window per coding agent. That's a subset of what a general terminal needs.
 
-This project owns the PTY directly via `Bun.spawn` with the native PTY API. xterm.js builds its scrollback buffer from the raw byte stream, nothing in between. Scrolling is smooth because xterm.js holds all the data itself.
+This project owns the PTY directly: Unix/macOS hosts use `Bun.spawn` with the native PTY API, while Windows hosts use ConPTY via `node-pty`. xterm.js builds its scrollback buffer from the raw byte stream, nothing in between. Scrolling is smooth because xterm.js holds all the data itself.
 
 Tmux session detection is supported as an optional future feature (for interop with dev-sessions MCP etc.) but is not the core model.
 
 ## Stack
 
 - **Runtime**: Bun
-- **Backend**: Bun HTTP + WebSocket server, `Bun.spawn` native PTY API (no node-pty)
+- **Backend**: Bun HTTP + WebSocket server; native `Bun.spawn` PTY on Unix/macOS, `node-pty` ConPTY worker on Windows
 - **Frontend**: React + TypeScript, bundled by Vite
 - **Terminal**: xterm.js 5.x with WebGL (desktop) + Canvas (iOS) + FitAddon
 
@@ -90,6 +90,8 @@ Working:
 - Host-scoped drag reorder hardening — drag source host is validated from live state during drag events (avoids stale-closure no-op drops)
 - Champion names for auto-generated sessions (all 172 LoL champions)
 - Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
+- Windows host support (validated on `mom`) — Git Bash is preferred over `cmd.exe` when available, CWD tracking works via a hidden Git Bash prompt hook, and duplicate/create-with-CWD works on Windows hosts
+- Windows installer/runtime hardening — `deploy/install.ps1` now bundles a portable Node runtime for the PTY worker, and Windows auto-update reinstalls dependencies after extracting a new release
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
@@ -133,6 +135,7 @@ Working:
 
 Missing / in progress:
 - Multi-machine dashboard (auto-discovery from Tailscale)
+- Windows CI / Playwright coverage (phase 5)
 
 ## Known limitations
 

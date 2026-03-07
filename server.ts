@@ -3,7 +3,8 @@ import { existsSync, readFileSync, readlinkSync, unlinkSync, writeFileSync, mkdi
 import { hostname } from "os";
 import { join } from "path";
 import { sanitizeReplayBuffer } from "./serverBuffer";
-import { defaultShell, spawnPty, type PtyProcess } from "./src/pty";
+import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
+import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
 const PORT = parseInt(process.env.PORT ?? "7681");
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024)); // 10MB by default
@@ -12,12 +13,15 @@ interface Session {
   id: string;
   name: string;
   proc: PtyProcess | null;
+  shell: string;
   buffer: Buffer;
   bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
   cwd: string;
   cwdTimer: ReturnType<typeof setTimeout> | null;
+  shellControlRemainder: string;
+  shellTracksCwd: boolean;
 }
 
 interface WSData {
@@ -312,33 +316,49 @@ function broadcastSessions() {
 
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
   const id = randomUUID();
+  const shell = defaultShell();
   const session: Session = {
     id,
     name: name?.trim() || pickSessionName(),
     proc: null,
+    shell,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     clients: new Set(),
     createdAt: Date.now(),
     cwd: "",
     cwdTimer: null,
+    shellControlRemainder: "",
+    shellTracksCwd: process.platform === "win32" && isGitBashShell(shell),
   };
 
-  const env = Object.fromEntries(
+  const baseEnv = Object.fromEntries(
     Object.entries({ ...process.env, TERM: "xterm-256color" }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )
   );
+  const env = prepareEnvForShell(shell, baseEnv);
 
   const proc = spawnPty({
-    shell: defaultShell(),
-    cwd: cwd || process.env.HOME || undefined,
+    shell,
+    cwd: cwd || defaultCwd(),
     cols,
     rows,
     env,
     onData(data) {
+      let payload = Buffer.from(data);
+      if (session.shellTracksCwd) {
+        const extracted = stripWindowsCwdControlFrames(payload, session.shellControlRemainder);
+        payload = Buffer.from(extracted.data);
+        session.shellControlRemainder = extracted.remainder;
+        if (extracted.cwd && extracted.cwd !== session.cwd) {
+          session.cwd = extracted.cwd;
+          broadcastSessions();
+        }
+      }
+
       // Append to scrollback buffer (capped)
-      const combined = Buffer.concat([session.buffer, data]);
+      const combined = Buffer.concat([session.buffer, payload]);
       if (combined.length > MAX_BUFFER) {
         session.buffer = combined.subarray(combined.length - MAX_BUFFER);
         session.bufferTrimmed = true;
@@ -347,7 +367,9 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       }
 
       // Broadcast raw bytes to all attached clients
-      for (const ws of session.clients) ws.sendBinary(data);
+      if (payload.length > 0) {
+        for (const ws of session.clients) ws.sendBinary(payload);
+      }
     },
     onExit() {
       if (session.cwdTimer) clearTimeout(session.cwdTimer);
@@ -667,6 +689,18 @@ async function checkForUpdate(): Promise<void> {
     }
 
     try { unlinkSync(tmpPath); } catch { /* ignore */ }
+
+    console.log("[auto-update] installing updated dependencies...");
+    const install = Bun.spawn([process.execPath, "install", "--frozen-lockfile"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await install.exited;
+    if (install.exitCode !== 0) {
+      const stderr = await new Response(install.stderr).text();
+      console.log(`[auto-update] bun install failed: ${stderr}`);
+      return;
+    }
 
     console.log(`[auto-update] updated to v${latest}, restarting...`);
     process.exit(0); // systemd restarts us

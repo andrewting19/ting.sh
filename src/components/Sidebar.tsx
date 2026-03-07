@@ -406,7 +406,7 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
         )}
         {session.cwd && (
           <span className="session-cwd" title={session.cwd}>
-            {session.cwd.split('/').filter(Boolean).pop() ?? '/'}
+            {session.cwd.split(/[\\/]/).filter(Boolean).pop() ?? '/'}
           </span>
         )}
       </div>

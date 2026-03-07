@@ -24,8 +24,11 @@ type WorkerInboundMessage =
 
 const textEncoder = new TextEncoder();
 const workerPath = fileURLToPath(new URL("./pty-worker.js", import.meta.url));
+const bundledNodePath = fileURLToPath(new URL("../node/node.exe", import.meta.url));
 
 function findNodeExecutable(): string {
+  if (existsSync(bundledNodePath)) return bundledNodePath;
+
   const pathValue = process.env.PATH || "";
   const pathEntries = pathValue.split(delimiter).filter(Boolean);
   const pathCandidates = ["node.exe", "node.cmd", "node.bat", "node"];

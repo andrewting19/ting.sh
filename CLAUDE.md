@@ -3,7 +3,7 @@
 ## Stack
 
 - **Runtime**: Bun 1.3.6+
-- **Backend**: `server.ts` — Bun HTTP + WebSocket server, `Bun.spawn` native PTY API (no node-pty)
+- **Backend**: `server.ts` — Bun HTTP + WebSocket server, `Bun.spawn` PTY on Unix/macOS, `node-pty` ConPTY worker on Windows
 - **Frontend**: React 18 + TypeScript, bundled by Vite
 - **Terminal renderer**: xterm.js 5.x with WebGL addon + FitAddon
 - **Styling**: Plain CSS with CSS variables in `src/App.css` — no CSS framework
