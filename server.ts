@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readlinkSync, unlinkSync, writeFileSync, mkdi
 import { hostname } from "os";
 import { join } from "path";
 import { sanitizeReplayBuffer } from "./serverBuffer";
+import { normalizeSessionHotReloadState } from "./serverSessionState";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
@@ -243,6 +244,15 @@ const g = globalThis as typeof globalThis & {
 if (!g.__wt_sessions) g.__wt_sessions = new Map();
 const sessions = g.__wt_sessions;
 const listSubscribers = new Set<ServerWebSocket<WSData>>();
+let normalizedHotReloadSessions = 0;
+for (const session of sessions.values()) {
+  if (normalizeSessionHotReloadState(session, process.platform === "win32" && isGitBashShell(session.shell))) {
+    normalizedHotReloadSessions += 1;
+  }
+}
+if (normalizedHotReloadSessions > 0) {
+  console.log(`[server] normalized ${normalizedHotReloadSessions} hot-reloaded sessions`);
+}
 
 // Platform-aware CWD reader.
 // Linux: single readlink syscall on /proc/<pid>/cwd — essentially free.
