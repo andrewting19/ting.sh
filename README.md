@@ -125,8 +125,7 @@ Working:
 - URL hash routing — `#<hostId>/<name>` deeplinks directly to a session (legacy `#<name>` still supported for local); auto-attaches on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
-- Mobile attach replay settle — attaching to an existing desktop-started session now briefly stages the socket after resize so SIGWINCH-driven redraws land before replay is snapshotted, which reduces mangled wraps/bleeding lines when opening TUIs like Codex CLI on a phone
-- Desktop attach replay bypass — wide terminals now skip the mobile-only replay settle delay, so normal session switching on desktop replays immediately instead of depending on the narrow-screen SIGWINCH timer path
+- Immediate attach replay — attach now resizes first, then replays immediately; any follow-up redraw bytes stream live after attach instead of going through a delayed staging path that could wedge reattaches on narrow screens
 - Dev hot-reload session migrations — in-memory sessions carried across `bun --hot` reloads are normalized to the current server shape before attach/list logic runs, so recent server-side field additions no longer strand existing dev sessions on a blank re-attach
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes

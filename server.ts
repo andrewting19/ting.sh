@@ -9,7 +9,6 @@ import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShell
 
 const PORT = parseInt(process.env.PORT ?? "7681");
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024)); // 10MB by default
-const ATTACH_REPLAY_SETTLE_MS = parseInt(process.env.ATTACH_REPLAY_SETTLE_MS ?? "40"); // wait for SIGWINCH redraws before replaying existing sessions
 
 interface Session {
   id: string;
@@ -19,16 +18,11 @@ interface Session {
   buffer: Buffer;
   bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
-  pendingClients: Map<ServerWebSocket<WSData>, PendingReplayAttach>;
   createdAt: number;
   cwd: string;
   cwdTimer: ReturnType<typeof setTimeout> | null;
   shellControlRemainder: string;
   shellTracksCwd: boolean;
-}
-
-interface PendingReplayAttach {
-  timer: ReturnType<typeof setTimeout> | null;
 }
 
 interface WSData {
@@ -302,7 +296,7 @@ function sessionInfo(s: Session) {
     hostId: HOST_CONFIG.self.id,
     name: s.name,
     createdAt: s.createdAt,
-    clients: s.clients.size + s.pendingClients.size,
+    clients: s.clients.size,
     cwd: s.cwd,
   };
 }
@@ -313,11 +307,7 @@ function detachClient(ws: ServerWebSocket<WSData>): boolean {
   ws.data.sessionId = null;
   const session = sessions.get(sessionId);
   if (!session) return false;
-  const pending = session.pendingClients.get(ws);
-  if (pending?.timer) clearTimeout(pending.timer);
-  const removedPending = session.pendingClients.delete(ws);
-  const removedLive = session.clients.delete(ws);
-  return removedPending || removedLive;
+  return session.clients.delete(ws);
 }
 
 function safeSend(ws: ServerWebSocket<WSData>, payload: string): boolean {
@@ -348,58 +338,30 @@ function broadcastSessions() {
   const recipients = new Set<ServerWebSocket<WSData>>(listSubscribers);
   for (const s of sessions.values()) {
     for (const ws of s.clients) recipients.add(ws);
-    for (const ws of s.pendingClients.keys()) recipients.add(ws);
   }
   for (const ws of recipients) safeSend(ws, msg);
 }
 
-function startPendingAttach(
+function finishAttach(
   ws: ServerWebSocket<WSData>,
   session: Session,
   readyPayload: string,
-  replayDelayMs: number,
-  requestId: string | null,
 ): void {
-  const pending: PendingReplayAttach = { timer: null };
-  session.pendingClients.set(ws, pending);
-
-  const flushReplay = () => {
-    try {
-      pending.timer = null;
-      if (ws.data.sessionId !== session.id) {
-        session.pendingClients.delete(ws);
-        return;
-      }
-
-      const replay = sanitizeReplayBuffer(session.buffer, session.bufferTrimmed);
-      if (!safeSend(ws, readyPayload)) return;
-      if (replay.length > 0 && !safeSendBinary(ws, replay)) return;
-
-      if (ws.data.sessionId !== session.id) {
-        session.pendingClients.delete(ws);
-        return;
-      }
-
-      session.pendingClients.delete(ws);
-      session.clients.add(ws);
-      broadcastSessions();
-    } catch (err) {
-      console.error(`[attach] replay flush failed for session ${session.id}:`, err);
-      session.pendingClients.delete(ws);
-      safeSend(ws, JSON.stringify({
-        type: "error",
-        message: "Attach replay failed",
-        ...(requestId !== null ? { requestId } : {}),
-      }));
-    }
-  };
-
-  if (replayDelayMs > 0) {
-    pending.timer = setTimeout(flushReplay, replayDelayMs);
+  try {
+    const replay = sanitizeReplayBuffer(session.buffer, session.bufferTrimmed);
+    if (!safeSend(ws, readyPayload)) return;
+    if (replay.length > 0 && !safeSendBinary(ws, replay)) return;
+    if (ws.data.sessionId !== session.id) return;
+    session.clients.add(ws);
+    broadcastSessions();
+  } catch (err) {
+    console.error(`[attach] replay failed for session ${session.id}:`, err);
+    safeSend(ws, JSON.stringify({
+      type: "error",
+      message: "Attach replay failed",
+    }));
     return;
   }
-
-  flushReplay();
 }
 
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
@@ -413,7 +375,6 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     clients: new Set(),
-    pendingClients: new Map(),
     createdAt: Date.now(),
     cwd: "",
     cwdTimer: null,
@@ -462,13 +423,9 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     },
     onExit() {
       if (session.cwdTimer) clearTimeout(session.cwdTimer);
-      for (const pending of session.pendingClients.values()) {
-        if (pending.timer) clearTimeout(pending.timer);
-      }
       sessions.delete(id);
       const msg = JSON.stringify({ type: "session-exit", id });
       for (const ws of session.clients) ws.send(msg);
-      for (const ws of session.pendingClients.keys()) safeSend(ws, msg);
       broadcastSessions();
     },
   });
@@ -590,15 +547,15 @@ const server = Bun.serve<WSData>({
             // sessions before ready — client needs the new session in its list so
             // the container div exists in the DOM when the ready handler fires.
             broadcastSessions();
-            startPendingAttach(ws, s, JSON.stringify({
+            finishAttach(ws, s, JSON.stringify({
               type: "ready",
               id: s.id,
               name: s.name,
               fresh: true,
               ...(requestId !== null ? { requestId } : {}),
-          }), 0, requestId);
-          break;
-        }
+            }));
+            break;
+          }
 
           case "attach": {
             const id = asString(data.id);
@@ -616,27 +573,24 @@ const server = Bun.serve<WSData>({
             // Detach from old session
             if (session && session !== s) detachClient(ws);
 
-          // Attach to new session
-          ws.data.sessionId = s.id;
-          const cols = asPositiveInt(data.cols);
-          const rows = asPositiveInt(data.rows);
-          const readyPayload = JSON.stringify({
-            type: "ready",
-            id: s.id,
-            name: s.name,
-            ...(requestId !== null ? { requestId } : {}),
-          });
+            // Attach to new session
+            ws.data.sessionId = s.id;
+            const cols = asPositiveInt(data.cols);
+            const rows = asPositiveInt(data.rows);
+            if (cols && rows) s.proc?.resize(cols, rows);
+            const readyPayload = JSON.stringify({
+              type: "ready",
+              id: s.id,
+              name: s.name,
+              ...(requestId !== null ? { requestId } : {}),
+            });
 
-          // Queue bytes emitted during resize/replay so a TUI started on a wide
-          // desktop can redraw for a narrow mobile viewport before we snapshot
-          // the replay buffer. This avoids replaying stale geometry frames.
-          const replayDelayMs = cols !== null && cols < 100 ? ATTACH_REPLAY_SETTLE_MS : 0;
-          startPendingAttach(ws, s, readyPayload, replayDelayMs, requestId);
-
-          // Resize to match client dimensions
-          if (cols && rows) s.proc?.resize(cols, rows);
-          break;
-        }
+            // Resize first, then send ready + full replay immediately. Any
+            // follow-up redraw bytes stream live after attach instead of going
+            // through a delayed staging path that can wedge reattaches.
+            finishAttach(ws, s, readyPayload);
+            break;
+          }
 
           case "input": {
             const input = asString(data.data);
@@ -672,13 +626,9 @@ const server = Bun.serve<WSData>({
             const s = sessions.get(id);
             if (!s) return;
             if (s.cwdTimer) clearTimeout(s.cwdTimer);
-            for (const pending of s.pendingClients.values()) {
-              if (pending.timer) clearTimeout(pending.timer);
-            }
             sessions.delete(id);
             const exitMsg = JSON.stringify({ type: "session-exit", id });
             for (const c of s.clients) c.send(exitMsg);
-            for (const ws of s.pendingClients.keys()) safeSend(ws, exitMsg);
             s.proc?.kill();
             broadcastSessions();
             break;
