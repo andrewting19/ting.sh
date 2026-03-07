@@ -357,41 +357,30 @@ function startPendingAttach(
   ws: ServerWebSocket<WSData>,
   session: Session,
   readyPayload: string,
-  replayDelayMs: number,
-  requestId: string | null,
+  replayDelayMs: number
 ): void {
   const pending: PendingReplayAttach = { timer: null };
   session.pendingClients.set(ws, pending);
 
   const flushReplay = () => {
-    try {
-      pending.timer = null;
-      if (ws.data.sessionId !== session.id) {
-        session.pendingClients.delete(ws);
-        return;
-      }
-
-      const replay = sanitizeReplayBuffer(session.buffer, session.bufferTrimmed);
-      if (!safeSend(ws, readyPayload)) return;
-      if (replay.length > 0 && !safeSendBinary(ws, replay)) return;
-
-      if (ws.data.sessionId !== session.id) {
-        session.pendingClients.delete(ws);
-        return;
-      }
-
+    pending.timer = null;
+    if (ws.data.sessionId !== session.id) {
       session.pendingClients.delete(ws);
-      session.clients.add(ws);
-      broadcastSessions();
-    } catch (err) {
-      console.error(`[attach] replay flush failed for session ${session.id}:`, err);
-      session.pendingClients.delete(ws);
-      safeSend(ws, JSON.stringify({
-        type: "error",
-        message: "Attach replay failed",
-        ...(requestId !== null ? { requestId } : {}),
-      }));
+      return;
     }
+
+    const replay = sanitizeReplayBuffer(session.buffer, session.bufferTrimmed);
+    if (!safeSend(ws, readyPayload)) return;
+    if (replay.length > 0 && !safeSendBinary(ws, replay)) return;
+
+    if (ws.data.sessionId !== session.id) {
+      session.pendingClients.delete(ws);
+      return;
+    }
+
+    session.pendingClients.delete(ws);
+    session.clients.add(ws);
+    broadcastSessions();
   };
 
   if (replayDelayMs > 0) {
@@ -560,66 +549,64 @@ const server = Bun.serve<WSData>({
       }
 
       const session = ws.data.sessionId ? sessions.get(ws.data.sessionId) : null;
-      try {
-        switch (data.type) {
-          case "list": {
-            listSubscribers.add(ws);
-            ws.send(JSON.stringify({ type: "sessions", list: [...sessions.values()].map(sessionInfo) }));
-            break;
-          }
 
-          case "detach": {
-            if (detachClient(ws)) {
-              broadcastSessions();
-            }
-            break;
-          }
-
-          case "create": {
-            // Detach from any current session
-            if (session) detachClient(ws);
-
-            const name = asString(data.name) ?? "";
-            const cols = asPositiveInt(data.cols) ?? 80;
-            const rows = asPositiveInt(data.rows) ?? 24;
-            const cwdRaw = asString(data.cwd);
-            const cwd = cwdRaw && cwdRaw.trim().length > 0 ? cwdRaw : undefined;
-            const requestId = asString(data.requestId);
-            const s = createSession(name, cols, rows, cwd);
-            ws.data.sessionId = s.id;
-            // sessions before ready — client needs the new session in its list so
-            // the container div exists in the DOM when the ready handler fires.
-            broadcastSessions();
-            startPendingAttach(ws, s, JSON.stringify({
-              type: "ready",
-              id: s.id,
-              name: s.name,
-              fresh: true,
-              ...(requestId !== null ? { requestId } : {}),
-          }), 0, requestId);
+      switch (data.type) {
+        case "list": {
+          listSubscribers.add(ws);
+          ws.send(JSON.stringify({ type: "sessions", list: [...sessions.values()].map(sessionInfo) }));
           break;
         }
 
-          case "attach": {
-            const id = asString(data.id);
-            const requestId = asString(data.requestId);
-            const s = id ? sessions.get(id) : null;
-            if (!s) {
-              ws.send(JSON.stringify({
-                type: "error",
-                message: "Session not found",
-                ...(requestId !== null ? { requestId } : {}),
-              }));
-              return;
-            }
+        case "detach": {
+          if (detachClient(ws)) {
+            broadcastSessions();
+          }
+          break;
+        }
 
-            // Detach from old session
-            if (session && session !== s) detachClient(ws);
+        case "create": {
+          // Detach from any current session
+          if (session) detachClient(ws);
+
+          const name = asString(data.name) ?? "";
+          const cols = asPositiveInt(data.cols) ?? 80;
+          const rows = asPositiveInt(data.rows) ?? 24;
+          const cwdRaw = asString(data.cwd);
+          const cwd = cwdRaw && cwdRaw.trim().length > 0 ? cwdRaw : undefined;
+          const requestId = asString(data.requestId);
+          const s = createSession(name, cols, rows, cwd);
+          ws.data.sessionId = s.id;
+          // sessions before ready — client needs the new session in its list so
+          // the container div exists in the DOM when the ready handler fires.
+          broadcastSessions();
+          startPendingAttach(ws, s, JSON.stringify({
+            type: "ready",
+            id: s.id,
+            name: s.name,
+            fresh: true,
+            ...(requestId !== null ? { requestId } : {}),
+          }), 0);
+          break;
+        }
+
+        case "attach": {
+          const id = asString(data.id);
+          const requestId = asString(data.requestId);
+          const s = id ? sessions.get(id) : null;
+          if (!s) {
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Session not found",
+              ...(requestId !== null ? { requestId } : {}),
+            }));
+            return;
+          }
+
+          // Detach from old session
+          if (session && session !== s) detachClient(ws);
 
           // Attach to new session
           ws.data.sessionId = s.id;
-          const cols = asPositiveInt(data.cols);
-          const rows = asPositiveInt(data.rows);
           const readyPayload = JSON.stringify({
             type: "ready",
             id: s.id,
@@ -630,68 +617,60 @@ const server = Bun.serve<WSData>({
           // Queue bytes emitted during resize/replay so a TUI started on a wide
           // desktop can redraw for a narrow mobile viewport before we snapshot
           // the replay buffer. This avoids replaying stale geometry frames.
-          const replayDelayMs = cols !== null && cols < 100 ? ATTACH_REPLAY_SETTLE_MS : 0;
-          startPendingAttach(ws, s, readyPayload, replayDelayMs, requestId);
+          startPendingAttach(ws, s, readyPayload, ATTACH_REPLAY_SETTLE_MS);
 
           // Resize to match client dimensions
+          const cols = asPositiveInt(data.cols);
+          const rows = asPositiveInt(data.rows);
           if (cols && rows) s.proc?.resize(cols, rows);
           break;
         }
 
-          case "input": {
-            const input = asString(data.data);
-            if (!session || input === null) return;
-            session.proc?.write(input);
-            // Enter key — schedule a CWD refresh after the command has time to run
-            if (input === "\r") scheduleCwdRefresh(session);
-            break;
-          }
-
-          case "resize": {
-            const cols = asPositiveInt(data.cols);
-            const rows = asPositiveInt(data.rows);
-            if (!session || !cols || !rows) return;
-            session.proc?.resize(cols, rows);
-            break;
-          }
-
-          case "rename": {
-            const id = asString(data.id);
-            if (!id) return;
-            const s = sessions.get(id);
-            if (!s) return;
-            const nextName = asString(data.name);
-            s.name = (nextName ?? "").trim() || s.name;
-            broadcastSessions();
-            break;
-          }
-
-          case "kill": {
-            const id = asString(data.id);
-            if (!id) return;
-            const s = sessions.get(id);
-            if (!s) return;
-            if (s.cwdTimer) clearTimeout(s.cwdTimer);
-            for (const pending of s.pendingClients.values()) {
-              if (pending.timer) clearTimeout(pending.timer);
-            }
-            sessions.delete(id);
-            const exitMsg = JSON.stringify({ type: "session-exit", id });
-            for (const c of s.clients) c.send(exitMsg);
-            for (const ws of s.pendingClients.keys()) safeSend(ws, exitMsg);
-            s.proc?.kill();
-            broadcastSessions();
-            break;
-          }
+        case "input": {
+          const input = asString(data.data);
+          if (!session || input === null) return;
+          session.proc?.write(input);
+          // Enter key — schedule a CWD refresh after the command has time to run
+          if (input === "\r") scheduleCwdRefresh(session);
+          break;
         }
-      } catch (err) {
-        console.error(`[ws] ${data.type} handler failed:`, err);
-        const requestId = asString(data.requestId);
-        safeSend(ws, JSON.stringify({
-          type: "error",
-          message: "Internal server error",
-          ...(requestId !== null ? { requestId } : {}),
-        }));
+
+        case "resize": {
+          const cols = asPositiveInt(data.cols);
+          const rows = asPositiveInt(data.rows);
+          if (!session || !cols || !rows) return;
+          session.proc?.resize(cols, rows);
+          break;
+        }
+
+        case "rename": {
+          const id = asString(data.id);
+          if (!id) return;
+          const s = sessions.get(id);
+          if (!s) return;
+          const nextName = asString(data.name);
+          s.name = (nextName ?? "").trim() || s.name;
+          broadcastSessions();
+          break;
+        }
+
+        case "kill": {
+          const id = asString(data.id);
+          if (!id) return;
+          const s = sessions.get(id);
+          if (!s) return;
+          if (s.cwdTimer) clearTimeout(s.cwdTimer);
+          for (const pending of s.pendingClients.values()) {
+            if (pending.timer) clearTimeout(pending.timer);
+          }
+          sessions.delete(id);
+          const exitMsg = JSON.stringify({ type: "session-exit", id });
+          for (const c of s.clients) c.send(exitMsg);
+          for (const ws of s.pendingClients.keys()) safeSend(ws, exitMsg);
+          s.proc?.kill();
+          broadcastSessions();
+          break;
+        }
       }
     },
 
