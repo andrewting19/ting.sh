@@ -126,7 +126,6 @@ Working:
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Mobile attach replay settle — attaching to an existing desktop-started session now briefly stages the socket after resize so SIGWINCH-driven redraws land before replay is snapshotted, which reduces mangled wraps/bleeding lines when opening TUIs like Codex CLI on a phone
-- Dev hot-reload session migrations — in-memory sessions carried across `bun --hot` reloads are normalized to the current server shape before attach/list logic runs, so recent server-side field additions no longer strand existing dev sessions on a blank re-attach
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
