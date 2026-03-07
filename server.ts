@@ -8,6 +8,7 @@ import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShell
 
 const PORT = parseInt(process.env.PORT ?? "7681");
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024)); // 10MB by default
+const ATTACH_REPLAY_SETTLE_MS = parseInt(process.env.ATTACH_REPLAY_SETTLE_MS ?? "40"); // wait for SIGWINCH redraws before replaying existing sessions
 
 interface Session {
   id: string;
@@ -17,11 +18,16 @@ interface Session {
   buffer: Buffer;
   bufferTrimmed: boolean;
   clients: Set<ServerWebSocket<WSData>>;
+  pendingClients: Map<ServerWebSocket<WSData>, PendingReplayAttach>;
   createdAt: number;
   cwd: string;
   cwdTimer: ReturnType<typeof setTimeout> | null;
   shellControlRemainder: string;
   shellTracksCwd: boolean;
+}
+
+interface PendingReplayAttach {
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 interface WSData {
@@ -281,7 +287,14 @@ function scheduleCwdRefresh(session: Session) {
 }
 
 function sessionInfo(s: Session) {
-  return { id: s.id, hostId: HOST_CONFIG.self.id, name: s.name, createdAt: s.createdAt, clients: s.clients.size, cwd: s.cwd };
+  return {
+    id: s.id,
+    hostId: HOST_CONFIG.self.id,
+    name: s.name,
+    createdAt: s.createdAt,
+    clients: s.clients.size + s.pendingClients.size,
+    cwd: s.cwd,
+  };
 }
 
 function detachClient(ws: ServerWebSocket<WSData>): boolean {
@@ -290,12 +303,27 @@ function detachClient(ws: ServerWebSocket<WSData>): boolean {
   ws.data.sessionId = null;
   const session = sessions.get(sessionId);
   if (!session) return false;
-  return session.clients.delete(ws);
+  const pending = session.pendingClients.get(ws);
+  if (pending?.timer) clearTimeout(pending.timer);
+  const removedPending = session.pendingClients.delete(ws);
+  const removedLive = session.clients.delete(ws);
+  return removedPending || removedLive;
 }
 
 function safeSend(ws: ServerWebSocket<WSData>, payload: string): boolean {
   try {
     ws.send(payload);
+    return true;
+  } catch {
+    listSubscribers.delete(ws);
+    detachClient(ws);
+    return false;
+  }
+}
+
+function safeSendBinary(ws: ServerWebSocket<WSData>, payload: Buffer): boolean {
+  try {
+    ws.sendBinary(payload);
     return true;
   } catch {
     listSubscribers.delete(ws);
@@ -310,8 +338,47 @@ function broadcastSessions() {
   const recipients = new Set<ServerWebSocket<WSData>>(listSubscribers);
   for (const s of sessions.values()) {
     for (const ws of s.clients) recipients.add(ws);
+    for (const ws of s.pendingClients.keys()) recipients.add(ws);
   }
   for (const ws of recipients) safeSend(ws, msg);
+}
+
+function startPendingAttach(
+  ws: ServerWebSocket<WSData>,
+  session: Session,
+  readyPayload: string,
+  replayDelayMs: number
+): void {
+  const pending: PendingReplayAttach = { timer: null };
+  session.pendingClients.set(ws, pending);
+
+  const flushReplay = () => {
+    pending.timer = null;
+    if (ws.data.sessionId !== session.id) {
+      session.pendingClients.delete(ws);
+      return;
+    }
+
+    const replay = sanitizeReplayBuffer(session.buffer, session.bufferTrimmed);
+    if (!safeSend(ws, readyPayload)) return;
+    if (replay.length > 0 && !safeSendBinary(ws, replay)) return;
+
+    if (ws.data.sessionId !== session.id) {
+      session.pendingClients.delete(ws);
+      return;
+    }
+
+    session.pendingClients.delete(ws);
+    session.clients.add(ws);
+    broadcastSessions();
+  };
+
+  if (replayDelayMs > 0) {
+    pending.timer = setTimeout(flushReplay, replayDelayMs);
+    return;
+  }
+
+  flushReplay();
 }
 
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
@@ -325,6 +392,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     clients: new Set(),
+    pendingClients: new Map(),
     createdAt: Date.now(),
     cwd: "",
     cwdTimer: null,
@@ -368,14 +436,18 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
 
       // Broadcast raw bytes to all attached clients
       if (payload.length > 0) {
-        for (const ws of session.clients) ws.sendBinary(payload);
+        for (const ws of session.clients) safeSendBinary(ws, payload);
       }
     },
     onExit() {
       if (session.cwdTimer) clearTimeout(session.cwdTimer);
+      for (const pending of session.pendingClients.values()) {
+        if (pending.timer) clearTimeout(pending.timer);
+      }
       sessions.delete(id);
       const msg = JSON.stringify({ type: "session-exit", id });
       for (const ws of session.clients) ws.send(msg);
+      for (const ws of session.pendingClients.keys()) safeSend(ws, msg);
       broadcastSessions();
     },
   });
@@ -484,7 +556,7 @@ const server = Bun.serve<WSData>({
 
         case "create": {
           // Detach from any current session
-          if (session) session.clients.delete(ws);
+          if (session) detachClient(ws);
 
           const name = asString(data.name) ?? "";
           const cols = asPositiveInt(data.cols) ?? 80;
@@ -497,18 +569,13 @@ const server = Bun.serve<WSData>({
           // sessions before ready — client needs the new session in its list so
           // the container div exists in the DOM when the ready handler fires.
           broadcastSessions();
-          ws.send(JSON.stringify({
+          startPendingAttach(ws, s, JSON.stringify({
             type: "ready",
             id: s.id,
             name: s.name,
             fresh: true,
             ...(requestId !== null ? { requestId } : {}),
-          }));
-          // Attach only after ready so no binary from the new PTY can arrive
-          // before client-side routing flips to this new session.
-          s.clients.add(ws);
-          if (s.buffer.length > 0) ws.sendBinary(s.buffer);
-          broadcastSessions();
+          }), 0);
           break;
         }
 
@@ -526,28 +593,26 @@ const server = Bun.serve<WSData>({
           }
 
           // Detach from old session
-          if (session && session !== s) session.clients.delete(ws);
+          if (session && session !== s) detachClient(ws);
 
           // Attach to new session
           ws.data.sessionId = s.id;
-          s.clients.add(ws);
-          broadcastSessions();
+          const readyPayload = JSON.stringify({
+            type: "ready",
+            id: s.id,
+            name: s.name,
+            ...(requestId !== null ? { requestId } : {}),
+          });
+
+          // Queue bytes emitted during resize/replay so a TUI started on a wide
+          // desktop can redraw for a narrow mobile viewport before we snapshot
+          // the replay buffer. This avoids replaying stale geometry frames.
+          startPendingAttach(ws, s, readyPayload, ATTACH_REPLAY_SETTLE_MS);
 
           // Resize to match client dimensions
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
           if (cols && rows) s.proc?.resize(cols, rows);
-
-          ws.send(JSON.stringify({
-            type: "ready",
-            id: s.id,
-            name: s.name,
-            ...(requestId !== null ? { requestId } : {}),
-          }));
-          // Replay after ready so client can validate requestId first and drop
-          // stale attach responses before any scrollback bytes are applied.
-          const replay = sanitizeReplayBuffer(s.buffer, s.bufferTrimmed);
-          if (replay.length > 0) ws.sendBinary(replay);
           break;
         }
 
@@ -585,9 +650,13 @@ const server = Bun.serve<WSData>({
           const s = sessions.get(id);
           if (!s) return;
           if (s.cwdTimer) clearTimeout(s.cwdTimer);
+          for (const pending of s.pendingClients.values()) {
+            if (pending.timer) clearTimeout(pending.timer);
+          }
           sessions.delete(id);
           const exitMsg = JSON.stringify({ type: "session-exit", id });
           for (const c of s.clients) c.send(exitMsg);
+          for (const ws of s.pendingClients.keys()) safeSend(ws, exitMsg);
           s.proc?.kill();
           broadcastSessions();
           break;
@@ -596,9 +665,7 @@ const server = Bun.serve<WSData>({
     },
 
     close(ws) {
-      const session = ws.data.sessionId ? sessions.get(ws.data.sessionId) : null;
-      if (session) {
-        session.clients.delete(ws);
+      if (detachClient(ws)) {
         broadcastSessions();
       }
       listSubscribers.delete(ws);
