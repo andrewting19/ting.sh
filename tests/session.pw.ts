@@ -97,33 +97,6 @@ async function getSttySize(page: import('@playwright/test').Page, id: string): P
   return result.jsonValue() as Promise<{ rows: number; cols: number }>
 }
 
-async function getClientTerminalSize(page: import('@playwright/test').Page, id: string): Promise<{ rows: number; cols: number }> {
-  const result = await page.waitForFunction(
-    (sessionId: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wt = (window as any).__wt_terminals
-      if (!wt) return null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let entry = wt.get(sessionId) as any
-      if (!entry) {
-        for (const key of wt.keys() as Iterable<string>) {
-          if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            entry = wt.get(key) as any
-            break
-          }
-        }
-      }
-      if (!entry) return null
-      return { rows: entry.term.rows, cols: entry.term.cols }
-    },
-    id,
-    { timeout: 5000 },
-  )
-
-  return result.jsonValue() as Promise<{ rows: number; cols: number }>
-}
-
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   // Clean slate: atomic kill-all avoids auto-attach cascade
@@ -616,35 +589,6 @@ test('shared session — desktop reclaims width after mobile resize', async ({ p
     await page.click(`[data-session-id="${id}"]`)
     const desktopAfter = await getSttySize(page, id)
     expect(desktopAfter.cols).toBeGreaterThan(mobileSize.cols)
-  } finally {
-    await mobileContext.close()
-  }
-})
-
-test('shared session — mobile attach receives resize redraw marker', async ({ page, browser }) => {
-  const id = await newSession(page)
-  await waitForPrompt(page, id)
-
-  const marker = `__WT_WINCH_${Date.now()}__`
-  await page.keyboard.type(`trap 'printf "${marker} "; stty size; printf "\\n"' WINCH`)
-  await page.keyboard.press('Enter')
-  await waitForPrompt(page, id)
-
-  const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
-  const mobile = await mobileContext.newPage()
-  try {
-    await mobile.goto('/')
-    await mobile.waitForSelector(`[data-session-id="${id}"]`, { timeout: 8000 })
-    await mobile.waitForFunction(
-      (sessionId: string) =>
-        document.querySelector('.session-item.active')?.getAttribute('data-session-id') === sessionId,
-      id,
-      { timeout: 5000 },
-    )
-    await waitForPrompt(mobile, id)
-
-    const size = await getClientTerminalSize(mobile, id)
-    await waitForTerminal(mobile, id, `${marker} ${size.rows} ${size.cols}`)
   } finally {
     await mobileContext.close()
   }

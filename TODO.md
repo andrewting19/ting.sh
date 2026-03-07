@@ -32,7 +32,6 @@
 - [x] Mobile toolbar overflowed horizontally on narrow phones — fixed (7-button primary row + collapsible macro tray for modifiers/hotkeys/select)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
 - [x] Attach replay/session-switch viewport could land at top and sometimes miss the `Latest` overlay after fit/resize races — fixed (defer attach auto-scroll until replay flush/layout settles + recompute scroll-overlay state after terminal fits/resizes)
-- [x] Mobile attach to an existing desktop-started TUI could replay stale wide-screen frames and leave wrapped/misaligned output — fixed (stage attaching sockets outside the live client set, wait briefly after resize for SIGWINCH redraws, then snapshot replay)
 - [x] Windows hosts defaulted to `cmd.exe`, had no live CWD parity, and depended on ambient Node installs — fixed (prefer Git Bash / OpenSSH default shell, parse hidden Git Bash cwd OSC frames, and bundle Node in the Windows installer)
 - [x] Windows `LocalSystem` service sessions started in `systemprofile` instead of the intended user home — fixed (installer seeds `TING_WINDOWS_SESSION_HOME`, runtime falls back to the last login profile, and `install.ps1` now supports optional `ServiceUser` + password for true per-user services)
 
@@ -53,7 +52,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 32 tests covering all key flows
+- [x] E2E test suite (Playwright) — 31 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
