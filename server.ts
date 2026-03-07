@@ -265,19 +265,34 @@ async function getCwd(pid: number): Promise<string | null> {
   }
 }
 
-// Schedule a CWD refresh for a session 200ms after the last Enter keypress.
-// Debounced so rapid keypresses collapse into one read.
+const CWD_REFRESH_RETRY_DELAYS_MS = [200, 400, 800];
+
+// Schedule a CWD refresh after Enter. Browser clients send one WS frame per
+// keypress, so a single 200ms sample can land before the shell has consumed
+// the full command and updated its cwd. Retry briefly before falling back to
+// the 30s background poll.
 function scheduleCwdRefresh(session: Session) {
   if (session.cwdTimer) clearTimeout(session.cwdTimer);
-  session.cwdTimer = setTimeout(async () => {
+  const baselineCwd = session.cwd;
+  let attempt = 0;
+
+  const refresh = async () => {
     session.cwdTimer = null;
     if (!session.proc) return;
     const cwd = await getCwd(session.proc.pid);
     if (cwd && cwd !== session.cwd) {
       session.cwd = cwd;
       broadcastSessions();
+      return;
     }
-  }, 200);
+    // Another path already updated the session; no need to keep retrying.
+    if (session.cwd !== baselineCwd) return;
+    attempt += 1;
+    if (attempt >= CWD_REFRESH_RETRY_DELAYS_MS.length) return;
+    session.cwdTimer = setTimeout(refresh, CWD_REFRESH_RETRY_DELAYS_MS[attempt]);
+  };
+
+  session.cwdTimer = setTimeout(refresh, CWD_REFRESH_RETRY_DELAYS_MS[attempt]);
 }
 
 function sessionInfo(s: Session) {

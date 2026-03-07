@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { utimesSync } from 'node:fs'
+import path from 'node:path'
 import { getSessions, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
 
 /** Returns the data-session-id of the currently active session item. */
@@ -108,6 +109,35 @@ test('create session — appears in sidebar and shows shell prompt', async ({ pa
   expect(id).toBeTruthy()
   // Shell prompt should appear (zsh/bash both show %)
   await waitForPrompt(page, id)
+})
+
+test('cwd subtitle updates after cd', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const initialCwdHandle = await page.waitForFunction(
+    (sessionId: string) =>
+      document.querySelector(`[data-session-id="${sessionId}"] .session-cwd`)?.getAttribute('title') ?? null,
+    id,
+    { timeout: 5000 },
+  )
+  const initialCwd = await initialCwdHandle.jsonValue() as string
+  expect(initialCwd).toBeTruthy()
+
+  const expectedParent = /^[A-Za-z]:[\\/]/.test(initialCwd)
+    ? path.win32.dirname(initialCwd.replace(/\//g, '\\')).replace(/\\/g, '/')
+    : path.posix.dirname(initialCwd)
+  expect(expectedParent).not.toBe(initialCwd)
+
+  await page.keyboard.type('cd ..')
+  await page.keyboard.press('Enter')
+
+  await page.waitForFunction(
+    ([sessionId, cwd]: [string, string]) =>
+      document.querySelector(`[data-session-id="${sessionId}"] .session-cwd`)?.getAttribute('title') === cwd,
+    [id, expectedParent] as [string, string],
+    { timeout: 5000 },
+  )
 })
 
 test('switch sessions — scrollback not duplicated on return', async ({ page }) => {

@@ -2,6 +2,7 @@
 
 ## Bugs (lower priority)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
+- [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
 - [x] Kill session uses native `confirm()` — replaced with custom Modal
 - [x] Session switch showed blank terminal — fixed
@@ -52,7 +53,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 31 tests covering all key flows
+- [x] E2E test suite (Playwright) — 32 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)

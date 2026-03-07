@@ -104,7 +104,7 @@ Working:
 - Drag-and-drop session reordering in sidebar, persisted to per-host localStorage keys
 - Host-scoped drag reorder hardening — drag source host is validated from live state during drag events (avoids stale-closure no-op drops)
 - Champion names for auto-generated sessions (all 172 LoL champions)
-- Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
+- Live CWD subtitle in sidebar — updates on Enter keypress with short retries for browser-driven `cd`s, plus a 30s fallback poll. No shell config needed.
 - Windows host support (validated on `mom`) — Git Bash is preferred over `cmd.exe` when available, CWD tracking works via a hidden Git Bash prompt hook, duplicate/create-with-CWD works on Windows hosts, and passwordless `LocalSystem` installs now default new shells to the intended user home instead of `systemprofile`
 - Windows installer/runtime hardening — `deploy/install.ps1` now bundles a portable Node runtime for the PTY worker, supports configurable `ServiceName` / `Port` / optional `ServiceUser`, and Windows auto-update reinstalls dependencies after extracting a new release
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
@@ -131,7 +131,7 @@ Working:
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 31 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 32 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
