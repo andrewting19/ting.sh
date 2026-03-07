@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n server,vite -c cyan,magenta \"bun run dev:server\" \"bun run dev:client\"",
-    "dev:server": "bun run --hot server.ts",
+    "dev:server": "AUTO_UPDATE=false bun run --hot server.ts",
     "dev:client": "vite",
     "build": "vite build",
     "start": "bun run server.ts",

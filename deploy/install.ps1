@@ -103,41 +103,51 @@ finally {
   Pop-Location
 }
 
-# 6. Download and install NSSM
+# 6. Stop existing service before touching files
+$serviceName = "ting.sh"
+$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if ($existingService -and $existingService.Status -ne "Stopped") {
+  Write-Step "Stopping existing service '$serviceName'"
+  Stop-Service -Name $serviceName -Force
+  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+}
+
+# 7. Download and install NSSM (skip if already present)
 $nssmVersion = "2.24"
-$nssmZipUrl = "https://nssm.cc/release/nssm-$nssmVersion.zip"
-$nssmZipPath = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}.zip" -f [guid]::NewGuid().ToString("N"))
-$nssmTempDir = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}" -f [guid]::NewGuid().ToString("N"))
 $nssmInstallDir = Join-Path $InstallDir "nssm"
-
-Write-Step "Downloading NSSM $nssmVersion"
-Invoke-WebRequest -Uri $nssmZipUrl -OutFile $nssmZipPath
-
-Write-Step "Extracting NSSM"
-New-Item -ItemType Directory -Path $nssmTempDir -Force | Out-Null
-Expand-Archive -Path $nssmZipPath -DestinationPath $nssmTempDir -Force
-Remove-Item -Path $nssmZipPath -Force
-
-$nssmExtractedDir = Join-Path $nssmTempDir "nssm-$nssmVersion"
-if (-not (Test-Path $nssmExtractedDir)) {
-  throw "NSSM extraction failed: expected $nssmExtractedDir"
-}
-
-if (Test-Path $nssmInstallDir) {
-  Remove-Item -Path $nssmInstallDir -Recurse -Force
-}
-New-Item -ItemType Directory -Path $nssmInstallDir -Force | Out-Null
-Copy-Item -Path (Join-Path $nssmExtractedDir "*") -Destination $nssmInstallDir -Recurse -Force
-Remove-Item -Path $nssmTempDir -Recurse -Force
-
 $nssmArch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
 $nssmExe = Join-Path $nssmInstallDir "$nssmArch\\nssm.exe"
+
+if (-not (Test-Path $nssmExe)) {
+  $nssmZipUrl = "https://nssm.cc/release/nssm-$nssmVersion.zip"
+  $nssmZipPath = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}.zip" -f [guid]::NewGuid().ToString("N"))
+  $nssmTempDir = Join-Path $env:TEMP ("nssm-$nssmVersion-{0}" -f [guid]::NewGuid().ToString("N"))
+
+  Write-Step "Downloading NSSM $nssmVersion"
+  Invoke-WebRequest -Uri $nssmZipUrl -OutFile $nssmZipPath
+
+  Write-Step "Extracting NSSM"
+  New-Item -ItemType Directory -Path $nssmTempDir -Force | Out-Null
+  Expand-Archive -Path $nssmZipPath -DestinationPath $nssmTempDir -Force
+  Remove-Item -Path $nssmZipPath -Force
+
+  $nssmExtractedDir = Join-Path $nssmTempDir "nssm-$nssmVersion"
+  if (-not (Test-Path $nssmExtractedDir)) {
+    throw "NSSM extraction failed: expected $nssmExtractedDir"
+  }
+
+  New-Item -ItemType Directory -Path $nssmInstallDir -Force | Out-Null
+  Copy-Item -Path (Join-Path $nssmExtractedDir "*") -Destination $nssmInstallDir -Recurse -Force
+  Remove-Item -Path $nssmTempDir -Recurse -Force
+} else {
+  Write-Step "NSSM already installed, skipping download"
+}
+
 if (-not (Test-Path $nssmExe)) {
   throw "NSSM executable not found: $nssmExe"
 }
 
-# 7. Register and start the Windows service
-$serviceName = "ting.sh"
+# 8. Register and start the Windows service
 $logsDir = Join-Path $InstallDir "logs"
 $stdoutLog = Join-Path $logsDir "service-stdout.log"
 $stderrLog = Join-Path $logsDir "service-stderr.log"
@@ -146,15 +156,9 @@ New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 if (-not (Test-Path $stdoutLog)) { New-Item -ItemType File -Path $stdoutLog | Out-Null }
 if (-not (Test-Path $stderrLog)) { New-Item -ItemType File -Path $stderrLog | Out-Null }
 
-$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if (-not $existingService) {
   Write-Step "Creating Windows service '$serviceName'"
   Invoke-External -FilePath $nssmExe -Arguments @("install", $serviceName, $bunPath, "run", "server.ts")
-}
-elseif ($existingService.Status -ne "Stopped") {
-  Write-Step "Stopping existing service '$serviceName'"
-  Stop-Service -Name $serviceName -Force
-  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
 }
 
 Write-Step "Configuring service '$serviceName'"
