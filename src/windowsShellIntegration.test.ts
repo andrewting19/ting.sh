@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test'
 import {
+  applyWindowsSessionIdentity,
   buildGitBashPromptCommand,
   isGitBashShell,
+  isWindowsServiceAccountUser,
+  isWindowsServiceProfileHome,
   normalizeWindowsPath,
+  resolveWindowsSessionIdentityFromEnv,
   stripWindowsCwdControlFrames,
 } from './windowsShellIntegration'
 
@@ -15,6 +19,42 @@ test('isGitBashShell detects common Git for Windows shell paths', () => {
   expect(isGitBashShell('C:/Program Files/Git/bin/bash.exe')).toBe(true)
   expect(isGitBashShell('C:/Program Files/Git/usr/bin/bash.exe')).toBe(true)
   expect(isGitBashShell('C:/Windows/System32/cmd.exe')).toBe(false)
+})
+
+test('resolveWindowsSessionIdentityFromEnv prefers explicit ting session overrides', () => {
+  const identity = resolveWindowsSessionIdentityFromEnv({
+    TING_WINDOWS_SESSION_USER: 'Andrew',
+    TING_WINDOWS_SESSION_HOME: 'C:\\Users\\Andrew',
+    USERNAME: 'SYSTEM',
+    USERPROFILE: 'C:\\Windows\\System32\\config\\systemprofile',
+  })
+
+  expect(identity).toEqual({
+    user: 'Andrew',
+    home: 'C:/Users/Andrew',
+  })
+})
+
+test('applyWindowsSessionIdentity populates shell home env', () => {
+  const env = applyWindowsSessionIdentity(
+    { TERM: 'xterm-256color' },
+    { user: 'Andrew', home: 'C:/Users/Andrew' },
+  )
+
+  expect(env).toMatchObject({
+    TERM: 'xterm-256color',
+    HOME: 'C:/Users/Andrew',
+    USERPROFILE: 'C:\\Users\\Andrew',
+    HOMEDRIVE: 'C:',
+    HOMEPATH: '\\Users\\Andrew',
+  })
+})
+
+test('service account helpers detect Windows service identities', () => {
+  expect(isWindowsServiceAccountUser('LocalSystem')).toBe(true)
+  expect(isWindowsServiceAccountUser('Andrew')).toBe(false)
+  expect(isWindowsServiceProfileHome('C:\\Windows\\System32\\config\\systemprofile')).toBe(true)
+  expect(isWindowsServiceProfileHome('C:/Users/Andrew')).toBe(false)
 })
 
 test('buildGitBashPromptCommand preserves existing prompt hooks', () => {

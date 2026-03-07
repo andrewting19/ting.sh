@@ -5,7 +5,12 @@
 [CmdletBinding()]
 param(
   [string]$Repo = "andrewting19/ting.sh",
-  [string]$InstallDir = "$env:ProgramData\\ting.sh"
+  [string]$InstallDir = "$env:ProgramData\\ting.sh",
+  [string]$ServiceName = "ting.sh",
+  [int]$Port = 7681,
+  [string]$ServiceUser = "",
+  [string]$ServicePassword = "",
+  [string]$SessionHome = ""
 )
 
 Set-StrictMode -Version Latest
@@ -87,8 +92,193 @@ function Ensure-BundledNode {
   Write-Step "Bundled Node version: $(& $nodeExe --version)"
 }
 
+function Test-BuiltinServiceAccount {
+  param([string]$AccountName)
+
+  if ([string]::IsNullOrWhiteSpace($AccountName)) {
+    return $false
+  }
+
+  $normalized = $AccountName.Trim().ToLowerInvariant()
+  return $normalized -eq "localsystem" `
+    -or $normalized -eq "localservice" `
+    -or $normalized -eq "networkservice" `
+    -or $normalized -eq "nt authority\\system" `
+    -or $normalized -eq "nt authority\\localsystem" `
+    -or $normalized -eq "nt authority\\localservice" `
+    -or $normalized -eq "nt authority\\networkservice"
+}
+
+function Get-LeafWindowsUserName {
+  param([string]$AccountName)
+
+  if ([string]::IsNullOrWhiteSpace($AccountName)) {
+    return ""
+  }
+
+  $trimmed = $AccountName.Trim()
+  if ($trimmed.Contains("\")) {
+    return ($trimmed.Split("\") | Select-Object -Last 1)
+  }
+  return $trimmed
+}
+
+function Normalize-OptionalPath {
+  param([string]$PathValue)
+
+  if ([string]::IsNullOrWhiteSpace($PathValue)) {
+    return ""
+  }
+
+  return [System.IO.Path]::GetFullPath($PathValue.Trim())
+}
+
+function Resolve-PreferredUserName {
+  param(
+    [string]$RequestedServiceUser
+  )
+
+  if (-not (Test-BuiltinServiceAccount $RequestedServiceUser)) {
+    $serviceLeaf = Get-LeafWindowsUserName $RequestedServiceUser
+    if (-not [string]::IsNullOrWhiteSpace($serviceLeaf)) {
+      return $serviceLeaf
+    }
+  }
+
+  return $env:USERNAME
+}
+
+function Resolve-SessionHome {
+  param(
+    [string]$PreferredUserName,
+    [string]$RequestedServiceUser
+  )
+
+  if (-not (Test-BuiltinServiceAccount $RequestedServiceUser)) {
+    $leaf = Get-LeafWindowsUserName $RequestedServiceUser
+    if (-not [string]::IsNullOrWhiteSpace($leaf)) {
+      $systemDrive = if ([string]::IsNullOrWhiteSpace($env:SystemDrive)) { "C:" } else { $env:SystemDrive }
+      $candidate = Join-Path $systemDrive ("Users\\{0}" -f $leaf)
+      if (Test-Path $candidate) {
+        return (Normalize-OptionalPath $candidate)
+      }
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($PreferredUserName) -and -not [string]::IsNullOrWhiteSpace($env:SystemDrive)) {
+    $candidate = Join-Path $env:SystemDrive ("Users\\{0}" -f $PreferredUserName)
+    if (Test-Path $candidate) {
+      return (Normalize-OptionalPath $candidate)
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+    return (Normalize-OptionalPath $env:USERPROFILE)
+  }
+
+  return ""
+}
+
+function Get-ExistingServiceEnvironment {
+  param([string]$ServiceName)
+
+  $parametersPath = "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\$ServiceName\\Parameters"
+  if (-not (Test-Path $parametersPath)) {
+    return @()
+  }
+
+  $value = (Get-ItemProperty -Path $parametersPath -Name AppEnvironmentExtra -ErrorAction SilentlyContinue).AppEnvironmentExtra
+  if ($null -eq $value) {
+    return @()
+  }
+
+  return @($value)
+}
+
+function Merge-ServiceEnvironment {
+  param(
+    [string[]]$ExistingEntries,
+    [hashtable]$ManagedEntries
+  )
+
+  $merged = [ordered]@{}
+  foreach ($line in $ExistingEntries) {
+    if ([string]::IsNullOrWhiteSpace($line)) {
+      continue
+    }
+
+    $separator = $line.IndexOf("=")
+    if ($separator -lt 1) {
+      continue
+    }
+
+    $key = $line.Substring(0, $separator)
+    if ($ManagedEntries.ContainsKey($key)) {
+      continue
+    }
+
+    $merged[$key] = $line.Substring($separator + 1)
+  }
+
+  foreach ($key in $ManagedEntries.Keys) {
+    $value = $ManagedEntries[$key]
+    if ([string]::IsNullOrWhiteSpace($value)) {
+      continue
+    }
+    $merged[$key] = [string]$value
+  }
+
+  return @(
+    $merged.Keys | ForEach-Object { "${_}=$($merged[$_])" }
+  )
+}
+
+function Set-ServiceIdentity {
+  param(
+    [Parameter(Mandatory = $true)][string]$NssmExe,
+    [Parameter(Mandatory = $true)][string]$ServiceName,
+    [string]$ServiceUser,
+    [string]$ServicePassword
+  )
+
+  if ([string]::IsNullOrWhiteSpace($ServiceUser)) {
+    Invoke-External -FilePath $NssmExe -Arguments @("set", $ServiceName, "ObjectName", "LocalSystem")
+    return
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ServicePassword)) {
+    throw "ServicePassword is required when ServiceUser is provided."
+  }
+
+  Invoke-External -FilePath $NssmExe -Arguments @("set", $ServiceName, "ObjectName", $ServiceUser, $ServicePassword)
+}
+
 Write-Step "Installing ting.sh"
 Assert-Administrator
+
+if ([string]::IsNullOrWhiteSpace($ServiceUser) -and -not [string]::IsNullOrWhiteSpace($ServicePassword)) {
+  throw "ServicePassword cannot be provided without ServiceUser."
+}
+
+$preferredUserName = Resolve-PreferredUserName -RequestedServiceUser $ServiceUser
+$requestedSessionHomeOverride = Normalize-OptionalPath $SessionHome
+$resolvedSessionHome = ""
+if (-not [string]::IsNullOrWhiteSpace($requestedSessionHomeOverride)) {
+  $resolvedSessionHome = $requestedSessionHomeOverride
+} elseif ([string]::IsNullOrWhiteSpace($ServiceUser) -or (Test-BuiltinServiceAccount $ServiceUser)) {
+  $resolvedSessionHome = Resolve-SessionHome -PreferredUserName $preferredUserName -RequestedServiceUser $ServiceUser
+}
+
+if (-not [string]::IsNullOrWhiteSpace($resolvedSessionHome)) {
+  Write-Step "Shell home override: $resolvedSessionHome"
+} elseif (-not [string]::IsNullOrWhiteSpace($ServiceUser) -and -not (Test-BuiltinServiceAccount $ServiceUser)) {
+  Write-Step "Shell home override: none (service account profile will be used)"
+}
+if ([string]::IsNullOrWhiteSpace($ServiceUser)) {
+  Write-Step "Service account: LocalSystem"
+} else {
+  Write-Step "Service account: $ServiceUser"
+}
 
 # 1. Install Bun if not present
 $bunCommand = Get-Command bun -ErrorAction SilentlyContinue
@@ -132,12 +322,11 @@ if (-not $zipAsset) {
 }
 
 # 3. Stop existing service before touching files
-$serviceName = "ting.sh"
-$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existingService -and $existingService.Status -ne "Stopped") {
-  Write-Step "Stopping existing service '$serviceName'"
-  Stop-Service -Name $serviceName -Force
-  (Get-Service -Name $serviceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+  Write-Step "Stopping existing service '$ServiceName'"
+  Stop-Service -Name $ServiceName -Force
+  (Get-Service -Name $ServiceName).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
 }
 
 # 4. Download and extract
@@ -205,35 +394,43 @@ if (-not (Test-Path $nssmExe)) {
 $logsDir = Join-Path $InstallDir "logs"
 $stdoutLog = Join-Path $logsDir "service-stdout.log"
 $stderrLog = Join-Path $logsDir "service-stderr.log"
+$managedServiceEnv = [ordered]@{
+  PORT = [string]$Port
+  TING_WINDOWS_SESSION_HOME = $resolvedSessionHome
+}
 
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 if (-not (Test-Path $stdoutLog)) { New-Item -ItemType File -Path $stdoutLog | Out-Null }
 if (-not (Test-Path $stderrLog)) { New-Item -ItemType File -Path $stderrLog | Out-Null }
 
 if (-not $existingService) {
-  Write-Step "Creating Windows service '$serviceName'"
-  Invoke-External -FilePath $nssmExe -Arguments @("install", $serviceName, $bunPath, "run", "server.ts")
+  Write-Step "Creating Windows service '$ServiceName'"
+  Invoke-External -FilePath $nssmExe -Arguments @("install", $ServiceName, $bunPath, "run", "server.ts")
 }
 
-Write-Step "Configuring service '$serviceName'"
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "Application", $bunPath)
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppDirectory", $InstallDir)
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppParameters", "run server.ts")
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppExit", "Default", "Restart")
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "Start", "SERVICE_AUTO_START")
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppStdout", $stdoutLog)
-Invoke-External -FilePath $nssmExe -Arguments @("set", $serviceName, "AppStderr", $stderrLog)
+Write-Step "Configuring service '$ServiceName'"
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "Application", $bunPath)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "AppDirectory", $InstallDir)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "AppParameters", "run server.ts")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "AppExit", "Default", "Restart")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "Start", "SERVICE_AUTO_START")
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "AppStdout", $stdoutLog)
+Invoke-External -FilePath $nssmExe -Arguments @("set", $ServiceName, "AppStderr", $stderrLog)
+Set-ServiceIdentity -NssmExe $nssmExe -ServiceName $ServiceName -ServiceUser $ServiceUser -ServicePassword $ServicePassword
+$existingEnv = if ($existingService) { Get-ExistingServiceEnvironment -ServiceName $ServiceName } else { @() }
+$mergedEnv = Merge-ServiceEnvironment -ExistingEntries $existingEnv -ManagedEntries $managedServiceEnv
+Invoke-External -FilePath $nssmExe -Arguments (@("set", $ServiceName, "AppEnvironmentExtra") + $mergedEnv)
 
-Write-Step "Starting service '$serviceName'"
-Start-Service -Name $serviceName
-(Get-Service -Name $serviceName).WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+Write-Step "Starting service '$ServiceName'"
+Start-Service -Name $ServiceName
+(Get-Service -Name $ServiceName).WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
 
-$service = Get-Service -Name $serviceName
+$service = Get-Service -Name $ServiceName
 Write-Step "Service status: $($service.Status)"
 Write-Step "ting.sh $latestTag installed to $InstallDir"
 Write-Host "Logs:"
 Write-Host "  Stdout: $stdoutLog"
 Write-Host "  Stderr: $stderrLog"
 Write-Host "Service management:"
-Write-Host "  Get-Service -Name '$serviceName'"
-Write-Host "  Restart-Service -Name '$serviceName'"
+Write-Host "  Get-Service -Name '$ServiceName'"
+Write-Host "  Restart-Service -Name '$ServiceName'"

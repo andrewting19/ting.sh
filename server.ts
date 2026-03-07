@@ -251,7 +251,7 @@ const listSubscribers = new Set<ServerWebSocket<WSData>>();
 async function getCwd(pid: number): Promise<string | null> {
   try {
     if (process.platform === "win32") {
-      return null; // Windows CWD detection not yet implemented
+      return null; // Windows CWD is shell-reported instead of parent-polled.
     }
     if (process.platform === "linux") {
       return readlinkSync(`/proc/${pid}/cwd`);

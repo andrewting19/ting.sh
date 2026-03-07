@@ -80,7 +80,7 @@ The git log is the project history. `git log --oneline` should read like a chang
 ## Deployment
 
 - **Production**: systemd service (`deploy/ting-sh.service`) runs `bun run server.ts` from `/opt/ting.sh/`
-- **Install**: `deploy/install.sh` — installs Bun, downloads latest GitHub release tarball, sets up systemd
+- **Install**: `deploy/install.sh` — installs Bun, downloads latest GitHub release tarball, sets up systemd. Windows uses `deploy/install.ps1` + NSSM; `ServiceUser`/`ServicePassword` are optional, otherwise the installer records `TING_WINDOWS_SESSION_HOME` so `LocalSystem` services still start shells in the intended user home.
 - **Release**: `scripts/release.sh` — bumps `VERSION`, builds, creates tarball, tags, publishes via `gh release create`
 - **Auto-update**: server polls GitHub releases API every 5min, downloads new tarball, extracts in-place, `process.exit(0)` for systemd restart. Disable with `AUTO_UPDATE=false`.
 - **Config**: `hosts.json` at server root (gitignored, machine-specific). `HOSTS_FILE=none` env var skips loading (used in tests).

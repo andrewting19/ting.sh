@@ -42,6 +42,20 @@ curl -fsSL https://raw.githubusercontent.com/andrewting19/ting.sh/main/deploy/in
 
 Release a new version: `bun run release` (or `release:minor` / `release:major`). All VPS auto-update within 5 minutes.
 
+Install on Windows (run in elevated PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/andrewting19/ting.sh/main/deploy/install.ps1 | iex
+```
+
+Optional Windows service-account install:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/andrewting19/ting.sh/main/deploy/install.ps1))) -ServiceUser "DESKTOP-42S5MOA\\Andrew" -ServicePassword "<password>"
+```
+
+If `ServiceUser` is omitted, the installer keeps the NSSM service on `LocalSystem` but records the intended shell home so sessions start in your user profile instead of `C:\Windows\System32\config\systemprofile`. If you need the shell to run with your actual Windows user token (`whoami`, file/network permissions), you must install the service with `ServiceUser` + `ServicePassword`.
+
 **Note:** auto-update restarts the server, which kills all running PTY sessions. Session persistence across restarts is on the roadmap.
 
 ### Multi-host setup
@@ -72,6 +86,7 @@ Every machine in the fleet needs its own `hosts.json` with the other machines as
 - `AUTO_UPDATE` — set to `false` to disable (default: enabled)
 - `AUTO_UPDATE_INTERVAL` — poll interval in ms (default: 300000 / 5min)
 - `AUTO_UPDATE_REPO` — GitHub repo to poll (default: `andrewting19/ting.sh`)
+- `TING_WINDOWS_SESSION_HOME` — Windows-only override for the shell home directory when the service itself runs as `LocalSystem`
 
 ## Current state
 
@@ -90,8 +105,8 @@ Working:
 - Host-scoped drag reorder hardening — drag source host is validated from live state during drag events (avoids stale-closure no-op drops)
 - Champion names for auto-generated sessions (all 172 LoL champions)
 - Live CWD subtitle in sidebar — updates on Enter keypress, 30s fallback poll. No shell config needed.
-- Windows host support (validated on `mom`) — Git Bash is preferred over `cmd.exe` when available, CWD tracking works via a hidden Git Bash prompt hook, and duplicate/create-with-CWD works on Windows hosts
-- Windows installer/runtime hardening — `deploy/install.ps1` now bundles a portable Node runtime for the PTY worker, and Windows auto-update reinstalls dependencies after extracting a new release
+- Windows host support (validated on `mom`) — Git Bash is preferred over `cmd.exe` when available, CWD tracking works via a hidden Git Bash prompt hook, duplicate/create-with-CWD works on Windows hosts, and passwordless `LocalSystem` installs now default new shells to the intended user home instead of `systemprofile`
+- Windows installer/runtime hardening — `deploy/install.ps1` now bundles a portable Node runtime for the PTY worker, supports configurable `ServiceName` / `Port` / optional `ServiceUser`, and Windows auto-update reinstalls dependencies after extracting a new release
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
