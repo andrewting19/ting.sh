@@ -118,6 +118,7 @@ export function App() {
   // Latest in-flight attach request. Older ready responses are ignored.
   const pendingRequestRef = useRef<PendingRequest | null>(null)
   const pendingAttachTargetKeyRef = useRef<SessionKey | null>(null)
+  const queuedAttachKeyRef = useRef<SessionKey | null>(null)
   const nextRequestSeqRef = useRef(0)
   // When we ignore a stale attach ready, drop binary until the newest attach
   // is confirmed so replay from the stale attach cannot contaminate terminals.
@@ -379,25 +380,29 @@ export function App() {
     }
   }, [hosts, tm])
 
-  const sendAttachRequest = useCallback((key: SessionKey) => {
+  const sendAttachRequest = useCallback((key: SessionKey, dims: { cols: number; rows: number }) => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
     const { hostId, sessionId } = parseKey(key)
     pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
-    const dims = tm.getDimensions(key)
     sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
   }, [sendToHost, tm])
 
-  const syncSessionSize = useCallback((key: SessionKey) => {
+  const prepareTerminalForAttach = useCallback((key: SessionKey) => {
     const container = containerRefs.current.get(key)
     if (container) tm.ensureTerminal(key, container)
     tm.setActive(key)
-    const dims = tm.getDimensions(key)
+    return tm.getMeasuredDimensions(key)
+  }, [tm])
+
+  const syncSessionSize = useCallback((key: SessionKey) => {
+    const dims = prepareTerminalForAttach(key)
+    if (!dims) return null
     sendToHost(parseKey(key).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
     return dims
-  }, [sendToHost, tm])
+  }, [prepareTerminalForAttach, sendToHost])
 
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
@@ -550,17 +555,22 @@ export function App() {
         sendToHost(host.id, { type: 'list' })
         const key = currentKeyRef.current
         if (key && parseKey(key).hostId === host.id) {
-          const container = containerRefs.current.get(key)
-          if (container) tm.ensureTerminal(key, container)
-          tm.setActive(key)
+          const dims = prepareTerminalForAttach(key)
           tm.reset(key)
-          sendAttachRequest(key)
+          if (dims) {
+            sendAttachRequest(key, dims)
+          } else {
+            queuedAttachKeyRef.current = key
+          }
         }
       }
       if (prev === 'connected' && next !== 'connected') {
         if (pendingRequestRef.current?.hostId === host.id) {
           pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
+          if (queuedAttachKeyRef.current && parseKey(queuedAttachKeyRef.current).hostId === host.id) {
+            queuedAttachKeyRef.current = null
+          }
           dropBinaryUntilReadyRef.current = false
           if (scrollToBottomAfterAttachBinaryRef.current && parseKey(scrollToBottomAfterAttachBinaryRef.current).hostId === host.id) {
             scrollToBottomAfterAttachBinaryRef.current = null
@@ -580,9 +590,15 @@ export function App() {
   // yet when ready arrives (sessions broadcast hadn't been processed by React).
   useEffect(() => {
     if (!currentKey) return
-    syncSessionSize(currentKey)
+    const dims = prepareTerminalForAttach(currentKey)
+    if (queuedAttachKeyRef.current === currentKey && dims) {
+      queuedAttachKeyRef.current = null
+      sendAttachRequest(currentKey, dims)
+    } else if (attachedKeyRef.current === currentKey && dims) {
+      sendToHost(parseKey(currentKey).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
+    }
     tm.focus(currentKey)
-  }, [currentKey, sessions.length, syncSessionSize, tm])
+  }, [currentKey, prepareTerminalForAttach, sendAttachRequest, sendToHost, sessions.length, tm])
 
   // If another client resized the shared PTY while this tab was in the
   // background (e.g. phone <-> desktop), reclaim local dimensions on return.
@@ -769,6 +785,9 @@ export function App() {
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
         }
+        if (queuedAttachKeyRef.current === key) {
+          queuedAttachKeyRef.current = null
+        }
         if (scrollToBottomAfterAttachBinaryRef.current === key) {
           scrollToBottomAfterAttachBinaryRef.current = null
         }
@@ -839,8 +858,7 @@ export function App() {
     if (currentHostId && currentHostId !== nextHostId) {
       sendToHost(currentHostId, { type: 'detach' })
     }
-    const container = containerRefs.current.get(key)
-    if (container) tm.ensureTerminal(key, container)
+    const dims = prepareTerminalForAttach(key)
     // Clear existing content — server always replays the full scrollback buffer
     // on every attach, so we must reset first to avoid duplication.
     tm.reset(key)
@@ -848,9 +866,12 @@ export function App() {
     // user gesture (required for iOS keyboard), without waiting for ready.
     currentKeyRef.current = key
     setCurrentKey(key)
-    tm.setActive(key)
     tm.focus(key)
-    sendAttachRequest(key)
+    if (dims) {
+      sendAttachRequest(key, dims)
+    } else {
+      queuedAttachKeyRef.current = key
+    }
     // Update URL hash for bookmarking / deeplink — use name not UUID
     const parsed = parseKey(key)
     const name = getSessionByKey(key)?.name ?? parsed.sessionId

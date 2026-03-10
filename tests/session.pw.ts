@@ -657,7 +657,7 @@ test('url hash — loading /#name attaches to correct session', async ({ page })
   const name = await getSessionName(page, id)
 
   // Reload with the hash — simulates opening a bookmark
-  await page.goto(`/#${encodeURIComponent(name)}`)
+  await page.goto(`/?attach-probe=1#${encodeURIComponent(name)}`)
   await page.waitForSelector('[data-session-id]', { timeout: 8000 })
 
   await page.waitForFunction(
@@ -667,6 +667,70 @@ test('url hash — loading /#name attaches to correct session', async ({ page })
     { timeout: 5000 },
   )
   expect(await getActiveSessionId(page)).toBe(id)
+})
+
+test('url hash — initial attach waits for measured terminal size', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  const id = await newSession(page)
+  const name = await getSessionName(page, id)
+
+  await page.addInitScript(() => {
+    const OriginalWebSocket = window.WebSocket
+    const sent: Array<Record<string, unknown>> = []
+    ;(window as unknown as { __wt_sent_messages?: Array<Record<string, unknown>> }).__wt_sent_messages = sent
+
+    const WrappedWebSocket = function (
+      this: WebSocket,
+      url: string | URL,
+      protocols?: string | string[]
+    ) {
+      const ws = protocols === undefined
+        ? new OriginalWebSocket(url)
+        : new OriginalWebSocket(url, protocols)
+      const originalSend = ws.send.bind(ws)
+      ws.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+        if (typeof data === 'string') {
+          try {
+            sent.push(JSON.parse(data) as Record<string, unknown>)
+          } catch {
+            // Ignore malformed control frames during diagnostics.
+          }
+        }
+        return originalSend(data)
+      }
+      return ws
+    } as unknown as typeof WebSocket
+
+    WrappedWebSocket.prototype = OriginalWebSocket.prototype
+    Object.defineProperties(WrappedWebSocket, Object.getOwnPropertyDescriptors(OriginalWebSocket))
+    window.WebSocket = WrappedWebSocket
+  })
+
+  await page.goto(`/?attach-probe=1#${encodeURIComponent(name)}`, { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+  await page.waitForFunction(
+    (expectedId: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const getAttached = (window as any).__wt_get_attached_id
+      return typeof getAttached === 'function' && getAttached() === expectedId
+    },
+    id,
+    { timeout: 5000 },
+  )
+
+  const attach = await page.evaluate(() => {
+    const sent = (window as unknown as { __wt_sent_messages?: Array<Record<string, unknown>> }).__wt_sent_messages ?? []
+    return sent.find((msg) => msg.type === 'attach') ?? null
+  }) as { cols?: number; rows?: number } | null
+
+  expect(attach).toBeTruthy()
+  expect(typeof attach?.cols).toBe('number')
+  expect(typeof attach?.rows).toBe('number')
+  expect(attach!.cols).toBeGreaterThan(100)
+  expect(attach!.rows).toBeGreaterThan(30)
+  expect(attach!.cols).not.toBe(80)
+  expect(attach!.rows).not.toBe(24)
 })
 
 test('url hash — loading /#local/name attaches to correct session', async ({ page }) => {

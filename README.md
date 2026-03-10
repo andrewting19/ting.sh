@@ -126,6 +126,7 @@ Working:
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
+- Measured attach handshake — hash-load/reconnect attaches now wait for a real fitted xterm size before sending `attach`, so shared PTYs are never briefly resized to fallback `80x24` before replay
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
