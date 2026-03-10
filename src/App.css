@@ -296,6 +296,10 @@ html, body, #root {
   scrollbar-color: var(--bg3) transparent;
   overscroll-behavior: contain; /* don't propagate scroll to page on iOS */
 }
+.session-list--nested {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
 .session-list::-webkit-scrollbar { width: 4px; }
 .session-list::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
 

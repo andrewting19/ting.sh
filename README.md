@@ -139,6 +139,7 @@ Working:
 - Host connection engine scaffolded: `useHostConnections` + imperative `WSConnection` with per-host reconnect/send lifecycle
 - App/terminal manager now run on host-scoped session keys and use multi-host WS transport plumbing (`useHostConnections`)
 - Sidebar now supports host-grouped sections with per-host connection status and host-scoped drag/drop interactions
+- Multi-host sidebar scroll hitbox hardening — per-host session lists no longer create nested wheel/touch scroll regions, so scrolling works consistently even when the pointer is over a host's session rows
 - Local host identity reconciliation — local host ID/name now follows server `host-info`/`/api/host` values instead of staying hardcoded as `local`
 - Peer WS URL derivation now follows each peer base URL scheme (`http→ws`, `https→wss`) instead of the current page protocol
 - Manual two-host production verification passed (create/attach/input/kill/reconnect across `server-a` + `server-b`)

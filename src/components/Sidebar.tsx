@@ -142,6 +142,7 @@ export function Sidebar({
                   <HostSessionList
                     hostId={host.id}
                     sessions={sessions}
+                    nestedInHostGroup
                     currentKey={currentKey}
                     editingKey={editingKey}
                     dragOverKey={dragOverKey}
@@ -196,6 +197,7 @@ export function Sidebar({
 interface HostSessionListProps {
   hostId: string
   sessions: Session[]
+  nestedInHostGroup?: boolean
   currentKey: SessionKey | null
   editingKey: SessionKey | null
   dragOverKey: SessionKey | null
@@ -218,6 +220,7 @@ interface HostSessionListProps {
 function HostSessionList({
   hostId,
   sessions,
+  nestedInHostGroup = false,
   currentKey,
   editingKey,
   dragOverKey,
@@ -237,7 +240,7 @@ function HostSessionList({
   onClearDrag,
 }: HostSessionListProps) {
   return (
-    <div className="session-list">
+    <div className={`session-list${nestedInHostGroup ? ' session-list--nested' : ''}`}>
       {sessions.length === 0 ? (
         <div className="empty-state">no sessions</div>
       ) : (

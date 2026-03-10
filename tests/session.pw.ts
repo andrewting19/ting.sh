@@ -456,6 +456,71 @@ test('session order persists across page reload', async ({ page }) => {
   expect(orderAfter).toEqual(reordered)
 })
 
+test('multi-host sidebar wheel scroll works over session rows', async ({ page }) => {
+  await page.route('**/api/host', async (route) => {
+    const origin = new URL(route.request().url()).origin
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'local',
+        name: 'Local Host',
+        peers: [
+          { id: 'peer-1', name: 'Peer 1', url: origin },
+          { id: 'peer-2', name: 'Peer 2', url: origin },
+          { id: 'peer-3', name: 'Peer 3', url: origin },
+          { id: 'peer-4', name: 'Peer 4', url: origin },
+        ],
+      }),
+    })
+  })
+
+  await page.goto('/')
+  await killAllSessions(page)
+
+  for (let i = 0; i < 10; i++) {
+    const id = await newSession(page)
+    await waitForPrompt(page, id)
+  }
+
+  const sidebar = page.locator('.host-groups')
+  await expect(sidebar).toBeVisible()
+
+  await page.waitForFunction(() => document.querySelectorAll('.host-group').length >= 5)
+  await page.waitForFunction(() => {
+    const target = document.querySelector('.host-group:nth-of-type(3) .session-item') as HTMLElement | null
+    return !!target
+  })
+
+  const before = await page.evaluate(() => {
+    const outer = document.querySelector<HTMLElement>('.host-groups')
+    const inner = document.querySelector<HTMLElement>('.host-group:nth-of-type(3) .session-list')
+    if (!outer) throw new Error('missing .host-groups')
+    if (!inner) throw new Error('missing nested .session-list')
+    outer.scrollTop = 0
+    return { outer: outer.scrollTop, inner: inner.scrollTop }
+  })
+  expect(before.outer).toBe(0)
+
+  await page.locator('.host-group:nth-of-type(3) .session-item').first().hover()
+  await page.mouse.wheel(0, 1200)
+
+  await page.waitForFunction(() => {
+    const outer = document.querySelector<HTMLElement>('.host-groups')
+    return !!outer && outer.scrollTop > 0
+  })
+
+  const after = await page.evaluate(() => {
+    const outer = document.querySelector<HTMLElement>('.host-groups')
+    const inner = document.querySelector<HTMLElement>('.host-group:nth-of-type(3) .session-list')
+    if (!outer) throw new Error('missing .host-groups')
+    if (!inner) throw new Error('missing nested .session-list')
+    return { outer: outer.scrollTop, inner: inner.scrollTop }
+  })
+
+  expect(after.outer).toBeGreaterThan(0)
+  expect(after.inner).toBe(0)
+})
+
 test('duplicate session — spawns in same CWD, appears after source', async ({ page }) => {
   const id1 = await newSession(page)
   await waitForPrompt(page, id1)
