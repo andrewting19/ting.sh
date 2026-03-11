@@ -4,7 +4,7 @@
 
 - **E2E** (Playwright): anything involving the full stack — UI interactions, WS message flow, terminal rendering, session lifecycle. This is the primary suite.
 - **Unit tests** (Bun): pure logic that can be tested in isolation — server session management, name allocation, state machine helpers. Add as `*.test.ts` files alongside the code they test (e.g. `server.test.ts`). Bun's test runner picks these up automatically.
-- **Don't unit-test**: React component rendering, WS hookups, xterm.js integration — E2E covers these better with less mocking.
+- **Don't unit-test**: React component rendering, WS hookups, browser terminal integration — E2E covers these better with less mocking.
 
 ## Architecture
 
@@ -30,18 +30,18 @@ Each `bun test` run gets its own unique port pair from the OS. Multiple coding a
 | Helper | What it does |
 |---|---|
 | `newSession(page)` | Clicks "+ new", waits for a new `[data-session-id]` to appear, returns its ID. Tolerates leftover sessions (diffs before/after). |
-| `waitForPrompt(page, id, timeout?)` | Polls the xterm.js buffer via `window.__wt_terminals` until any non-whitespace line appears. Includes diagnostics on timeout. |
+| `waitForPrompt(page, id, timeout?)` | Polls the terminal buffer via `window.__wt_terminals` until any non-whitespace line appears. Includes diagnostics on timeout. |
 | `waitForTerminal(page, id, needle, timeout?)` | Polls until `needle` string appears in the terminal buffer. |
 | `killAllSessions(page)` | Waits for WS connected + stable session count, then kills sessions **sequentially** (kill one, wait for DOM removal, repeat). |
 | `getSessions(page)` | Returns all `[data-session-id]` values currently in the DOM. |
 | `switchToSession(page, id)` | Clicks the sidebar item for the given session ID. |
-| `getTerminalText(page, id)` | Reads the full xterm.js buffer content via `window.__wt_terminals`. |
+| `getTerminalText(page, id)` | Reads the full terminal buffer content via `window.__wt_terminals`. |
 
 ## Dev-mode test hooks on `window`
 
 The app exposes these in dev mode (`import.meta.env.DEV`) for test use:
 
-- `__wt_terminals` — `Map<sessionId, { term, opened }>` — direct access to xterm.js Terminal instances and their buffers.
+- `__wt_terminals` — `Map<sessionId, { term, opened }>` — direct access to terminal instances and their buffers.
 - `__wt_send` — `(obj: object) => void` — send arbitrary WS messages (e.g. `{ type: 'kill', id }`).
 - `__wt_ws_close` — `() => void` — force-close the WS connection (used by the reconnect test since `setOffline(true)` doesn't affect localhost).
 
@@ -76,7 +76,7 @@ test('descriptive name — what is being verified', async ({ page }) => {
 
 5. **`killAllSessions` is sequential, not bulk.** Bulk-killing causes an auto-attach cascade where killing the current session triggers `attachSession` to the next one, which may already be dead server-side. Sequential kill-and-wait avoids this.
 
-6. **Terminal content is read via `__wt_terminals`, not the DOM.** xterm.js renders to canvas, so DOM text queries don't work. The `getTerminalText` and `waitForTerminal` helpers read from the xterm.js buffer API.
+6. **Terminal content is read via `__wt_terminals`, not the DOM.** The terminal renders to canvas, so DOM text queries don't work. The `getTerminalText` and `waitForTerminal` helpers read from the terminal buffer API.
 
 7. **Don't use `page.context().setOffline(true)` for WS disconnect tests.** It doesn't reliably affect localhost WebSocket connections. Use `__wt_ws_close()` instead.
 

@@ -543,14 +543,14 @@ html, body, #root {
   pointer-events: auto;
 }
 
-/* Stop terminal scroll from propagating to the page on iOS — the xterm
-   viewport is the only scrollable area inside .main. */
-.xterm-viewport {
+/* Stop terminal scroll gestures from propagating to the page on iOS. The
+   terminal manager owns touch scrolling inside the active pane. */
+.terminal-pane {
   overscroll-behavior: contain;
 }
 
-/* touch-action + overflow on .xterm-viewport are set by attachIOSScroll()
-   in useTerminalManager.ts at runtime on touch devices. No CSS needed here. */
+/* touch-action is set by attachIOSScroll() in useTerminalManager.ts at runtime
+   on touch devices. No CSS needed here. */
 
 /* ── Modal ── */
 .modal-backdrop {
@@ -812,14 +812,14 @@ html, body, #root {
 
   /* iOS Safari auto-zooms focused form controls <16px. Use more-specific
      selectors so these mobile overrides beat the later component rules.
-     Include xterm's hidden helper textarea so the toolbar keyboard button
+     Include the terminal's hidden textarea so the toolbar keyboard button
      doesn't zoom the whole page when it focuses the terminal. */
   .paste-modal .paste-textarea,
   .selection-modal .selection-textarea,
   .hotkey-editor .hk-key-select,
   .hotkey-editor .hk-key-input,
   .hotkey-editor .hk-label-input,
-  .xterm .xterm-helper-textarea {
+  .terminal-pane textarea[aria-label="Terminal input"] {
     font-size: 16px;
   }
 }

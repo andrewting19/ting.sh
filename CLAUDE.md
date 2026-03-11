@@ -5,7 +5,7 @@
 - **Runtime**: Bun 1.3.6+
 - **Backend**: `server.ts` — Bun HTTP + WebSocket server, `Bun.spawn` PTY on Unix/macOS, `node-pty` ConPTY worker on Windows
 - **Frontend**: React 18 + TypeScript, bundled by Vite
-- **Terminal renderer**: xterm.js 5.x with WebGL addon + FitAddon
+- **Terminal renderer**: `ghostty-web` + FitAddon
 - **Styling**: Plain CSS with CSS variables in `src/App.css` — no CSS framework
 
 ## Dev workflow
@@ -31,7 +31,7 @@ Run `bun test` **after every commit**. Tests take ~10 seconds. If tests fail, fi
 
 Playwright test files use the `.pw.ts` extension so Bun's scanner ignores them; `tests/e2e.test.ts` is the entry point Bun discovers and it spawns Playwright as a subprocess. Each run gets OS-assigned dynamic ports so concurrent agents never collide.
 
-E2E tests are the primary suite. Unit tests are welcome for pure logic (server session management, name allocation, state machines) — add them as `*.test.ts` files alongside the code they test. Don't unit-test React/WS/xterm.js integration — E2E covers that better.
+E2E tests are the primary suite. Unit tests are welcome for pure logic (server session management, name allocation, state machines) — add them as `*.test.ts` files alongside the code they test. Don't unit-test React/WS/terminal integration — E2E covers these better.
 
 See `tests/CLAUDE.md` for detailed test architecture and guidelines for writing new tests.
 
@@ -61,7 +61,7 @@ The git log is the project history. `git log --oneline` should read like a chang
 
 - TypeScript everywhere — no `any` unless truly unavoidable, add a comment if you use it
 - No external state libraries — React `useState`/`useRef`/`useReducer` is enough for now
-- xterm.js Terminal instance lives in a `useRef`, never in React state — it must not re-render
+- Terminal instance lives in a `useRef`, never in React state — it must not re-render
 - WebSocket connections managed by `useHostConnections` hook (imperative `WSConnection` per host)
 - CSS variables for all colors/sizes — defined in `src/App.css`, never hardcode hex values in components
 - Prefer editing existing files over creating new ones
@@ -70,11 +70,11 @@ The git log is the project history. `git log --oneline` should read like a chang
 
 - `server.ts` — single file, session Map, Bun WebSocket handler. Keep it simple.
 - `src/hooks/useHostConnections.ts` — manages per-host WS lifecycle, auto-reconnect, imperative `WSConnection` class
-- `src/hooks/useTerminalManager.ts` — owns all xterm.js instances; exposes `primeTerminal`, `ensureTerminal`, `write`, `reset`, `setActive`, `focus`, `getDimensions`, `destroy`
+- `src/hooks/useTerminalManager.ts` — owns all browser terminal instances; exposes `primeTerminal`, `ensureTerminal`, `write`, `reset`, `setActive`, `focus`, `getDimensions`, `destroy`
 - Binary WS frames = raw PTY output → `term.write(data)`. JSON frames = control messages.
 - Sessions survive tab close. Scrollback buffer (10MB cap) replayed on reconnect.
 - **Scrollback**: server always replays the full buffer on every `attach`. Client must call `tm.reset(id)` before sending `attach` to avoid duplication on re-attach. `fresh` flag in `ready` is only set for `create`, not `attach` — it's informational only now.
-- **`primeTerminal`**: called from the `ready` handler (for `create`) before React has rendered the container div. Creates the xterm.js Terminal instance in a not-yet-opened state so PTY output that arrives during the React render cycle is buffered rather than dropped. `ensureTerminal` detects the primed state and calls `term.open(container)` when the div is available.
+- **`primeTerminal`**: called from the `ready` handler (for `create`) before React has rendered the container div. PTY output that arrives during the React render cycle is queued rather than dropped. `ensureTerminal` detects the primed state and calls `term.open(container)` when the div is available.
 - **`attachSession` order matters**: `ensureTerminal` → `reset` → `setCurrentId` (optimistic) → `setActive` → `focus` → `send attach`. Focus must be called synchronously within the user gesture for iOS keyboard to appear.
 
 ## Deployment
@@ -98,5 +98,4 @@ The git log is the project history. `git log --oneline` should read like a chang
   ```
 - **Use `100dvh` not `100vh`** — iOS Safari's `100vh` ignores the collapsible browser chrome. Always set both: `height: 100vh; height: 100dvh;`
 - **Grid + `position: fixed` children**: fixed elements don't block grid auto-placement. Give `.main` explicit `grid-column: 2; grid-row: 2` so it doesn't collapse to the 0px sidebar column on mobile.
-- **WebGL on mobile**: skip it — fails silently on iOS Safari. Detect with `navigator.userAgent` and fall through to canvas renderer.
 - **Long-press for context menu on touch**: use `pointerdown` + 500ms timeout, cancel on `pointerup`/`pointermove`. Right-click doesn't exist on touch devices.

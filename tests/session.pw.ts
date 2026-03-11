@@ -376,8 +376,9 @@ test('scroll-to-latest overlay appears when scrolled up and jumps to bottom', as
       }
     }
     if (!entry) return false
-    const buf = entry.term.buffer.active
-    return buf.viewportY === buf.baseY
+    return typeof entry.term.getViewportY === 'function'
+      ? Math.floor(entry.term.getViewportY()) === 0
+      : false
   }, id, { timeout: 3000 })
   await expect(overlay).toBeHidden({ timeout: 3000 })
 })
