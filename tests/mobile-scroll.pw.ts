@@ -1,11 +1,11 @@
 /**
  * Mobile touch-scroll tests — run with iPhone user agent so mobile touch handlers activate.
  *
- * These tests dispatch raw TouchEvent sequences and verify the xterm viewport
- * scrollTop changes.  They run on Chromium (not iOS Safari), so they CANNOT
+ * These tests dispatch raw TouchEvent sequences and verify the terminal
+ * viewport offset changes. They run on Chromium (not iOS Safari), so they CANNOT
  * reproduce iOS UIKit's gesture-recognizer behaviour (where touchmove is
  * suppressed while UIKit decides text-selection vs scroll).  What they DO catch:
- *   - The core JS scroll path works: touchmove fires → xterm scrollTop += deltaY
+ *   - The core JS scroll path works: touchmove fires → terminal viewport moves
  *   - preventDefault on touchmove (active listener) doesn't break scrolling
  *   - Our momentum rAF loop runs without errors
  *   - Regressions in mobile touch-listener setup / teardown
@@ -15,7 +15,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { waitForPrompt, killAllSessions } from './helpers'
+import { getViewportOffset, waitForPrompt, killAllSessions } from './helpers'
 import type { Page } from '@playwright/test'
 
 // Spoof iPhone UA so iOS-specific terminal behavior is active.
@@ -75,28 +75,27 @@ async function touchSwipe(
     ({ startY, endY, steps }) => {
       const container = document.querySelector<HTMLElement>('.terminal-pane.active')
       if (!container) throw new Error('no active .terminal-pane')
-      const viewport = container.querySelector<HTMLElement>('.xterm-viewport')
-      if (!viewport) throw new Error('no .xterm-viewport')
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')
+      if (!canvas) throw new Error('no terminal canvas')
 
       const bounds = container.getBoundingClientRect()
       const clientX = bounds.left + bounds.width / 2
-      const scrollTopBefore = viewport.scrollTop
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wt = (window as any).__wt_terminals
+      const activeSessionId = document.querySelector('.session-item.active')?.getAttribute('data-session-id')
+      const entry = activeSessionId
+        ? wt?.get(activeSessionId) ?? [...(wt?.entries?.() ?? [])].find(([key]: [string]) => key.endsWith(`:${activeSessionId}`))?.[1]
+        : null
+      const viewportOffsetBefore = typeof entry?.term?.getViewportY === 'function' ? Math.floor(entry.term.getViewportY()) : 0
 
-      // Dispatch on the viewport element (inside xterm root) so that:
-      // - Capture phase reaches .terminal-pane first (our mobile touch handler)
-      // - Then the event reaches .xterm in the bubble phase (xterm's handlers)
-      // Dispatching from the outer container would not reach xterm's inner listeners.
       const fire = (type: string, y: number) => {
         const touch = new Touch({
           identifier: 1,
-          target: viewport,
+          target: canvas,
           clientX,
           clientY: y,
           screenX: clientX,
           screenY: y,
-          // pageY must be set explicitly — xterm's handleTouchStart reads
-          // ev.touches[0].pageY; if omitted, it defaults to 0 and deltaY=0.
-          // Since our app has overflow:hidden, window.scrollY===0 so pageY===clientY.
           pageX: clientX,
           pageY: y,
           radiusX: 10,
@@ -104,7 +103,7 @@ async function touchSwipe(
           rotationAngle: 0,
           force: 1,
         })
-        viewport.dispatchEvent(
+        canvas.dispatchEvent(
           new TouchEvent(type, {
             bubbles: true,
             cancelable: true,
@@ -119,38 +118,35 @@ async function touchSwipe(
       for (let i = 1; i <= steps; i++) fire('touchmove', startY + dy * i)
       fire('touchend', endY)
 
-      return { scrollTopBefore, scrollTopAfter: viewport.scrollTop }
+      const viewportOffsetAfter = typeof entry?.term?.getViewportY === 'function' ? Math.floor(entry.term.getViewportY()) : 0
+      return { scrollTopBefore: viewportOffsetBefore, scrollTopAfter: viewportOffsetAfter }
     },
     { startY, endY, steps },
   )
 }
 
-test('iPhone UA uses canvas renderer (no DOM text rows)', async ({ page }) => {
+test('iPhone UA renders terminal to canvas', async ({ page }) => {
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
   await page.waitForFunction(() => {
     const pane = document.querySelector<HTMLElement>('.terminal-pane.active')
     if (!pane) return false
-    const canvasCount = pane.querySelectorAll('.xterm-screen canvas').length
-    const hasDomRows = !!pane.querySelector('.xterm-rows')
-    return canvasCount > 0 && !hasDomRows
+    return pane.querySelectorAll('canvas').length > 0
   })
 
   const info = await page.evaluate(() => {
     const pane = document.querySelector<HTMLElement>('.terminal-pane.active')
     if (!pane) throw new Error('no active .terminal-pane')
     return {
-      canvasCount: pane.querySelectorAll('.xterm-screen canvas').length,
-      hasDomRows: !!pane.querySelector('.xterm-rows'),
+      canvasCount: pane.querySelectorAll('canvas').length,
     }
   })
 
   expect(info.canvasCount).toBeGreaterThan(0)
-  expect(info.hasDomRows).toBe(false)
 })
 
-test('touch swipe up scrolls terminal down (scrollTop increases)', async ({ page }) => {
+test('touch swipe up scrolls terminal down (viewport offset increases)', async ({ page }) => {
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
@@ -160,13 +156,6 @@ test('touch swipe up scrolls terminal down (scrollTop increases)', async ({ page
     ;(window as any).__wt_send({ type: 'input', data: 'printf "%0.s\\n" {1..200}\r' })
   })
   await page.waitForTimeout(1500)
-
-  // Ensure viewport starts at top
-  await page.evaluate(() => {
-    const vp = document.querySelector<HTMLElement>('.terminal-pane.active .xterm-viewport')
-    if (vp) vp.scrollTop = 0
-  })
-  await page.waitForTimeout(50)
 
   const bounds = await page.evaluate(() => {
     const el = document.querySelector<HTMLElement>('.terminal-pane.active')!
@@ -180,11 +169,11 @@ test('touch swipe up scrolls terminal down (scrollTop increases)', async ({ page
     endY:   bounds.top + bounds.height * 0.2,
   })
 
-  expect(scrollTopAfter, `scrollTop should increase: before=${scrollTopBefore} after=${scrollTopAfter}`)
+  expect(scrollTopAfter, `viewport offset should increase: before=${scrollTopBefore} after=${scrollTopAfter}`)
     .toBeGreaterThan(scrollTopBefore)
 })
 
-test('touch swipe down scrolls terminal up (scrollTop decreases)', async ({ page }) => {
+test('touch swipe down scrolls terminal up (viewport offset decreases)', async ({ page }) => {
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
@@ -194,12 +183,25 @@ test('touch swipe down scrolls terminal up (scrollTop decreases)', async ({ page
   })
   await page.waitForTimeout(1500)
 
-  // Ensure viewport starts at bottom
-  await page.evaluate(() => {
-    const vp = document.querySelector<HTMLElement>('.terminal-pane.active .xterm-viewport')
-    if (vp) vp.scrollTop = vp.scrollHeight
-  })
-  await page.waitForTimeout(50)
+  await page.evaluate((sessionId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wt = (window as any).__wt_terminals
+    if (!wt) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let entry = wt.get(sessionId) as any
+    if (!entry) {
+      for (const key of wt.keys() as Iterable<string>) {
+        if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entry = wt.get(key) as any
+          break
+        }
+      }
+    }
+    entry?.term?.scrollLines?.(-100)
+  }, id)
+  await page.waitForTimeout(100)
+  expect(await getViewportOffset(page, id)).toBeGreaterThan(0)
 
   const bounds = await page.evaluate(() => {
     const el = document.querySelector<HTMLElement>('.terminal-pane.active')!
@@ -213,7 +215,7 @@ test('touch swipe down scrolls terminal up (scrollTop decreases)', async ({ page
     endY:   bounds.top + bounds.height * 0.7,
   })
 
-  expect(scrollTopAfter, `scrollTop should decrease: before=${scrollTopBefore} after=${scrollTopAfter}`)
+  expect(scrollTopAfter, `viewport offset should decrease: before=${scrollTopBefore} after=${scrollTopAfter}`)
     .toBeLessThan(scrollTopBefore)
 })
 

@@ -1,8 +1,8 @@
 # TODO
 
 ## Bugs (lower priority)
-- [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
-- [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
+- [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses terminal scrollback and looks like a flickering scroll-jump bug; keep it opt-in because `clear`/`reset` semantics change
+- [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until the terminal has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
 - [x] Kill session uses native `confirm()` — replaced with custom Modal
@@ -23,11 +23,10 @@
 - [x] Deprecated `useWS` hook still present — fixed (remove dead hook and keep WS lifecycle in `useHostConnections`)
 - [x] `server.ts` control-path `any` usage — fixed (typed JSON guards + typed field coercion helpers)
 - [x] Dev mode could leave Vite up with a dead WS backend — fixed (`bun run dev` now uses `concurrently -k` to fail fast when either process exits)
-- [x] Mobile D-pad arrows sent wrong sequence in app-cursor mode TUIs — fixed (read xterm `applicationCursorKeysMode` and emit `ESC O*` when needed)
+- [x] Mobile D-pad arrows sent wrong sequence in app-cursor mode TUIs — fixed (read terminal application-cursor mode and emit `ESC O*` when needed)
 - [x] Mobile keyboard covered terminal bottom + toolbar while typing — fixed (VisualViewport keyboard inset drives terminal/toolbar/overlay bottom offsets)
 - [x] Mobile paste/hotkey inputs zoomed page on focus (iOS) — fixed (mobile form control font size raised to 16px in toolbar modals)
-- [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for xterm helper textarea, with selector-specificity hardening)
-- [x] iOS canvas renderer could leave one-frame stale glyphs on the wrong row during rapid redraw/scroll (e.g. spinner updates while output streams) — fixed (coalesced full refresh after writes/fits on iOS canvas path)
+- [x] iOS mobile paste sheet focus was delayed (keyboard often stayed closed) and ⌨ toolbar button could still zoom page — fixed (immediate paste autofocus + mobile 16px override for the terminal textarea, with selector-specificity hardening)
 - [x] Mobile paste sheet lost unsent text on close and could grow too tall when history was long — fixed (save non-trivial drafts into paste history on close + cap history list with internal scroll)
 - [x] Mobile paste modal required leaving the sheet to send Enter after `Send` — fixed (compact `↩` button next to `Send` emits CR in-place)
 - [x] Mobile sidebar list was hard to scroll (incl. multi-host grouped sections clipping) — fixed (touch rows no longer expose draggable on coarse pointers + sidebar scroll containers hardened with `min-height: 0`/touch scrolling + host groups no longer flex-shrink)
@@ -40,7 +39,7 @@
 
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
-- [x] Per-session xterm.js instances (lazy, WebGL on active only)
+- [x] Per-session terminal instances (lazy, one renderer per session)
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
@@ -55,20 +54,20 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 32 tests covering all key flows
+- [x] E2E test suite (Playwright) — 34 tests covering all key flows
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
 - [x] Auto-attach to first session when no hash in URL
 - [x] Kill-to-next — killing current session auto-navigates to nearest surviving session
-- [x] primeTerminal — xterm.js instance created before container div exists so startup output buffers
+- [x] primeTerminal — terminal output is queued before the container div exists so startup output buffers
 - [x] Mobile toolbar — fixed-width primary row (macro/ESC/TAB/arrows/paste/Enter/keyboard) plus macro tray for sticky CTRL/SHIFT, 3 programmable hotkeys, and `select`
 - [x] Mobile paste modal — `Send` action row includes compact `↩` button to send Enter without leaving the sheet
 - [x] Mobile text selection mode — toolbar opens a native textarea scrollback snapshot for touch-friendly select/copy
 - [x] Shared scroll-to-latest overlay button (desktop + mobile) — appears when scrolled up and jumps back to live output
 - [x] Mobile toolbar polish — hotkey editor key-type switching fixed, ALT hotkey sequences, mutually exclusive toolbar overlays
 - [x] iOS tap-to-keyboard disabled on terminal canvas; keyboard via toolbar button only
-- [x] iOS Safari scroll-on-text bug fixed (Canvas renderer forced on iOS + renderer guard test)
+- [x] iOS Safari scroll-on-text bug fixed (terminal-managed touch scrolling on the Ghostty canvas + renderer guard test)
 - [x] Shared-session resize reclaim — active session click/foreground reapplies local PTY dimensions
 - [x] Manual multi-host production verification (two real servers) — create/attach/input/kill/offline-reconnect validated end-to-end
 - [x] Manual Windows production verification (`mom`) — Git Bash default shell, correct initial home/cwd, live CWD tracking, duplicate/create-with-CWD, rename, kill, and bundled-Node PTY worker path validated end-to-end
@@ -91,7 +90,7 @@
 - [ ] Auto-update: only restart when idle (zero active sessions) to avoid killing running work
 - [ ] Windows phase 5 — run Playwright / multi-host CI on Windows
 - [ ] Custom launch command per session — start directly into `claude`, `ssh host`, etc.
-- [ ] Search in scrollback — `xterm-addon-search`
+- [ ] Search in scrollback
 - [ ] Font size adjustment in UI
 - [ ] Session pinning
 - [ ] Export scrollback as text
@@ -100,8 +99,8 @@
 ## Decisions made
 
 - **Platform PTY split** — Unix/macOS use `Bun.spawn({ terminal: { ... } })`; Windows uses `node-pty` via a Node sidecar because Bun-on-Windows could spawn ConPTY on `mom` but failed on `write()`
-- **Per-session xterm.js instances, lazy** — created on first view, kept alive; WebGL on active only
-- **Renderer split by platform** — WebGL on desktop; Canvas forced on iOS to avoid Safari glyph-touch selection issues
+- **Per-session terminal instances, lazy** — created on first view, kept alive independently
+- **Renderer/runtime choice** — `ghostty-web` in the browser for Ghostty-compatible parsing and rendering
 - **`visibility:hidden` not `display:none`** — FitAddon needs layout to measure
 - **Attach correlation via `requestId`** — client validates `ready` against the latest attach request and drops stale attach binary to prevent cross-session replay leaks
 - **`globalThis` for session Map** — survives Bun `--hot` reloads

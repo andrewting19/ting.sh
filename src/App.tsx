@@ -299,6 +299,16 @@ export function App() {
         return { ...prev, [sessionKey]: true }
       })
     },
+    onTerminalReady: (sessionKey, cols, rows) => {
+      if (queuedAttachKeyRef.current === sessionKey) {
+        queuedAttachKeyRef.current = null
+        sendAttachRequest(sessionKey, { cols, rows })
+        return
+      }
+      if (attachedKeyRef.current === sessionKey) {
+        sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
+      }
+    },
   })
 
   const reconcileLocalHostIdentity = useCallback((connectionHostId: string, reportedId: string, reportedName: string) => {

@@ -18,7 +18,7 @@ Agentboard is close but has two fundamental constraints this project doesn't wan
 1. **Tmux-coupled** — sessions are tmux windows. The terminal is proxied through tmux's `pipe-pane` / `send-keys` API rather than owning the PTY directly. This is why scrollback is glitchy and rendering artifacts appear.
 2. **Agent-focused UI** — one window per coding agent. That's a subset of what a general terminal needs.
 
-This project owns the PTY directly: Unix/macOS hosts use `Bun.spawn` with the native PTY API, while Windows hosts use ConPTY via `node-pty`. xterm.js builds its scrollback buffer from the raw byte stream, nothing in between. Scrolling is smooth because xterm.js holds all the data itself.
+This project owns the PTY directly: Unix/macOS hosts use `Bun.spawn` with the native PTY API, while Windows hosts use ConPTY via `node-pty`. The browser terminal consumes the raw PTY byte stream directly via Ghostty's parser/runtime in `ghostty-web`, nothing in between.
 
 Tmux session detection is supported as an optional future feature (for interop with dev-sessions MCP etc.) but is not the core model.
 
@@ -27,7 +27,7 @@ Tmux session detection is supported as an optional future feature (for interop w
 - **Runtime**: Bun
 - **Backend**: Bun HTTP + WebSocket server; native `Bun.spawn` PTY on Unix/macOS, `node-pty` ConPTY worker on Windows
 - **Frontend**: React + TypeScript, bundled by Vite
-- **Terminal**: xterm.js 5.x with WebGL (desktop) + Canvas (iOS) + FitAddon
+- **Terminal**: `ghostty-web` (Ghostty parser/runtime in WASM) + FitAddon
 
 Dev: `bun run dev` — Vite on :4321 with HMR, WS server on :7681, proxied transparently
 Prod: `bun run build && bun run start` — single Bun server on :7681 serves everything
@@ -95,9 +95,9 @@ Working:
 - PTY sessions persist when browser tab closes — reconnect and resume
 - Scrollback replay on reconnect (10MB buffer per session)
 - WebSocket auto-reconnect with status indicator
-- WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
+- Ghostty terminal runtime in the browser via `ghostty-web` with explicit pre-open output queuing
 - Multiple browser tabs can share the same session simultaneously
-- Per-session xterm.js instances — independent terminal state, no leaking between sessions
+- Per-session terminal instances — independent terminal state, no leaking between sessions
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar
@@ -112,27 +112,26 @@ Working:
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - Mobile sidebar scrolling hardening — touch scrolling now works reliably in single-host and multi-host grouped sidebars (touch rows no longer expose drag-reorder, scroll containers get explicit touch sizing, host sections no longer flex-shrink and clip rows)
-- iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
+- iOS Safari touch scrolling now uses a terminal-managed touch path over the Ghostty canvas
 - Mobile toolbar (iOS): non-scrolling primary row (macro, ESC, TAB, arrows, paste, Enter, ⌨) plus expandable macro tray for sticky CTRL/SHIFT, ALT-aware programmable hotkey slots (long-press to edit), and `select`, with coordinated overlay toggles
 - Mobile text selection mode (toolbar macro tray `select`) — opens a scrollback snapshot in a native textarea sheet for reliable touch selection/copy and drag-to-scroll selection expansion
 - Shared scroll-to-latest overlay button (desktop + mobile) — bottom-centered pill appears when the active terminal is scrolled up and jumps back to live output
-- Mobile D-pad arrows now respect xterm application-cursor mode (`ESC O A/B/C/D`) for TUIs that require it (falls back to normal `ESC [ A/B/C/D`)
+- Mobile D-pad arrows now respect application-cursor mode (`ESC O A/B/C/D`) for TUIs that require it (falls back to normal `ESC [ A/B/C/D`)
 - Mobile keyboard avoidance (VisualViewport): terminal area, toolbar, arrow pad, and paste sheet now lift above the on-screen keyboard while typing
-- iOS mobile focus zoom suppression hardened — toolbar modal inputs (paste + hotkey editor) now use mobile-specific selectors that win over later component styles, and xterm's hidden helper textarea is also forced to 16px so the ⌨ button doesn't zoom the page
+- iOS mobile focus zoom suppression hardened — toolbar modal inputs (paste + hotkey editor) now use mobile-specific selectors that win over later component styles, and the terminal's hidden textarea is also forced to 16px so the ⌨ button doesn't zoom the page
 - Mobile paste sheet now focuses the textarea immediately on open (instead of delayed focus) so the keyboard opens with the sheet more reliably on iOS
 - Mobile paste sheet now saves longer unsent drafts into paste history on close, long history lists scroll inside a capped panel so the textarea/send controls stay visible above the keyboard, and a compact `↩` button can send Enter without leaving the sheet
-- iOS canvas renderer repaint hardening — coalesced full-screen refreshes after rapid write/fit cycles reduce transient stale glyphs during noisy output (e.g. spinner redraws while scrollback is advancing)
 - URL hash routing — `#<hostId>/<name>` deeplinks directly to a session (legacy `#<name>` still supported for local); auto-attaches on load
 - Kill-to-next — killing current session auto-navigates to nearest surviving session
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
-- Measured attach handshake — hash-load/reconnect attaches now wait for a real fitted xterm size before sending `attach`, so shared PTYs are never briefly resized to fallback `80x24` before replay
-- Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
-- Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
+- Measured attach handshake — hash-load/reconnect attaches now wait for a real fitted terminal size before sending `attach`, so shared PTYs are never briefly resized to fallback `80x24` before replay
+- Attach replay viewport restore hardening — after attach/reconnect replay flush, the terminal now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
+- Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled terminal focus reporting (`?1004`)
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 32 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 34 tests, runs with `bun test`
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
@@ -158,11 +157,11 @@ Missing / in progress:
 
 **Sessions don't survive hard restarts.** PTY processes are OS child processes of the server — when the server process dies (crash, kill, machine reboot), the kernel sends SIGHUP to all children and they die. The `globalThis` trick only preserves sessions across Bun `--hot` module reloads (same process, module re-evaluated). True cross-restart persistence would require detaching PTYs into their own process group (like tmux does with `setsid`), which is a significant architectural change.
 
-**Some full-screen TUIs can intentionally wipe xterm scrollback during redraw (observed with Claude Code).** This can look like a random "flicker/scroll jump" bug where the viewport suddenly snaps and the `latest` button cannot stay at the bottom. In the observed case, the PTY stream included `CSI 2J` (clear screen), `CSI 3J` (clear scrollback), and `CSI H` (cursor home) in the **normal buffer** (not an attach/reconnect path, and not a client-side replay/reset bug). xterm.js is behaving correctly by collapsing scrollback and resetting the viewport after `CSI 3J`.
+**Some full-screen TUIs can intentionally wipe scrollback during redraw (observed with Claude Code).** This can look like a random "flicker/scroll jump" bug where the viewport suddenly snaps and the `latest` button cannot stay at the bottom. In the observed case, the PTY stream included `CSI 2J` (clear screen), `CSI 3J` (clear scrollback), and `CSI H` (cursor home) in the **normal buffer** (not an attach/reconnect path, and not a client-side replay/reset bug). The terminal is behaving correctly by collapsing scrollback and resetting the viewport after `CSI 3J`.
 
 This appears inconsistent because the TUI does not emit the same redraw sequence every frame. Some frames are incremental (no `CSI 3J`), while others trigger a full redraw path that clears scrollback.
 
-If this becomes a recurring UX issue, the safest mitigation is an **opt-in compatibility mode** that ignores only `CSI 3J` (clear scrollback) on the client, ideally via xterm parser hooks (`parser.registerCsiHandler` for `CSI J` with param `3`). Do not blindly auto-scroll after every redraw; that fights the app and causes jank. Trade-off: ignoring `CSI 3J` means apps (or `clear`/`reset`) can no longer intentionally clear scrollback in that mode.
+If this becomes a recurring UX issue, the safest mitigation is an **opt-in compatibility mode** that ignores only `CSI 3J` (clear scrollback) on the client. Do not blindly auto-scroll after every redraw; that fights the app and causes jank. Trade-off: ignoring `CSI 3J` means apps (or `clear`/`reset`) can no longer intentionally clear scrollback in that mode.
 
 ## Future ideas
 
@@ -184,7 +183,7 @@ The privacy consideration: even read-only exposes everything in the terminal (en
 ### Other ideas
 
 - Custom command per session — launch directly into `claude`, `ssh host`, etc. instead of plain shell
-- Search in scrollback (`xterm-addon-search`)
+- Search in scrollback
 - Tmux session auto-discovery by prefix (dev-sessions MCP interop)
 - Session pinning / grouping
 - Export scrollback as text
