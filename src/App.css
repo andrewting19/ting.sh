@@ -549,8 +549,8 @@ html, body, #root {
   overscroll-behavior: contain;
 }
 
-/* touch-action + overflow on .xterm-viewport are set by attachIOSScroll()
-   in useTerminalManager.ts at runtime on touch devices. No CSS needed here. */
+/* touch-action on the terminal container is set by attachIOSScroll() in
+   useTerminalManager.ts at runtime on touch devices. No CSS needed here. */
 
 /* ── Modal ── */
 .modal-backdrop {

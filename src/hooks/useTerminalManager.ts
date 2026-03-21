@@ -1,7 +1,6 @@
 import { useRef, useCallback, useMemo } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { CanvasAddon } from '@xterm/addon-canvas'
 import { FitAddon } from '@xterm/addon-fit'
 import type { SessionKey } from '../types'
 import '@xterm/xterm/css/xterm.css'
@@ -9,7 +8,6 @@ import '@xterm/xterm/css/xterm.css'
 interface TerminalEntry {
   term: Terminal
   fitAddon: FitAddon
-  canvasAddon: CanvasAddon | null
   webglAddon: WebglAddon | null
   ro: ResizeObserver
   // False until term.open(container) is called. A terminal can be primed
@@ -18,9 +16,6 @@ interface TerminalEntry {
   opened: boolean
   // Cleanup fn for iOS momentum scroll listeners; null on non-iOS.
   momentumCleanup: (() => void) | null
-  // Safari/iOS canvas renderer can occasionally leave stale glyphs for one
-  // frame during rapid redraw + scroll. Coalesce full repaints to the next rAF.
-  fullRefreshRaf: number | null
   // Programmatic term.focus() can emit CSI I/O when an app enabled focus
   // reporting (?1004h). Suppress only the immediate focus/blur report so the
   // shell prompt doesn't get literal "^[[I" inserted during session switches.
@@ -79,30 +74,46 @@ function isMobileDevice(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
-// iOS touch scrolling with momentum. We intentionally own touchmove + scrollTop
-// here so xterm's internal handler can't double-apply deltas.
-function attachIOSScroll(container: HTMLElement): (() => void) | null {
+// iOS touch scrolling with momentum. xterm.js v6.0.0 has a touch scroll
+// regression (#5489) so we drive scrolling ourselves via term.scrollLines().
+// TODO: remove this once xterm.js 6.1+ ships with native touch scroll fixed.
+function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) | null {
   if (!isIOSDevice()) return null
 
-  const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
-  if (!viewport) return null
+  const prevTouchAction = container.style.touchAction
+  container.style.touchAction = 'none'
 
-  const prevOverflow = viewport.style.overflow
-  const prevTouchAction = viewport.style.touchAction
-  // Kill native scrolling in this viewport; we drive scrollTop ourselves.
-  viewport.style.overflow = 'hidden'
-  viewport.style.touchAction = 'none'
+  // Approximate cell height for pixel→line conversion.
+  const cellHeight = () => (term.options.fontSize ?? 13) * (term.options.lineHeight ?? 1.2)
 
   const samples: { y: number; t: number }[] = []
   let lastY = 0
+  let pixelRemainder = 0
   let rafId: number | null = null
 
   const cancelMomentum = () => {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
   }
 
+  const scrollByPixels = (deltaY: number) => {
+    const ch = cellHeight()
+    if (ch <= 0) return
+    pixelRemainder += deltaY
+    const lines = Math.trunc(pixelRemainder / ch)
+    if (lines !== 0) {
+      const before = term.buffer.active.viewportY
+      term.scrollLines(lines)
+      const after = term.buffer.active.viewportY
+      pixelRemainder -= lines * ch
+      // At scroll boundary (top/bottom), clear remainder so reversing
+      // direction doesn't feel sticky from accumulated opposite remainder.
+      if (before === after) pixelRemainder = 0
+    }
+  }
+
   const onTouchStart = (e: TouchEvent) => {
     cancelMomentum()
+    pixelRemainder = 0
     samples.length = 0
     lastY = e.touches[0].pageY
     samples.push({ y: lastY, t: performance.now() })
@@ -115,10 +126,9 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     const y = e.touches[0].pageY
     const deltaY = lastY - y
     lastY = y
-    if (deltaY !== 0) viewport.scrollTop += deltaY
+    if (deltaY !== 0) scrollByPixels(deltaY)
     samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
-    // Prevent xterm's own touchmove handler from double-scrolling.
     e.stopPropagation()
   }
 
@@ -130,7 +140,7 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     const last = samples[samples.length - 1]
     const prev = samples[samples.length - 2]
     const dt = last.t - prev.t
-    if (dt <= 0 || dt > 100) return  // finger was stationary before lifting
+    if (dt <= 0 || dt > 100) return
 
     let velocity = (prev.y - last.y) / dt  // px/ms; positive = scroll down
     if (Math.abs(velocity) < 0.1) return
@@ -140,8 +150,8 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
       const elapsed = Math.min(now - prevFrame, 32)
       prevFrame = now
       if (Math.abs(velocity) < 0.05) { rafId = null; return }
-      viewport.scrollTop += velocity * elapsed
-      velocity *= Math.pow(0.94, elapsed / 16.67)  // friction, normalised to 60fps
+      scrollByPixels(velocity * elapsed)
+      velocity *= Math.pow(0.94, elapsed / 16.67)
       rafId = requestAnimationFrame(animate)
     }
     rafId = requestAnimationFrame(animate)
@@ -151,6 +161,7 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
     cancelMomentum()
     samples.length = 0
     lastY = 0
+    pixelRemainder = 0
   }
 
   const captureActive  = { capture: true, passive: false } as const
@@ -162,8 +173,7 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
 
   return () => {
     cancelMomentum()
-    viewport.style.overflow = prevOverflow
-    viewport.style.touchAction = prevTouchAction
+    container.style.touchAction = prevTouchAction
     container.removeEventListener('touchstart',  onTouchStart,  captureActive)
     container.removeEventListener('touchmove',   onTouchMove,   captureActive)
     container.removeEventListener('touchend',    onTouchEnd,    captureActive)
@@ -173,20 +183,6 @@ function attachIOSScroll(container: HTMLElement): (() => void) | null {
 
 export function useTerminalManager(callbacks: Callbacks) {
   const entriesRef = useRef<Map<SessionKey, TerminalEntry>>(new Map())
-  const scheduleFullRefresh = useCallback((sessionKey: SessionKey) => {
-    const entry = entriesRef.current.get(sessionKey)
-    if (!entry || !entry.opened || !entry.canvasAddon) return
-    if (!isIOSDevice()) return
-    if (entry.fullRefreshRaf !== null) return
-
-    entry.fullRefreshRaf = requestAnimationFrame(() => {
-      entry.fullRefreshRaf = null
-      // Only repaint the visible terminal to avoid extra work on hidden panes.
-      if (activeIdRef.current !== sessionKey) return
-      const rows = entry.term.rows
-      if (rows > 0) entry.term.refresh(0, rows - 1)
-    })
-  }, [])
 
   // Expose terminal entries on window in dev mode so Playwright tests can
   // read terminal buffer content without scraping the canvas.
@@ -224,11 +220,6 @@ export function useTerminalManager(callbacks: Callbacks) {
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
-    let canvasAddon: CanvasAddon | null = null
-    if (isIOSDevice()) {
-      canvasAddon = new CanvasAddon()
-      term.loadAddon(canvasAddon)
-    }
 
     term.onData((data) => {
       forwardTerminalData(sessionKey, data)
@@ -239,7 +230,7 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     // Stub RO — replaced with the real one when open() is called in ensureTerminal
     const ro = new ResizeObserver(() => {})
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, fullRefreshRaf: null, suppressFocusReportUntil: 0 })
+    entriesRef.current.set(sessionKey, { term, fitAddon, webglAddon: null, ro, opened: false, momentumCleanup: null, suppressFocusReportUntil: 0 })
     emitScrollState(sessionKey)
   }, [emitScrollState, forwardTerminalData])
 
@@ -252,13 +243,11 @@ export function useTerminalManager(callbacks: Callbacks) {
         existing.term.open(container)
         existing.fitAddon.fit()
         existing.opened = true
-        scheduleFullRefresh(sessionKey)
-        existing.momentumCleanup = attachIOSScroll(container)
+        existing.momentumCleanup = attachIOSScroll(container, existing.term)
         // Replace stub RO with real one that reacts to container size changes
         existing.ro.disconnect()
         const ro = new ResizeObserver(() => {
           existing.fitAddon.fit()
-          scheduleFullRefresh(sessionKey)
           emitScrollState(sessionKey)
           cbRef.current.onResize(sessionKey, existing.term.cols, existing.term.rows)
         })
@@ -273,14 +262,8 @@ export function useTerminalManager(callbacks: Callbacks) {
     const term = new Terminal(TERMINAL_OPTIONS)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
-    let canvasAddon: CanvasAddon | null = null
-    if (isIOSDevice()) {
-      canvasAddon = new CanvasAddon()
-      term.loadAddon(canvasAddon)
-    }
     term.open(container)
     fitAddon.fit()
-    scheduleFullRefresh(sessionKey)
 
     term.onData((data) => {
       forwardTerminalData(sessionKey, data)
@@ -291,16 +274,14 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     const ro = new ResizeObserver(() => {
       fitAddon.fit()
-      scheduleFullRefresh(sessionKey)
       emitScrollState(sessionKey)
       cbRef.current.onResize(sessionKey, term.cols, term.rows)
     })
     ro.observe(container)
 
-    entriesRef.current.set(sessionKey, { term, fitAddon, canvasAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container), fullRefreshRaf: null, suppressFocusReportUntil: 0 })
-    scheduleFullRefresh(sessionKey)
+    entriesRef.current.set(sessionKey, { term, fitAddon, webglAddon: null, ro, opened: true, momentumCleanup: attachIOSScroll(container, term), suppressFocusReportUntil: 0 })
     emitScrollState(sessionKey)
-  }, [emitScrollState, forwardTerminalData, scheduleFullRefresh])
+  }, [emitScrollState, forwardTerminalData])
 
   // Switch the WebGL renderer to the newly active terminal.
   // Inactive terminals don't need GPU acceleration — they're invisible.
@@ -328,43 +309,39 @@ export function useTerminalManager(callbacks: Callbacks) {
         entry.term.loadAddon(webgl)
         entry.webglAddon = webgl
       } catch {
-        // Canvas fallback — fine
+        // DOM renderer fallback — fine
       }
     }
 
     // Re-fit in case the container was invisible when last resized
     if (entry?.opened) {
       entry.fitAddon.fit()
-      scheduleFullRefresh(sessionKey)
       emitScrollState(sessionKey)
     }
-  }, [emitScrollState, scheduleFullRefresh])
+  }, [emitScrollState])
 
   const write = useCallback((sessionKey: SessionKey, data: Uint8Array, onFlushed?: () => void) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.write(data, () => {
-      scheduleFullRefresh(sessionKey)
       emitScrollState(sessionKey)
       onFlushed?.()
     })
-  }, [emitScrollState, scheduleFullRefresh])
+  }, [emitScrollState])
 
   const reset = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.reset()
-    scheduleFullRefresh(sessionKey)
     emitScrollState(sessionKey)
-  }, [emitScrollState, scheduleFullRefresh])
+  }, [emitScrollState])
 
   const scrollToBottom = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
     entry.term.scrollToBottom()
-    scheduleFullRefresh(sessionKey)
     emitScrollState(sessionKey)
-  }, [emitScrollState, scheduleFullRefresh])
+  }, [emitScrollState])
 
   const focus = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
@@ -410,12 +387,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     cbRef.current.onScrollStateChange(sessionKey, false)
     entry.ro.disconnect()
     entry.momentumCleanup?.()
-    if (entry.fullRefreshRaf !== null) {
-      cancelAnimationFrame(entry.fullRefreshRaf)
-      entry.fullRefreshRaf = null
-    }
     entry.webglAddon?.dispose()
-    entry.canvasAddon?.dispose()
     entry.term.dispose()
     entriesRef.current.delete(sessionKey)
     if (activeIdRef.current === sessionKey) activeIdRef.current = null
