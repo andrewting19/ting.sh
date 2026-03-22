@@ -33,10 +33,7 @@ fi
 RELEASE_FILES=(
   server.ts
   serverBuffer.ts
-  src/pty.ts
-  src/pty-unix.ts
-  src/pty-windows.ts
-  src/pty-worker.js
+  src/
   package.json
   bun.lock
   VERSION
