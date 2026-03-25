@@ -13,6 +13,7 @@
 - [x] New session blank until switch away/back — fixed (sessions before ready)
 - [x] Session name collisions after delete — fixed (champion name pool)
 - [x] Shared-session width stuck after phone use — fixed (foreground + same-session resize reclaim)
+- [x] Browser/sidebar viewport width changes could trigger Ghostty resize storms and temporary tab stalls — fixed in web-terminal by frame-coalescing measured resize notifications and deduping host resize sends while preserving explicit reclaim resizes
 - [x] Output leaked into wrong terminal during fast session switches — fixed (requestId-validated attach + stale-stream binary quarantine)
 - [x] Truncated replay could render with broken ANSI state — fixed (sanitize first partial line after buffer cap trims)
 - [x] Duplicate output after reconnect/hot reload — fixed (ignore stale WS events + hot-reload regression test)
@@ -49,6 +50,7 @@
 - [x] Right-click context menu — Rename / Duplicate / Kill
 - [x] Duplicate session — spawns in same CWD, inserted directly after source in list
 - [x] Rename UX polish — CWD subtitle stays visible, no height jump (box-shadow not border)
+- [x] Rename editor stability — entering edit mode waits until the double-click sequence settles, and Escape cancels without blur-committing the draft
 - [x] Champion names for auto-generated session names (all 172, as of Feb 2026)
 - [x] Live CWD subtitle in sidebar (Enter-key triggered + 30s fallback poll)
 - [x] Client-side session ordering persisted to per-host localStorage keys

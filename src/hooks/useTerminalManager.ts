@@ -31,6 +31,7 @@ interface TerminalEntry {
   adapter: TerminalAdapter | null
   term: Terminal | null
   ro: ResizeObserver | null
+  resizeNotifyFrame: number | null
   opened: boolean
   container: HTMLElement | null
   pendingWrites: PendingWrite[]
@@ -39,6 +40,7 @@ interface TerminalEntry {
   shouldBeActive: boolean
   momentumCleanup: (() => void) | null
   suppressFocusReportUntil: number
+  lastReportedSize: { cols: number; rows: number } | null
 }
 
 interface Callbacks {
@@ -287,6 +289,7 @@ function createEntry(): TerminalEntry {
     adapter: null,
     term: null,
     ro: null,
+    resizeNotifyFrame: null,
     opened: false,
     container: null,
     pendingWrites: [],
@@ -295,6 +298,7 @@ function createEntry(): TerminalEntry {
     shouldBeActive: false,
     momentumCleanup: null,
     suppressFocusReportUntil: 0,
+    lastReportedSize: null,
   }
 }
 
@@ -347,6 +351,24 @@ export function useTerminalManager(callbacks: Callbacks) {
     cbRef.current.onTerminalReady(sessionKey, dims.cols, dims.rows)
   }, [])
 
+  const reportMeasuredResize = useCallback((sessionKey: SessionKey, entry: TerminalEntry) => {
+    const dims = entry.adapter?.getMeasuredDimensions()
+    if (!dims) return
+    const last = entry.lastReportedSize
+    if (last && last.cols === dims.cols && last.rows === dims.rows) return
+    entry.lastReportedSize = dims
+    cbRef.current.onResize(sessionKey, dims.cols, dims.rows)
+  }, [])
+
+  const scheduleMeasuredResizeReport = useCallback((sessionKey: SessionKey, entry: TerminalEntry) => {
+    if (entry.resizeNotifyFrame !== null) return
+    entry.resizeNotifyFrame = requestAnimationFrame(() => {
+      entry.resizeNotifyFrame = null
+      if (!entry.adapter || !entry.opened) return
+      reportMeasuredResize(sessionKey, entry)
+    })
+  }, [reportMeasuredResize])
+
   const openEntry = useCallback((sessionKey: SessionKey, entry: TerminalEntry, container: HTMLElement) => {
     if (!entry.adapter || entry.opened) return
 
@@ -359,9 +381,7 @@ export function useTerminalManager(callbacks: Callbacks) {
       if (!entry.adapter) return
       entry.adapter.fit()
       emitScrollState(sessionKey)
-      const dims = entry.adapter.getMeasuredDimensions()
-      if (!dims) return
-      cbRef.current.onResize(sessionKey, dims.cols, dims.rows)
+      scheduleMeasuredResizeReport(sessionKey, entry)
     })
     ro.observe(container)
     entry.ro = ro
@@ -380,7 +400,8 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     emitScrollState(sessionKey)
     notifyTerminalReady(sessionKey, entry)
-  }, [emitScrollState, flushPendingWrites, notifyTerminalReady])
+    entry.lastReportedSize = entry.adapter.getMeasuredDimensions()
+  }, [emitScrollState, flushPendingWrites, notifyTerminalReady, scheduleMeasuredResizeReport])
 
   const ensureAdapter = useCallback((sessionKey: SessionKey, entry: TerminalEntry) => {
     if (!runtimeReadyRef.current || entry.adapter) return
@@ -469,6 +490,7 @@ export function useTerminalManager(callbacks: Callbacks) {
   const reset = useCallback((sessionKey: SessionKey) => {
     const entry = ensureEntry(sessionKey)
     entry.pendingWrites = []
+    entry.lastReportedSize = null
     if (!entry.adapter || !entry.opened) {
       entry.pendingReset = true
       cbRef.current.onScrollStateChange(sessionKey, false)
@@ -523,6 +545,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     if (!entry) return
     cbRef.current.onScrollStateChange(sessionKey, false)
     entry.ro?.disconnect()
+    if (entry.resizeNotifyFrame !== null) cancelAnimationFrame(entry.resizeNotifyFrame)
     entry.momentumCleanup?.()
     entry.adapter?.dispose()
     entriesRef.current.delete(sessionKey)

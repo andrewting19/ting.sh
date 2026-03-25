@@ -131,6 +131,7 @@ export function App() {
 
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceKeyRef = useRef<SessionKey | null>(null)
+  const lastSentResizeRef = useRef<Map<SessionKey, { cols: number; rows: number }>>(new Map())
 
   // Track sessions killed this WS connection to avoid attaching to dead ones
   // during cascading kills (e.g. killAllSessions sends bulk kill messages)
@@ -285,7 +286,7 @@ export function App() {
     },
     onResize: (sessionKey, cols, rows) => {
       if (sessionKey !== currentKeyRef.current) return
-      sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
+      sendResizeIfChanged(sessionKey, { cols, rows })
     },
     onScrollStateChange: (sessionKey, showScrollToBottom) => {
       setShowScrollToBottomByKey(prev => {
@@ -306,7 +307,7 @@ export function App() {
         return
       }
       if (attachedKeyRef.current === sessionKey) {
-        sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
+        sendResizeIfChanged(sessionKey, { cols, rows })
       }
     },
   })
@@ -400,6 +401,19 @@ export function App() {
     sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
   }, [sendToHost, tm])
 
+  const sendResizeIfChanged = useCallback((
+    key: SessionKey,
+    dims: { cols: number; rows: number } | null,
+    options?: { force?: boolean },
+  ) => {
+    if (!dims) return null
+    const last = lastSentResizeRef.current.get(key)
+    if (!options?.force && last && last.cols === dims.cols && last.rows === dims.rows) return dims
+    lastSentResizeRef.current.set(key, dims)
+    sendToHost(parseKey(key).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
+    return dims
+  }, [sendToHost])
+
   const prepareTerminalForAttach = useCallback((key: SessionKey) => {
     const container = containerRefs.current.get(key)
     if (container) tm.ensureTerminal(key, container)
@@ -409,10 +423,8 @@ export function App() {
 
   const syncSessionSize = useCallback((key: SessionKey) => {
     const dims = prepareTerminalForAttach(key)
-    if (!dims) return null
-    sendToHost(parseKey(key).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
-    return dims
-  }, [prepareTerminalForAttach, sendToHost])
+    return sendResizeIfChanged(key, dims, { force: true })
+  }, [prepareTerminalForAttach, sendResizeIfChanged])
 
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
@@ -567,6 +579,7 @@ export function App() {
         if (key && parseKey(key).hostId === host.id) {
           const dims = prepareTerminalForAttach(key)
           tm.reset(key)
+          lastSentResizeRef.current.delete(key)
           if (dims) {
             sendAttachRequest(key, dims)
           } else {
@@ -605,10 +618,10 @@ export function App() {
       queuedAttachKeyRef.current = null
       sendAttachRequest(currentKey, dims)
     } else if (attachedKeyRef.current === currentKey && dims) {
-      sendToHost(parseKey(currentKey).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
+      sendResizeIfChanged(currentKey, dims)
     }
     tm.focus(currentKey)
-  }, [currentKey, prepareTerminalForAttach, sendAttachRequest, sendToHost, sessions.length, tm])
+  }, [currentKey, prepareTerminalForAttach, sendAttachRequest, sendResizeIfChanged, sessions.length, tm])
 
   // If another client resized the shared PTY while this tab was in the
   // background (e.g. phone <-> desktop), reclaim local dimensions on return.
@@ -872,6 +885,7 @@ export function App() {
     // Clear existing content — server always replays the full scrollback buffer
     // on every attach, so we must reset first to avoid duplication.
     tm.reset(key)
+    lastSentResizeRef.current.delete(key)
     // Optimistic: make pane visible immediately so focus() fires within the
     // user gesture (required for iOS keyboard), without waiting for ready.
     currentKeyRef.current = key

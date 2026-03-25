@@ -331,6 +331,7 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
+  const skipBlurCommitRef = useRef(false)
   const canDragReorder = supportsPointerDragReorder()
 
   function startLongPress(e: React.PointerEvent) {
@@ -353,19 +354,28 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
 
   useEffect(() => {
     if (isEditing) {
+      skipBlurCommitRef.current = false
       setDraft(session.name)
       setTimeout(() => inputRef.current?.select(), 0)
     }
   }, [isEditing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function commit() {
+    if (skipBlurCommitRef.current) {
+      skipBlurCommitRef.current = false
+      return
+    }
     onCommitEdit(draft.trim() || session.name)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
     e.stopPropagation()
     if (e.key === 'Enter') { e.preventDefault(); commit() }
-    if (e.key === 'Escape') { onCancelEdit() }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      skipBlurCommitRef.current = true
+      onCancelEdit()
+    }
   }
 
   return (
@@ -403,7 +413,14 @@ function SessionItem({ session, active, disabled, isEditing, isDragOver, 'data-s
             autoFocus
           />
         ) : (
-          <span className="session-name" onDoubleClick={(e) => { e.stopPropagation(); if (!disabled) onStartEdit() }}>
+          <span
+            className="session-name"
+            onDoubleClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (!disabled) requestAnimationFrame(() => onStartEdit())
+            }}
+          >
             {session.name}
           </span>
         )}
