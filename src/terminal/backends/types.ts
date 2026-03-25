@@ -18,8 +18,7 @@ export interface TerminalBackendInstance {
   reset: () => void
   focus: () => void
   scrollToBottom: () => void
-  activate: () => void
-  deactivate: () => void
+  setActive: (active: boolean) => void
   dispose: () => void
   isOpened: () => boolean
   getDimensions: () => TerminalDimensions
@@ -27,10 +26,17 @@ export interface TerminalBackendInstance {
   getApplicationCursorKeysMode: () => boolean
   getBufferText: () => string
   getLinesFromBottom: () => number
-  getDebugTerminal?: () => unknown
 }
 
 export interface TerminalBackend {
   id: string
   createTerminal: (sessionKey: SessionKey, callbacks: TerminalBackendCallbacks) => TerminalBackendInstance
+}
+
+export interface TerminalBackendDebugInfo {
+  term?: unknown
+}
+
+export interface DebuggableTerminalBackendInstance extends TerminalBackendInstance {
+  getDebugInfo: () => TerminalBackendDebugInfo
 }

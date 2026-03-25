@@ -1,7 +1,7 @@
 import { useRef, useCallback, useMemo } from 'react'
 import type { SessionKey } from '../types'
-import { getTerminalBackend } from '../terminal/backends'
-import type { TerminalBackendInstance } from '../terminal/backends/types'
+import { createTerminalBackend } from '../terminal/backends'
+import type { DebuggableTerminalBackendInstance, TerminalBackendInstance } from '../terminal/backends/types'
 
 interface TerminalEntry {
   terminal: TerminalBackendInstance
@@ -24,9 +24,12 @@ const SCROLL_TO_BOTTOM_BUTTON_THRESHOLD_LINES = 4
 
 export function useTerminalManager(callbacks: Callbacks) {
   const entriesRef = useRef<Map<SessionKey, TerminalEntry>>(new Map())
-  const backendRef = useRef(getTerminalBackend())
+  const backendRef = useRef(createTerminalBackend())
   const createEntry = useCallback((terminal: TerminalBackendInstance): TerminalEntry => {
     const entry: TerminalEntry = { terminal, suppressFocusReportUntil: 0 }
+    const debugInfo = 'getDebugInfo' in terminal
+      ? (terminal as DebuggableTerminalBackendInstance).getDebugInfo()
+      : {}
     Object.defineProperties(entry, {
       opened: {
         enumerable: true,
@@ -34,7 +37,7 @@ export function useTerminalManager(callbacks: Callbacks) {
       },
       term: {
         enumerable: true,
-        get: () => terminal.getDebugTerminal?.(),
+        get: () => debugInfo.term,
       },
     })
     return entry
@@ -115,14 +118,14 @@ export function useTerminalManager(callbacks: Callbacks) {
 
     if (prevId && prevId !== sessionKey) {
       const prev = entriesRef.current.get(prevId)
-      prev?.terminal.deactivate()
+      prev?.terminal.setActive(false)
     }
 
     activeIdRef.current = sessionKey
 
     const entry = entriesRef.current.get(sessionKey)
     if (entry?.terminal.isOpened()) {
-      entry.terminal.activate()
+      entry.terminal.setActive(true)
       entry.terminal.fit()
       emitScrollState(sessionKey)
     }

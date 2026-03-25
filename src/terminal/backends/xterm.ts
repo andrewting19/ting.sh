@@ -2,7 +2,12 @@ import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { FitAddon } from '@xterm/addon-fit'
 import type { SessionKey } from '../../types'
-import type { TerminalBackend, TerminalBackendCallbacks, TerminalBackendInstance, TerminalDimensions } from './types'
+import type {
+  DebuggableTerminalBackendInstance,
+  TerminalBackend,
+  TerminalBackendCallbacks,
+  TerminalDimensions,
+} from './types'
 import '@xterm/xterm/css/xterm.css'
 
 const TERMINAL_OPTIONS = {
@@ -155,7 +160,7 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
   }
 }
 
-class XtermTerminalInstance implements TerminalBackendInstance {
+class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
   private webglAddon: WebglAddon | null = null
@@ -210,7 +215,13 @@ class XtermTerminalInstance implements TerminalBackendInstance {
     this.term.scrollToBottom()
   }
 
-  activate() {
+  setActive(active: boolean) {
+    if (!active) {
+      this.webglAddon?.dispose()
+      this.webglAddon = null
+      return
+    }
+
     if (!this.opened || this.webglAddon || isMobileDevice()) return
     try {
       const webgl = new WebglAddon()
@@ -225,17 +236,12 @@ class XtermTerminalInstance implements TerminalBackendInstance {
     }
   }
 
-  deactivate() {
-    this.webglAddon?.dispose()
-    this.webglAddon = null
-  }
-
   dispose() {
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
     this.momentumCleanup?.()
     this.momentumCleanup = null
-    this.deactivate()
+    this.setActive(false)
     this.term.dispose()
   }
 
@@ -273,8 +279,8 @@ class XtermTerminalInstance implements TerminalBackendInstance {
     return Math.max(0, buffer.baseY - buffer.viewportY)
   }
 
-  getDebugTerminal() {
-    return this.term
+  getDebugInfo() {
+    return { term: this.term }
   }
 }
 
