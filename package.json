@@ -15,6 +15,7 @@
     "release:major": "./scripts/release.sh major"
   },
   "dependencies": {
+    "@andrewting19/ghostty-web": "0.5.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",

@@ -1,7 +1,4 @@
-import { Terminal } from '@xterm/xterm'
-import { WebglAddon } from '@xterm/addon-webgl'
-import { FitAddon } from '@xterm/addon-fit'
-import type { SessionKey } from '../../types'
+import { FitAddon, Terminal, init as initGhostty } from '@andrewting19/ghostty-web'
 import type {
   DebuggableTerminalBackendInstance,
   TerminalBackend,
@@ -9,7 +6,7 @@ import type {
   TerminalDimensions,
   TerminalScrollState,
 } from './types'
-import '@xterm/xterm/css/xterm.css'
+import type { SessionKey } from '../../types'
 
 const TERMINAL_OPTIONS = {
   fontSize: 13,
@@ -18,6 +15,7 @@ const TERMINAL_OPTIONS = {
   cursorBlink: true,
   cursorStyle: 'block' as const,
   scrollback: 10000,
+  smoothScrollDuration: 0,
   theme: {
     background: '#0d0e17',
     foreground: '#c0caf5',
@@ -43,14 +41,25 @@ const TERMINAL_OPTIONS = {
   },
 }
 
+let ghosttyInitPromise: Promise<void> | null = null
+
+function ensureGhosttyReady(): Promise<void> {
+  if (!ghosttyInitPromise) ghosttyInitPromise = initGhostty()
+  return ghosttyInitPromise
+}
+
 function isIOSDevice(): boolean {
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
-function isMobileDevice(): boolean {
-  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
-  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+function getTerminalLineHeight(container: HTMLElement, term: Terminal): number {
+  const canvas = container.querySelector('canvas')
+  if (canvas && term.rows > 0) {
+    const rect = canvas.getBoundingClientRect()
+    if (rect.height > 0) return rect.height / term.rows
+  }
+  return 20
 }
 
 function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) | null {
@@ -59,12 +68,16 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
   const prevTouchAction = container.style.touchAction
   container.style.touchAction = 'none'
 
-  const cellHeight = () => (term.options.fontSize ?? 13) * (term.options.lineHeight ?? 1.2)
-
   const samples: { y: number; t: number }[] = []
   let lastY = 0
-  let pixelRemainder = 0
   let rafId: number | null = null
+
+  const scrollByPixels = (deltaY: number) => {
+    const lineHeight = getTerminalLineHeight(container, term)
+    if (lineHeight <= 0) return
+    const lineDelta = deltaY / lineHeight
+    if (lineDelta !== 0) term.scrollLines(-lineDelta)
+  }
 
   const cancelMomentum = () => {
     if (rafId !== null) {
@@ -73,23 +86,9 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
     }
   }
 
-  const scrollByPixels = (deltaY: number) => {
-    const ch = cellHeight()
-    if (ch <= 0) return
-    pixelRemainder += deltaY
-    const lines = Math.trunc(pixelRemainder / ch)
-    if (lines !== 0) {
-      const before = term.buffer.active.viewportY
-      term.scrollLines(lines)
-      const after = term.buffer.active.viewportY
-      pixelRemainder -= lines * ch
-      if (before === after) pixelRemainder = 0
-    }
-  }
-
   const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1) return
     cancelMomentum()
-    pixelRemainder = 0
     samples.length = 0
     lastY = e.touches[0].pageY
     samples.push({ y: lastY, t: performance.now() })
@@ -102,7 +101,7 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
     const y = e.touches[0].pageY
     const deltaY = lastY - y
     lastY = y
-    if (deltaY !== 0) scrollByPixels(deltaY)
+    scrollByPixels(deltaY)
     samples.push({ y, t: performance.now() })
     if (samples.length > 8) samples.shift()
     e.stopPropagation()
@@ -141,7 +140,6 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
     cancelMomentum()
     samples.length = 0
     lastY = 0
-    pixelRemainder = 0
   }
 
   const captureActive = { capture: true, passive: false } as const
@@ -161,10 +159,9 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
   }
 }
 
-class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
+class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
-  private webglAddon: WebglAddon | null = null
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
   private opened = false
@@ -212,33 +209,21 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.term.focus()
   }
 
-  scrollToBottom() {
-    this.term.scrollToBottom()
-  }
-
   scrollToTop() {
     this.term.scrollToTop()
   }
 
+  scrollToBottom() {
+    this.term.scrollToBottom()
+  }
+
   setActive(active: boolean) {
     if (!active) {
-      this.webglAddon?.dispose()
-      this.webglAddon = null
+      this.term.blur()
+      this.term.pauseRendering()
       return
     }
-
-    if (!this.opened || this.webglAddon || isMobileDevice()) return
-    try {
-      const webgl = new WebglAddon()
-      webgl.onContextLoss(() => {
-        webgl.dispose()
-        if (this.webglAddon === webgl) this.webglAddon = null
-      })
-      this.term.loadAddon(webgl)
-      this.webglAddon = webgl
-    } catch {
-      // DOM renderer fallback is acceptable.
-    }
+    this.term.resumeRendering()
   }
 
   dispose() {
@@ -246,7 +231,6 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.resizeObserver = null
     this.momentumCleanup?.()
     this.momentumCleanup = null
-    this.setActive(false)
     this.term.dispose()
   }
 
@@ -264,15 +248,16 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   }
 
   getScrollState(): TerminalScrollState {
-    const buffer = this.term.buffer.active
+    const offsetFromBottom = Math.max(0, Math.floor(this.term.getViewportY()))
+    const scrollbackLength = this.term.getScrollbackLength()
     return {
-      offsetFromTop: buffer.viewportY,
-      offsetFromBottom: Math.max(0, buffer.baseY - buffer.viewportY),
+      offsetFromTop: Math.max(0, scrollbackLength - offsetFromBottom),
+      offsetFromBottom,
     }
   }
 
   getApplicationCursorKeysMode() {
-    return this.term.modes.applicationCursorKeysMode ?? false
+    return this.term.getMode(1, false)
   }
 
   getBufferText() {
@@ -292,14 +277,14 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   }
 }
 
-export function createXtermBackend(): TerminalBackend {
+export function createGhosttyBackend(): TerminalBackend {
   return {
-    id: 'xterm',
+    id: 'ghostty',
     init() {
-      return Promise.resolve()
+      return ensureGhosttyReady()
     },
     createTerminal(sessionKey, callbacks) {
-      return new XtermTerminalInstance(sessionKey, callbacks)
+      return new GhosttyTerminalInstance(sessionKey, callbacks)
     },
   }
 }

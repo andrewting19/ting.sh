@@ -36,6 +36,7 @@ export interface TerminalBackendInstance {
 
 export interface TerminalBackend {
   id: string
+  init: () => Promise<void>
   createTerminal: (sessionKey: SessionKey, callbacks: TerminalBackendCallbacks) => TerminalBackendInstance
 }
 
