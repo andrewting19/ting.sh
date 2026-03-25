@@ -12,6 +12,7 @@
 bun test
   └─ tests/e2e.test.ts        (Bun test runner entry point)
        └─ playwright test
+            └─ tests/renderer-matrix.pw.ts (shared core flows under xterm + ghostty)
             └─ tests/session.pw.ts   (all E2E tests)
             └─ tests/helpers.ts      (shared utilities)
 ```
@@ -30,6 +31,8 @@ Each `bun test` run gets its own unique port pair from the OS. Multiple coding a
 | Helper | What it does |
 |---|---|
 | `newSession(page)` | Clicks "+ new", waits for a new `[data-session-id]` to appear, returns its ID. Tolerates leftover sessions (diffs before/after). |
+| `loadWithRenderer(page, renderer)` | Boots the app under `xterm` or `ghostty` by seeding localStorage before navigation, then kills leftover sessions. |
+| `getActiveRenderer(page)` | Reads the currently booted renderer from the dev helper / document dataset. |
 | `waitForPrompt(page, id, timeout?)` | Polls the backend-neutral dev helper via `window.__wt_terminal_debug` until any non-whitespace line appears. Includes diagnostics on timeout. |
 | `waitForTerminal(page, id, needle, timeout?)` | Polls until `needle` string appears in the terminal buffer. |
 | `killAllSessions(page)` | Waits for WS connected + stable session count, then kills sessions **sequentially** (kill one, wait for DOM removal, repeat). |
@@ -42,6 +45,7 @@ Each `bun test` run gets its own unique port pair from the OS. Multiple coding a
 The app exposes these in dev mode (`import.meta.env.DEV`) for test use:
 
 - `__wt_terminal_debug` — dev helper for backend-neutral terminal text and scroll state used by E2E tests.
+- `__wt_terminal_debug.getRenderer()` — returns the active renderer (`xterm` or `ghostty`) in dev mode.
 - `__wt_send` — `(obj: object) => void` — send arbitrary WS messages (e.g. `{ type: 'kill', id }`).
 - `__wt_ws_close` — `() => void` — force-close the WS connection (used by the reconnect test since `setOffline(true)` doesn't affect localhost).
 
@@ -83,6 +87,10 @@ test('descriptive name — what is being verified', async ({ page }) => {
 8. **Tests run with `/bin/bash`, not the user's shell.** Don't assert zsh-specific prompt strings (like `%`). The `waitForPrompt` helper just checks for any non-whitespace output.
 
 9. **Test timeout is 15 seconds.** If a test needs longer, something is wrong. Individual `waitFor*` calls should use explicit timeouts (3-8s) rather than relying on the global timeout.
+
+10. **Prefer the renderer matrix for shared behavior.** Put parity-sensitive core flows in `tests/renderer-matrix.pw.ts` and run them for both `xterm` and `ghostty`. Keep `tests/session.pw.ts` for broader app coverage and renderer-specific expectations that are not yet matrix-ready.
+
+11. **Use browser-use as a final smoke pass for renderer work.** After large renderer or lifecycle changes, exercise at least create, input, session switch, and reload manually under both `xterm` and `ghostty` against the live dev server.
 
 ## Gotchas
 

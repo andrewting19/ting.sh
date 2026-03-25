@@ -121,10 +121,12 @@ Working:
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
-- Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a backend interface while xterm remains the only shipped renderer on this branch
+- Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a shared backend interface and ships both xterm and Ghostty implementations on this branch
 - Dev/test terminal inspection no longer depends on raw xterm instances — E2E now uses a backend-neutral `__wt_terminal_debug` helper
 - Terminal manager now supports async backend initialization, and Ghostty has been added as a second backend implementation behind the shared contract
 - Startup renderer selection is supported via `localStorage['wt-terminal-renderer']` with a full-page reload remount path (`xterm` default, `ghostty` opt-in)
+- Core Playwright parity coverage now runs under both renderers for create/input/switch/reload/reconnect/focus-report flows
+- Browser-use smoke coverage has also been exercised under both renderers for create/input/switch/reload flows against the live dev server
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar
@@ -159,7 +161,7 @@ Working:
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 32 tests, runs with `bun test`
+- Automated E2E test suite (Playwright) — 48 tests, including a shared xterm/Ghostty renderer matrix for core parity flows
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)

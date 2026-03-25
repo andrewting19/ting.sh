@@ -46,6 +46,8 @@
 - [x] Ghostty backend scaffolded behind the shared contract — xterm remains the default until renderer selection overrides it
 - [x] Startup renderer selection/remount path — renderer is chosen once per page load and switched via localStorage + reload
 - [x] Backend-aware smoke coverage — Ghostty create/switch/reload flows now run in Playwright
+- [x] Shared renderer-matrix coverage — core create/input/switch/reload/reconnect/focus-report flows now run under both xterm and Ghostty
+- [x] Browser-use smoke verification — xterm and Ghostty both exercised manually for create/input/switch/reload against the live dev server
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
@@ -60,7 +62,7 @@
 - [x] Dev mode accessible over Tailscale (Vite `host: true`)
 
 ## Completed features (continued)
-- [x] E2E test suite (Playwright) — 32 tests covering all key flows
+- [x] E2E test suite (Playwright) — 48 tests with a shared xterm/Ghostty core matrix plus renderer-specific coverage
 - [x] Long-press context menu on mobile (pointerdown + 500ms, click suppression)
 - [x] Drag-to-end (sentinel drop zone after last session item)
 - [x] URL hash routing — `#<hostId>/<name>` deeplinks to session by host + name (legacy `#<name>` supported for local host)
@@ -82,7 +84,7 @@
 - [x] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [x] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [x] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics
-- [ ] Dual-renderer PR 5: broaden backend-aware test coverage beyond smoke coverage and shared dev-helper assertions
+- [ ] Dual-renderer PR 5: broaden backend-aware coverage beyond the current core matrix (mobile, resize reclaim, hash/deeplink, duplicate/rename/kill parity)
 - [x] Multi-host phase 1: protocol hardening (`detach`, list subscribers, `requestId` echo)
 - [x] Multi-host phase 2: server identity (`hosts.json`, `/api/host`, `host-info`, `hostId`)
 - [x] Multi-host phase 3: shared types (`Host`, `SessionKey`, host-aware `Session`)

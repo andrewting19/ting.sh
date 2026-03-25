@@ -1,10 +1,27 @@
 import type { Page } from '@playwright/test'
+import type { TerminalRenderer } from '../src/terminal/backends'
 
 /** IDs of all session items currently visible in the sidebar. */
 export async function getSessions(page: Page): Promise<string[]> {
   return page.$$eval('[data-session-id]', els =>
     els.map(el => el.getAttribute('data-session-id')!)
   )
+}
+
+export async function loadWithRenderer(page: Page, renderer: TerminalRenderer): Promise<void> {
+  await page.addInitScript((nextRenderer: TerminalRenderer) => {
+    localStorage.setItem('wt-terminal-renderer', nextRenderer)
+  }, renderer)
+  await page.goto('/')
+  await killAllSessions(page)
+}
+
+export async function getActiveRenderer(page: Page): Promise<TerminalRenderer | null> {
+  return page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (window as any).__wt_terminal_debug?.getRenderer?.() ?? document.documentElement.dataset.terminalRenderer
+    return value === 'xterm' || value === 'ghostty' ? value : null
+  })
 }
 
 /**
