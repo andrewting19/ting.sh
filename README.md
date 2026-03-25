@@ -88,6 +88,29 @@ Every machine in the fleet needs its own `hosts.json` with the other machines as
 - `AUTO_UPDATE_REPO` — GitHub repo to poll (default: `andrewting19/ting.sh`)
 - `TING_WINDOWS_SESSION_HOME` — Windows-only override for the shell home directory when the service itself runs as `LocalSystem`
 
+### Renderer selection
+
+The app now supports two browser terminal backends behind the same manager contract:
+
+- `xterm` — current default
+- `ghostty` — opt-in alternate renderer
+
+Select a renderer locally with:
+
+```js
+localStorage.setItem('wt-terminal-renderer', 'ghostty')
+location.reload()
+```
+
+Switch back with:
+
+```js
+localStorage.setItem('wt-terminal-renderer', 'xterm')
+location.reload()
+```
+
+Renderer choice is read once at startup and switched by a full-page reload on purpose. That avoids trying to migrate live terminal state between renderers.
+
 ## Current state
 
 Working:
@@ -101,6 +124,7 @@ Working:
 - Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a backend interface while xterm remains the only shipped renderer on this branch
 - Dev/test terminal inspection no longer depends on raw xterm instances — E2E now uses a backend-neutral `__wt_terminal_debug` helper
 - Terminal manager now supports async backend initialization, and Ghostty has been added as a second backend implementation behind the shared contract
+- Startup renderer selection is supported via `localStorage['wt-terminal-renderer']` with a full-page reload remount path (`xterm` default, `ghostty` opt-in)
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar

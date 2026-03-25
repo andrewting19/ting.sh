@@ -6,6 +6,8 @@ import { SelectionModal } from './components/SelectionModal'
 import { getArrowSequence, type ArrowDirection } from './components/ArrowPad'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
+import { persistTerminalRenderer, resolveTerminalRenderer } from './terminal/renderer'
+import type { TerminalRenderer } from './terminal/backends'
 import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
 import './App.css'
@@ -94,6 +96,7 @@ function getMobileKeyboardInset(): number {
 }
 
 export function App() {
+  const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -299,7 +302,14 @@ export function App() {
         return { ...prev, [sessionKey]: true }
       })
     },
-  })
+  }, { backendId: terminalRenderer })
+
+  useEffect(() => {
+    document.documentElement.dataset.terminalRenderer = terminalRenderer
+    return () => {
+      delete document.documentElement.dataset.terminalRenderer
+    }
+  }, [terminalRenderer])
 
   const reconcileLocalHostIdentity = useCallback((connectionHostId: string, reportedId: string, reportedName: string) => {
     const localConnection = hosts.find(host => host.local && host.id === connectionHostId)
@@ -426,6 +436,7 @@ export function App() {
       return key ? parseKey(key).sessionId : null
     }
     ;(window as any).__wt_terminal_debug = {
+      getRenderer: () => terminalRenderer,
       getText: (sessionId: string) => {
         const key = resolveTerminalKey(sessionId)
         return key ? tm.getBufferText(key) : ''
@@ -454,7 +465,14 @@ export function App() {
         if (key) tm.scrollToBottom(key)
       },
     }
-  }, [forceClose, getSessionByKey, hosts, localHostId, sendToHost, tm])
+    ;(window as any).__wt_renderer = {
+      get: () => terminalRenderer,
+      set: (renderer: TerminalRenderer) => {
+        persistTerminalRenderer(renderer)
+        location.reload()
+      },
+    }
+  }, [forceClose, getSessionByKey, hosts, localHostId, sendToHost, terminalRenderer, tm])
 
   const toWsUrl = useCallback((baseUrl: string) => {
     const next = new URL(baseUrl)

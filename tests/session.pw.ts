@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { utimesSync } from 'node:fs'
 import path from 'node:path'
+import type { TerminalRenderer } from '../src/terminal/backends'
 import { getSessions, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
 
 /** Returns the data-session-id of the currently active session item. */
@@ -85,10 +86,77 @@ async function getSttySize(page: import('@playwright/test').Page, id: string): P
   return result.jsonValue() as Promise<{ rows: number; cols: number }>
 }
 
+async function loadWithRenderer(page: import('@playwright/test').Page, renderer: TerminalRenderer): Promise<void> {
+  await page.addInitScript((nextRenderer: TerminalRenderer) => {
+    localStorage.setItem('wt-terminal-renderer', nextRenderer)
+  }, renderer)
+  await page.goto('/')
+  await killAllSessions(page)
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   // Clean slate: atomic kill-all avoids auto-attach cascade
   await killAllSessions(page)
+})
+
+test('ghostty renderer can be selected at startup and create a session', async ({ page }) => {
+  await loadWithRenderer(page, 'ghostty')
+
+  const renderer = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__wt_terminal_debug?.getRenderer?.() ?? document.documentElement.dataset.terminalRenderer
+  })
+  expect(renderer).toBe('ghostty')
+
+  const id = await newSession(page)
+  await waitForPrompt(page, id, 12000)
+})
+
+test('ghostty renderer can switch sessions without duplicating scrollback', async ({ page }) => {
+  await loadWithRenderer(page, 'ghostty')
+
+  const id1 = await newSession(page)
+  await waitForPrompt(page, id1, 12000)
+
+  const marker = `ghostty_switch_${Date.now()}`
+  await page.keyboard.type(`echo ${marker}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id1, marker, 12000)
+  const textBefore = await getTerminalText(page, id1)
+  const countBefore = (textBefore.match(new RegExp(marker, 'g')) ?? []).length
+
+  const id2 = await newSession(page)
+  await waitForPrompt(page, id2, 12000)
+  await switchToSession(page, id1)
+  await waitForTerminal(page, id1, marker, 12000)
+
+  const textAfter = await getTerminalText(page, id1)
+  const countAfter = (textAfter.match(new RegExp(marker, 'g')) ?? []).length
+  expect(countAfter).toBe(countBefore)
+})
+
+test('ghostty renderer survives page reload with session content intact', async ({ page }) => {
+  await loadWithRenderer(page, 'ghostty')
+
+  const id = await newSession(page)
+  await waitForPrompt(page, id, 12000)
+
+  const marker = `ghostty_reload_${Date.now()}`
+  await page.keyboard.type(`echo ${marker}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, marker, 12000)
+  const textBefore = await getTerminalText(page, id)
+  const countBefore = (textBefore.match(new RegExp(marker, 'g')) ?? []).length
+
+  await page.reload()
+  await page.waitForSelector('[data-session-id]', { timeout: 12000 })
+  await switchToSession(page, id)
+  await waitForTerminal(page, id, marker, 12000)
+
+  const textAfter = await getTerminalText(page, id)
+  const countAfter = (textAfter.match(new RegExp(marker, 'g')) ?? []).length
+  expect(countAfter).toBe(countBefore)
 })
 
 test('create session — appears in sidebar and shows shell prompt', async ({ page }) => {
