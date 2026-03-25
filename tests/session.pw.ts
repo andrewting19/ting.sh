@@ -66,24 +66,11 @@ async function getSttySize(page: import('@playwright/test').Page, id: string): P
   const result = await page.waitForFunction(
     ([sessionId, outputMarker]: [string, string]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wt = (window as any).__wt_terminals
-      if (!wt) return null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let entry = wt.get(sessionId) as any
-      if (!entry) {
-        for (const key of wt.keys() as Iterable<string>) {
-          if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            entry = wt.get(key) as any
-            break
-          }
-        }
-      }
-      if (!entry) return null
-      const buf = entry.term.buffer.active
+      const debug = (window as any).__wt_terminal_debug
+      if (!debug?.getText) return null
+      const text = String(debug.getText(sessionId))
       let found: { rows: number; cols: number } | null = null
-      for (let i = 0; i < buf.length; i++) {
-        const line = buf.getLine(i)?.translateToString(true) ?? ''
+      for (const line of text.split('\n')) {
         const idx = line.indexOf(outputMarker)
         if (idx === -1) continue
         const m = line.slice(idx + outputMarker.length).trim().match(/^(\d+)\s+(\d+)/)
@@ -338,21 +325,9 @@ test('scroll-to-latest overlay appears when scrolled up and jumps to bottom', as
 
   await page.evaluate((sessionId: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const wt = (window as any).__wt_terminals
-    if (!wt) throw new Error('__wt_terminals unavailable')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let entry = wt.get(sessionId) as any
-    if (!entry) {
-      for (const key of wt.keys() as Iterable<string>) {
-        if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          entry = wt.get(key) as any
-          break
-        }
-      }
-    }
-    if (!entry) throw new Error(`terminal entry not found for ${sessionId}`)
-    entry.term.scrollLines(-100)
+    const debug = (window as any).__wt_terminal_debug
+    if (!debug?.scrollToTop) throw new Error('__wt_terminal_debug unavailable')
+    debug.scrollToTop(sessionId)
   }, id)
 
   const overlay = page.locator('.scroll-bottom-overlay-btn')
@@ -362,22 +337,9 @@ test('scroll-to-latest overlay appears when scrolled up and jumps to bottom', as
 
   await page.waitForFunction((sessionId: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const wt = (window as any).__wt_terminals
-    if (!wt) return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let entry = wt.get(sessionId) as any
-    if (!entry) {
-      for (const key of wt.keys() as Iterable<string>) {
-        if (typeof key === 'string' && key.endsWith(`:${sessionId}`)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          entry = wt.get(key) as any
-          break
-        }
-      }
-    }
-    if (!entry) return false
-    const buf = entry.term.buffer.active
-    return buf.viewportY === buf.baseY
+    const debug = (window as any).__wt_terminal_debug
+    const state = debug?.getState?.(sessionId)
+    return !!state && state.scroll?.offsetFromBottom === 0
   }, id, { timeout: 3000 })
   await expect(overlay).toBeHidden({ timeout: 3000 })
 })

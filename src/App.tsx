@@ -408,13 +408,53 @@ export function App() {
   // directly (e.g. bulk-kill sessions) without driving the UI.
   useEffect(() => {
     if (!import.meta.env.DEV) return
+    const resolveTerminalKey = (rawId: string) => {
+      if (!rawId) return null
+      if (currentKeyRef.current && parseKey(currentKeyRef.current).sessionId === rawId) return currentKeyRef.current
+      const direct = rawId.includes(':') ? rawId as SessionKey : null
+      if (direct) return direct
+      for (const host of hosts) {
+        const candidate = makeKey(host.id, rawId)
+        if (getSessionByKey(candidate)) return candidate
+      }
+      return null
+    }
     ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)
     ;(window as any).__wt_ws_close = () => forceClose(localHostId)
     ;(window as any).__wt_get_attached_id = () => {
       const key = attachedKeyRef.current
       return key ? parseKey(key).sessionId : null
     }
-  }, [forceClose, localHostId, sendToHost])
+    ;(window as any).__wt_terminal_debug = {
+      getText: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        return key ? tm.getBufferText(key) : ''
+      },
+      hasPrompt: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        if (!key) return false
+        const text = tm.getBufferText(key)
+        return text.split('\n').some(line => line.trim().length > 0)
+      },
+      getState: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        if (!key) return null
+        return {
+          opened: tm.isOpened(key),
+          scroll: tm.getScrollState(key),
+          text: tm.getBufferText(key),
+        }
+      },
+      scrollToTop: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        if (key) tm.scrollToTop(key)
+      },
+      scrollToBottom: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        if (key) tm.scrollToBottom(key)
+      },
+    }
+  }, [forceClose, getSessionByKey, hosts, localHostId, sendToHost, tm])
 
   const toWsUrl = useCallback((baseUrl: string) => {
     const next = new URL(baseUrl)

@@ -5,6 +5,11 @@ export interface TerminalDimensions {
   rows: number
 }
 
+export interface TerminalScrollState {
+  offsetFromTop: number
+  offsetFromBottom: number
+}
+
 export interface TerminalBackendCallbacks {
   onData: (sessionKey: SessionKey, data: string) => void
   onScroll: (sessionKey: SessionKey) => void
@@ -17,15 +22,16 @@ export interface TerminalBackendInstance {
   write: (data: Uint8Array, onFlushed?: () => void) => void
   reset: () => void
   focus: () => void
+  scrollToTop: () => void
   scrollToBottom: () => void
   setActive: (active: boolean) => void
   dispose: () => void
   isOpened: () => boolean
   getDimensions: () => TerminalDimensions
   getMeasuredDimensions: () => TerminalDimensions | null
+  getScrollState: () => TerminalScrollState
   getApplicationCursorKeysMode: () => boolean
   getBufferText: () => string
-  getLinesFromBottom: () => number
 }
 
 export interface TerminalBackend {

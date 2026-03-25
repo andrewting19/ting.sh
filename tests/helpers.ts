@@ -24,32 +24,14 @@ export async function newSession(page: Page): Promise<string> {
 }
 
 /**
- * Read the full visible text content of a session's xterm.js terminal
- * via the buffer API exposed on window.__wt_terminals in dev mode.
+ * Read the full visible text content of a session's terminal
+ * via the backend-neutral dev helper exposed in dev mode.
  */
 export async function getTerminalText(page: Page, sessionId: string): Promise<string> {
   return page.evaluate((id: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const wt = (window as any).__wt_terminals
-    if (!wt) return ''
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let entry = wt.get(id) as any
-    if (!entry) {
-      for (const key of wt.keys() as Iterable<string>) {
-        if (typeof key === 'string' && key.endsWith(`:${id}`)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          entry = wt.get(key) as any
-          break
-        }
-      }
-    }
-    if (!entry) return ''
-    const buf = entry.term.buffer.active
-    const lines: string[] = []
-    for (let i = 0; i < buf.length; i++) {
-      lines.push(buf.getLine(i)?.translateToString(true) ?? '')
-    }
-    return lines.join('\n').trimEnd()
+    const debug = (window as any).__wt_terminal_debug
+    return typeof debug?.getText === 'function' ? debug.getText(id) : ''
   }, sessionId)
 }
 
@@ -66,25 +48,8 @@ export async function waitForPrompt(page: Page, sessionId: string, timeout = 800
   await page.waitForFunction(
     (id: string) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wt = (window as any).__wt_terminals
-      if (!wt) return false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let entry = wt.get(id) as any
-      if (!entry) {
-        for (const key of wt.keys() as Iterable<string>) {
-          if (typeof key === 'string' && key.endsWith(`:${id}`)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            entry = wt.get(key) as any
-            break
-          }
-        }
-      }
-      if (!entry) return false
-      const buf = entry.term.buffer.active
-      for (let i = 0; i < buf.length; i++) {
-        if (buf.getLine(i)?.translateToString(true)?.trim()) return true
-      }
-      return false
+      const debug = (window as any).__wt_terminal_debug
+      return typeof debug?.hasPrompt === 'function' ? debug.hasPrompt(id) : false
     },
     sessionId,
     { timeout },
@@ -92,16 +57,12 @@ export async function waitForPrompt(page: Page, sessionId: string, timeout = 800
     // Diagnose why waitForPrompt failed — log terminal state at time of failure
     const diag = await page.evaluate((id: string) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wt = (window as any).__wt_terminals
-      if (!wt) return 'no __wt_terminals map'
-      const entry = wt.get(id)
-      if (!entry) return `no entry for id ${id} (map has ${wt.size} entries, keys: ${[...wt.keys()].join(',')})`
-      const buf = entry.term.buffer.active
-      const lines: string[] = []
-      for (let i = 0; i < Math.min(buf.length, 5); i++) {
-        lines.push(JSON.stringify(buf.getLine(i)?.translateToString(true) ?? ''))
-      }
-      return `entry exists (opened=${entry.opened}), buf.length=${buf.length}, first 5 lines: [${lines.join(', ')}]`
+      const debug = (window as any).__wt_terminal_debug
+      if (!debug?.getState) return 'no __wt_terminal_debug helper'
+      const state = debug.getState(id)
+      if (!state) return `no entry for id ${id}`
+      const lines = String(state.text ?? '').split('\n').slice(0, 5).map((line: string) => JSON.stringify(line))
+      return `entry exists (opened=${state.opened}), first 5 lines: [${lines.join(', ')}]`
     }, sessionId)
     const sessions = await page.evaluate(() =>
       [...document.querySelectorAll('[data-session-id]')].map(el => el.getAttribute('data-session-id')).join(',')
@@ -123,26 +84,9 @@ export async function waitForTerminal(
   await page.waitForFunction(
     ([id, text]: [string, string]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wt = (window as any).__wt_terminals
-      if (!wt) return false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let entry = wt.get(id) as any
-      if (!entry) {
-        for (const key of wt.keys() as Iterable<string>) {
-          if (typeof key === 'string' && key.endsWith(`:${id}`)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            entry = wt.get(key) as any
-            break
-          }
-        }
-      }
-      if (!entry) return false
-      const buf = entry.term.buffer.active
-      let content = ''
-      for (let i = 0; i < buf.length; i++) {
-        content += (buf.getLine(i)?.translateToString(true) ?? '')
-      }
-      return content.includes(text)
+      const debug = (window as any).__wt_terminal_debug
+      if (!debug?.getText) return false
+      return String(debug.getText(id)).includes(text)
     },
     [sessionId, needle] as [string, string],
     { timeout },

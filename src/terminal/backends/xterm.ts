@@ -7,6 +7,7 @@ import type {
   TerminalBackend,
   TerminalBackendCallbacks,
   TerminalDimensions,
+  TerminalScrollState,
 } from './types'
 import '@xterm/xterm/css/xterm.css'
 
@@ -215,6 +216,10 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.term.scrollToBottom()
   }
 
+  scrollToTop() {
+    this.term.scrollToTop()
+  }
+
   setActive(active: boolean) {
     if (!active) {
       this.webglAddon?.dispose()
@@ -258,6 +263,14 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     return this.getDimensions()
   }
 
+  getScrollState(): TerminalScrollState {
+    const buffer = this.term.buffer.active
+    return {
+      offsetFromTop: buffer.viewportY,
+      offsetFromBottom: Math.max(0, buffer.baseY - buffer.viewportY),
+    }
+  }
+
   getApplicationCursorKeysMode() {
     return this.term.modes.applicationCursorKeysMode ?? false
   }
@@ -272,11 +285,6 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
       out += line.translateToString(true)
     }
     return out
-  }
-
-  getLinesFromBottom() {
-    const buffer = this.term.buffer.active
-    return Math.max(0, buffer.baseY - buffer.viewportY)
   }
 
   getDebugInfo() {

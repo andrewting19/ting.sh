@@ -78,17 +78,16 @@ async function touchSwipe(
       const container = document.querySelector<HTMLElement>('.terminal-pane.active')
       if (!container) throw new Error('no active .terminal-pane')
 
-      // Get terminal buffer scroll position via dev hook
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const terminals = (window as any).__wt_terminals as Map<string, { term: any; opened: boolean }> | undefined
-      if (!terminals) throw new Error('no __wt_terminals')
-      const entry = [...terminals.values()].find(e => e.opened)
-      if (!entry) throw new Error('no opened terminal')
-      const buffer = entry.term.buffer.active
+      const debug = (window as any).__wt_terminal_debug
+      if (!debug?.getState) throw new Error('no __wt_terminal_debug')
+      const activeId = (window as any).__wt_get_attached_id?.()
+      if (!activeId) throw new Error('no active terminal id')
 
       const bounds = container.getBoundingClientRect()
       const clientX = bounds.left + bounds.width / 2
-      const viewportYBefore = buffer.viewportY
+      const viewportYBefore = debug.getState(activeId)?.scroll?.offsetFromTop
+      if (typeof viewportYBefore !== 'number') throw new Error('no viewportYBefore')
 
       // Dispatch on the container so capture-phase listeners (our iOS scroll
       // handler) receive the events.
@@ -122,7 +121,9 @@ async function touchSwipe(
       for (let i = 1; i <= steps; i++) fire('touchmove', startY + dy * i)
       fire('touchend', endY)
 
-      return { viewportYBefore, viewportYAfter: buffer.viewportY }
+      const viewportYAfter = debug.getState(activeId)?.scroll?.offsetFromTop
+      if (typeof viewportYAfter !== 'number') throw new Error('no viewportYAfter')
+      return { viewportYBefore, viewportYAfter }
     },
     { startY, endY, steps },
   )
@@ -168,10 +169,9 @@ test('touch swipe up scrolls terminal down (viewportY increases)', async ({ page
   // Ensure viewport starts at top via terminal API
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const terminals = (window as any).__wt_terminals as Map<string, { term: any }> | undefined
-    if (!terminals) return
-    const entry = [...terminals.values()][0]
-    entry?.term?.scrollToTop()
+    const debug = (window as any).__wt_terminal_debug
+    const activeId = (window as any).__wt_get_attached_id?.()
+    if (debug?.scrollToTop && activeId) debug.scrollToTop(activeId)
   })
   await page.waitForTimeout(50)
 
@@ -204,10 +204,9 @@ test('touch swipe down scrolls terminal up (viewportY decreases)', async ({ page
   // Ensure viewport starts at bottom via terminal API
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const terminals = (window as any).__wt_terminals as Map<string, { term: any }> | undefined
-    if (!terminals) return
-    const entry = [...terminals.values()][0]
-    entry?.term?.scrollToBottom()
+    const debug = (window as any).__wt_terminal_debug
+    const activeId = (window as any).__wt_get_attached_id?.()
+    if (debug?.scrollToBottom && activeId) debug.scrollToBottom(activeId)
   })
   await page.waitForTimeout(50)
 

@@ -1,7 +1,7 @@
 import { useRef, useCallback, useMemo } from 'react'
 import type { SessionKey } from '../types'
 import { createTerminalBackend } from '../terminal/backends'
-import type { DebuggableTerminalBackendInstance, TerminalBackendInstance } from '../terminal/backends/types'
+import type { DebuggableTerminalBackendInstance, TerminalBackendInstance, TerminalScrollState } from '../terminal/backends/types'
 
 interface TerminalEntry {
   terminal: TerminalBackendInstance
@@ -43,12 +43,6 @@ export function useTerminalManager(callbacks: Callbacks) {
     return entry
   }, [])
 
-  // Expose terminal entries on window in dev mode so Playwright tests can
-  // read terminal buffer content without scraping the canvas.
-  if (import.meta.env.DEV) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(window as any).__wt_terminals = entriesRef.current
-  }
   const activeIdRef = useRef<SessionKey | null>(null)
   // Always-fresh callbacks via ref — no stale closure issues
   const cbRef = useRef(callbacks)
@@ -56,8 +50,8 @@ export function useTerminalManager(callbacks: Callbacks) {
   const emitScrollState = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
-    const linesFromBottom = entry.terminal.getLinesFromBottom()
-    cbRef.current.onScrollStateChange(sessionKey, linesFromBottom >= SCROLL_TO_BOTTOM_BUTTON_THRESHOLD_LINES)
+    const scrollState = entry.terminal.getScrollState()
+    cbRef.current.onScrollStateChange(sessionKey, scrollState.offsetFromBottom >= SCROLL_TO_BOTTOM_BUTTON_THRESHOLD_LINES)
   }, [])
   const forwardTerminalData = useCallback((sessionKey: SessionKey, data: string) => {
     if (data === '\x1b[I' || data === '\x1b[O') {
@@ -154,6 +148,13 @@ export function useTerminalManager(callbacks: Callbacks) {
     emitScrollState(sessionKey)
   }, [emitScrollState])
 
+  const scrollToTop = useCallback((sessionKey: SessionKey) => {
+    const entry = entriesRef.current.get(sessionKey)
+    if (!entry) return
+    entry.terminal.scrollToTop()
+    emitScrollState(sessionKey)
+  }, [emitScrollState])
+
   const focus = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry) return
@@ -168,6 +169,15 @@ export function useTerminalManager(callbacks: Callbacks) {
   const getMeasuredDimensions = useCallback((sessionKey: SessionKey) => {
     const entry = entriesRef.current.get(sessionKey)
     return entry?.terminal.getMeasuredDimensions() ?? null
+  }, [])
+
+  const getScrollState = useCallback((sessionKey: SessionKey): TerminalScrollState | null => {
+    const entry = entriesRef.current.get(sessionKey)
+    return entry?.terminal.getScrollState() ?? null
+  }, [])
+
+  const isOpened = useCallback((sessionKey: SessionKey) => {
+    return entriesRef.current.get(sessionKey)?.terminal.isOpened() ?? false
   }, [])
 
   const getApplicationCursorKeysMode = useCallback((sessionKey: SessionKey) => {
@@ -194,7 +204,7 @@ export function useTerminalManager(callbacks: Callbacks) {
   // this memo never re-computes. Without this, effects in App.tsx that list
   // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getApplicationCursorKeysMode, getBufferText, destroy }),
-    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getApplicationCursorKeysMode, getBufferText, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy]
   )
 }

@@ -99,6 +99,7 @@ Working:
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
 - Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a backend interface while xterm remains the only shipped renderer on this branch
+- Dev/test terminal inspection no longer depends on raw xterm instances — E2E now uses a backend-neutral `__wt_terminal_debug` helper
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar

@@ -42,6 +42,7 @@
 - [x] React + Vite frontend, Bun WebSocket server
 - [x] Per-session xterm.js instances (lazy, WebGL on active only)
 - [x] Terminal backend abstraction scaffold — `useTerminalManager` now talks to a backend interface while xterm remains the active implementation
+- [x] Backend-neutral dev/test terminal helper — E2E no longer depends on raw xterm instances for text and scroll assertions
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
@@ -78,7 +79,7 @@
 - [ ] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [ ] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [ ] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics
-- [ ] Dual-renderer PR 5: move tests off raw xterm internals and onto backend-aware/dev-helper coverage
+- [ ] Dual-renderer PR 5: broaden backend-aware test coverage beyond the shared dev helper surface
 - [x] Multi-host phase 1: protocol hardening (`detach`, list subscribers, `requestId` echo)
 - [x] Multi-host phase 2: server identity (`hosts.json`, `/api/host`, `host-info`, `hostId`)
 - [x] Multi-host phase 3: shared types (`Host`, `SessionKey`, host-aware `Session`)
