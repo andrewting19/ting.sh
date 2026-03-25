@@ -184,14 +184,13 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
   // Inactive terminals don't need GPU acceleration — they're invisible.
   const setActive = useCallback((sessionKey: SessionKey) => {
     const prevId = activeIdRef.current
+    activeIdRef.current = sessionKey
 
     if (prevId && prevId !== sessionKey) {
       const prev = entriesRef.current.get(prevId)
       if (prev) prev.shouldBeActive = false
       prev?.terminal.setActive(false)
     }
-
-    activeIdRef.current = sessionKey
 
     const entry = ensureEntry(sessionKey)
     entry.shouldBeActive = true

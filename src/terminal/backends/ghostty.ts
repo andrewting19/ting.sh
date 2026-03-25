@@ -181,6 +181,7 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
 
   open(container: HTMLElement) {
     if (this.opened) return
+    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null
     this.term.open(container)
     this.fitAddon.fit()
     this.momentumCleanup = attachIOSScroll(container, this.term)
@@ -191,6 +192,12 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     })
     this.resizeObserver.observe(container)
     this.opened = true
+
+    // ghostty-web focuses during open(); restore the previous element so
+    // mounting an inactive pane doesn't steal input from the active session.
+    if (previousActive && previousActive !== document.body && previousActive !== container) {
+      previousActive.focus({ preventScroll: true })
+    }
   }
 
   fit() {

@@ -136,6 +136,31 @@ test('ghostty renderer can switch sessions without duplicating scrollback', asyn
   expect(countAfter).toBe(countBefore)
 })
 
+test('ghostty renderer does not inject focus-report escape sequences on session switch', async ({ page }) => {
+  await loadWithRenderer(page, 'ghostty')
+
+  const id1 = await newSession(page)
+  await waitForPrompt(page, id1, 12000)
+  const id2 = await newSession(page)
+  await waitForPrompt(page, id2, 12000)
+
+  await switchToSession(page, id1)
+  await waitForPrompt(page, id1, 12000)
+
+  await page.keyboard.type("printf '\\e[?1004h'")
+  await page.keyboard.press('Enter')
+  await waitForPrompt(page, id1, 12000)
+
+  await switchToSession(page, id2)
+  await waitForPrompt(page, id2, 12000)
+  await switchToSession(page, id1)
+  await waitForPrompt(page, id1, 12000)
+
+  const text = await getTerminalText(page, id1)
+  expect(text).not.toContain('^[[I')
+  expect(text).not.toContain('^[[O')
+})
+
 test('ghostty renderer survives page reload with session content intact', async ({ page }) => {
   await loadWithRenderer(page, 'ghostty')
 
