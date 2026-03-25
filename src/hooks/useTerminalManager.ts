@@ -23,6 +23,8 @@ interface TerminalAdapter {
   getApplicationCursorKeysMode: () => boolean
   getBufferText: () => string
   getLinesFromBottom: () => number
+  pauseRendering: () => void
+  resumeRendering: () => void
 }
 
 interface TerminalEntry {
@@ -165,6 +167,12 @@ function createTerminalAdapter(
     },
     getLinesFromBottom() {
       return Math.max(0, Math.floor(term.getViewportY()))
+    },
+    pauseRendering() {
+      term.pauseRendering()
+    },
+    resumeRendering() {
+      term.resumeRendering()
     },
   }
 }
@@ -428,6 +436,9 @@ export function useTerminalManager(callbacks: Callbacks) {
       if (prev) {
         prev.shouldBeActive = false
         prev.adapter?.blur()
+        // Pause rendering on inactive terminals to avoid wasting CPU
+        // and prevent WASM renderStateUpdate hangs on background terminals.
+        prev.adapter?.pauseRendering()
       }
     }
 
@@ -436,6 +447,7 @@ export function useTerminalManager(callbacks: Callbacks) {
     entry.shouldBeActive = true
     ensureAdapter(sessionKey, entry)
     if (entry.adapter && entry.opened) {
+      entry.adapter.resumeRendering()
       entry.adapter.fit()
       emitScrollState(sessionKey)
     }
