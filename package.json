@@ -15,7 +15,7 @@
     "release:major": "./scripts/release.sh major"
   },
   "dependencies": {
-    "@andrewting19/ghostty-web": "0.4.1-fork.4",
+    "@andrewting19/ghostty-web": "0.5.0",
     "node-pty": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
