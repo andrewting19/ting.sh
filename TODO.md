@@ -41,6 +41,7 @@
 ## Completed features
 - [x] React + Vite frontend, Bun WebSocket server
 - [x] Per-session xterm.js instances (lazy, WebGL on active only)
+- [x] Terminal backend abstraction scaffold — `useTerminalManager` now talks to a backend interface while xterm remains the active implementation
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
@@ -74,6 +75,9 @@
 - [x] Manual Windows production verification (`mom`) — Git Bash default shell, correct initial home/cwd, live CWD tracking, duplicate/create-with-CWD, rename, kill, and bundled-Node PTY worker path validated end-to-end
 
 ## Up next (in order)
+- [ ] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
+- [ ] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
+- [ ] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics
 - [x] Multi-host phase 1: protocol hardening (`detach`, list subscribers, `requestId` echo)
 - [x] Multi-host phase 2: server identity (`hosts.json`, `/api/host`, `host-info`, `hostId`)
 - [x] Multi-host phase 3: shared types (`Host`, `SessionKey`, host-aware `Session`)
@@ -101,6 +105,7 @@
 
 - **Platform PTY split** — Unix/macOS use `Bun.spawn({ terminal: { ... } })`; Windows uses `node-pty` via a Node sidecar because Bun-on-Windows could spawn ConPTY on `mom` but failed on `write()`
 - **Per-session xterm.js instances, lazy** — created on first view, kept alive; WebGL on active only
+- **Renderer/backend boundary first** — extract a stable terminal backend interface before introducing Ghostty so shared app logic stays renderer-neutral
 - **Renderer split by platform** — WebGL on desktop; Canvas forced on iOS to avoid Safari glyph-touch selection issues
 - **`visibility:hidden` not `display:none`** — FitAddon needs layout to measure
 - **Attach correlation via `requestId`** — client validates `ready` against the latest attach request and drops stale attach binary to prevent cross-session replay leaks

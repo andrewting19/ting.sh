@@ -98,6 +98,7 @@ Working:
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously
 - Per-session xterm.js instances — independent terminal state, no leaking between sessions
+- Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a backend interface while xterm remains the only shipped renderer on this branch
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
 - Duplicate session — spawns in same CWD, inserts directly after source in sidebar
@@ -138,6 +139,7 @@ Working:
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
 - Host connection engine scaffolded: `useHostConnections` + imperative `WSConnection` with per-host reconnect/send lifecycle
 - App/terminal manager now run on host-scoped session keys and use multi-host WS transport plumbing (`useHostConnections`)
+- Terminal backend scaffold extracted: xterm-specific lifecycle, WebGL activation, and iOS touch scrolling now live behind a backend module boundary
 - Sidebar now supports host-grouped sections with per-host connection status and host-scoped drag/drop interactions
 - Multi-host sidebar scroll hitbox hardening — per-host session lists no longer create nested wheel/touch scroll regions, so scrolling works consistently even when the pointer is over a host's session rows
 - Local host identity reconciliation — local host ID/name now follows server `host-info`/`/api/host` values instead of staying hardcoded as `local`
