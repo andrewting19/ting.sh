@@ -5,7 +5,7 @@
     "": {
       "name": "web-terminal",
       "dependencies": {
-        "@andrewting19/ghostty-web": "0.4.1-fork.3",
+        "@andrewting19/ghostty-web": "0.4.1-fork.4",
         "node-pty": "^1.1.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
@@ -22,7 +22,7 @@
     },
   },
   "packages": {
-    "@andrewting19/ghostty-web": ["@andrewting19/ghostty-web@0.4.1-fork.3", "", {}, "sha512-rDrCRl4UJVh7fL53AUyinXBqH7DKLv5PrmQOqzL2WfYL99Dmfhll4NNzkuQ2P27FdkhDcRK8vZ+1I2XLRA43Aw=="],
+    "@andrewting19/ghostty-web": ["@andrewting19/ghostty-web@0.4.1-fork.4", "", {}, "sha512-yrGLXaCIaDW6Qr/paE0Cg3gE2RzcSuTA1b0S39feDwsIhOaGiNx2iWtXlTMDeMtqH6x5YZMk9elWfkhL30sOPg=="],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
