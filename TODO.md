@@ -1,6 +1,7 @@
 # TODO
 
 ## Bugs (lower priority)
+- [x] Same-host session switch could freeze the browser tab under Ghostty (`Lissandra → Quinn` repro) — fixed in `ghostty-web@0.5.1` by rebinding post-reset helper state to the new WASM terminal
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses terminal scrollback and looks like a flickering scroll-jump bug; keep it opt-in because `clear`/`reset` semantics change
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until the terminal has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)

@@ -96,6 +96,7 @@ Working:
 - Scrollback replay on reconnect (10MB buffer per session)
 - WebSocket auto-reconnect with status indicator
 - Ghostty terminal runtime in the browser via `ghostty-web` with explicit pre-open output queuing
+- Ghostty runtime reset hardening via `ghostty-web@0.5.1` — same-host session switches no longer freeze the browser from stale post-reset WASM helper references
 - Multiple browser tabs can share the same session simultaneously
 - Per-session terminal instances — independent terminal state, no leaking between sessions
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
