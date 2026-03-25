@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { FitAddon, Terminal, init as initGhostty } from 'ghostty-web'
+import { FitAddon, Terminal, init as initGhostty } from '@andrewting19/ghostty-web'
 import type { SessionKey } from '../types'
 
 interface PendingWrite {
