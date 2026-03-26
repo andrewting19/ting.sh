@@ -127,7 +127,9 @@ Working:
 - Dev/test terminal inspection no longer depends on raw xterm instances — E2E now uses a backend-neutral `__wt_terminal_debug` helper
 - Terminal manager now supports async backend initialization, and Ghostty has been added as a second backend implementation behind the shared contract
 - Startup renderer selection is supported via `localStorage['wt-terminal-renderer']` and a minimal header toggle, both using a full-page reload remount path (`xterm` default, `ghostty` opt-in)
-- Ghostty runtime bumped to `@andrewting19/ghostty-web@0.5.3` on this branch — line-height is honored, OSC 52 clipboard writes propagate to the browser clipboard, macOS Option is treated as Meta, freed terminals no longer leak stale cells, long scrollback stays stable, and mouse-tracked TUIs receive wheel coordinates correctly
+- Ghostty runtime bumped to `@andrewting19/ghostty-web@0.5.4` on this branch — line-height is honored, OSC 52 clipboard writes propagate to the browser clipboard, macOS Option is treated as Meta, freed terminals no longer leak stale cells, long scrollback stays stable, mouse-tracked TUIs receive wheel coordinates correctly, and FitAddon no longer reserves a fake scrollbar gutter that left a right-edge gap
+- Mobile session selection no longer auto-focuses the terminal on narrow layouts — switching sessions does not summon/zoom the iOS keyboard, while the toolbar keyboard button remains the explicit focus path
+- Ghostty mobile touch scrolling now matches xterm direction on iOS-style swipe gestures
 - Core Playwright parity coverage now runs under both renderers for create/input/switch/reload/reconnect/focus-report flows
 - Browser-use smoke coverage has also been exercised under both renderers for create/input/switch/reload flows against the live dev server
 - Session rename — double-click or right-click/long-press context menu, persisted server-side

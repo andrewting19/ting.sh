@@ -877,6 +877,8 @@ html, body, #root {
   .hotkey-editor .hk-key-select,
   .hotkey-editor .hk-key-input,
   .hotkey-editor .hk-label-input,
+  [data-terminal-renderer="ghostty"] .terminal-pane[contenteditable="true"],
+  [data-terminal-renderer="ghostty"] .terminal-pane > textarea[aria-label="Terminal input"],
   .xterm .xterm-helper-textarea {
     font-size: 16px;
   }

@@ -71,13 +71,21 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
 
   const samples: { y: number; t: number }[] = []
   let lastY = 0
+  let pixelRemainder = 0
   let rafId: number | null = null
 
   const scrollByPixels = (deltaY: number) => {
     const lineHeight = getTerminalLineHeight(container, term)
     if (lineHeight <= 0) return
-    const lineDelta = deltaY / lineHeight
-    if (lineDelta !== 0) term.scrollLines(-lineDelta)
+    pixelRemainder += deltaY
+    const lines = Math.trunc(pixelRemainder / lineHeight)
+    if (lines !== 0) {
+      const before = term.getViewportY()
+      term.scrollLines(lines)
+      const after = term.getViewportY()
+      pixelRemainder -= lines * lineHeight
+      if (before === after) pixelRemainder = 0
+    }
   }
 
   const cancelMomentum = () => {
@@ -91,6 +99,7 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
     if (e.touches.length !== 1) return
     cancelMomentum()
     samples.length = 0
+    pixelRemainder = 0
     lastY = e.touches[0].pageY
     samples.push({ y: lastY, t: performance.now() })
     e.preventDefault()
@@ -141,6 +150,7 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
     cancelMomentum()
     samples.length = 0
     lastY = 0
+    pixelRemainder = 0
   }
 
   const captureActive = { capture: true, passive: false } as const

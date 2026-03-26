@@ -15,8 +15,9 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { waitForPrompt, killAllSessions } from './helpers'
+import { waitForPrompt, loadWithRenderer, switchToSession } from './helpers'
 import type { Page } from '@playwright/test'
+import type { TerminalRenderer } from '../src/terminal/backends'
 
 // Spoof iPhone UA so iOS-specific terminal behavior is active.
 test.use({
@@ -27,10 +28,9 @@ test.use({
   hasTouch: true,
 })
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('/')
-  await killAllSessions(page)
-})
+async function loadMobileRenderer(page: Page, renderer: TerminalRenderer = 'xterm'): Promise<void> {
+  await loadWithRenderer(page, renderer)
+}
 
 /** Create a session via WS (bypasses the sidebar which is hidden on mobile). */
 async function newSessionMobile(page: Page): Promise<string> {
@@ -130,6 +130,7 @@ async function touchSwipe(
 }
 
 test('iPhone UA uses DOM renderer (no WebGL canvas)', async ({ page }) => {
+  await loadMobileRenderer(page, 'xterm')
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
@@ -155,78 +156,101 @@ test('iPhone UA uses DOM renderer (no WebGL canvas)', async ({ page }) => {
   expect(info.hasDomRows).toBe(true)
 })
 
-test('touch swipe up scrolls terminal down (viewportY increases)', async ({ page }) => {
-  const id = await newSessionMobile(page)
-  await waitForPrompt(page, id)
-
-  // Produce >1 screenful of output
+async function fillTerminalWithScrollback(page: Page): Promise<void> {
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).__wt_send({ type: 'input', data: 'printf "%0.s\\n" {1..200}\r' })
   })
   await page.waitForTimeout(1500)
+}
 
-  // Ensure viewport starts at top via terminal API
-  await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const debug = (window as any).__wt_terminal_debug
-    const activeId = (window as any).__wt_get_attached_id?.()
-    if (debug?.scrollToTop && activeId) debug.scrollToTop(activeId)
-  })
-  await page.waitForTimeout(50)
-
-  const bounds = await page.evaluate(() => {
-    const el = document.querySelector<HTMLElement>('.terminal-pane.active')!
+async function getActivePaneBounds(page: Page): Promise<{ top: number; height: number }> {
+  return page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('.terminal-pane.active')
+    if (!el) throw new Error('no active .terminal-pane')
     const r = el.getBoundingClientRect()
     return { top: r.top, height: r.height }
   })
+}
 
-  // Finger moves from 70% → 20% of terminal height = swipe up = scroll down
-  const { viewportYBefore, viewportYAfter } = await touchSwipe(page, {
-    startY: bounds.top + bounds.height * 0.7,
-    endY:   bounds.top + bounds.height * 0.2,
+for (const renderer of ['xterm', 'ghostty'] as const) {
+  test(`${renderer}: touch swipe up scrolls terminal down (viewportY increases)`, async ({ page }) => {
+    await loadMobileRenderer(page, renderer)
+    const id = await newSessionMobile(page)
+    await waitForPrompt(page, id)
+    await fillTerminalWithScrollback(page)
+
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const debug = (window as any).__wt_terminal_debug
+      const activeId = (window as any).__wt_get_attached_id?.()
+      if (debug?.scrollToTop && activeId) debug.scrollToTop(activeId)
+    })
+    await page.waitForTimeout(50)
+
+    const bounds = await getActivePaneBounds(page)
+    const { viewportYBefore, viewportYAfter } = await touchSwipe(page, {
+      startY: bounds.top + bounds.height * 0.7,
+      endY: bounds.top + bounds.height * 0.2,
+    })
+
+    expect(viewportYAfter, `viewportY should increase: before=${viewportYBefore} after=${viewportYAfter}`)
+      .toBeGreaterThan(viewportYBefore)
   })
 
-  expect(viewportYAfter, `viewportY should increase: before=${viewportYBefore} after=${viewportYAfter}`)
-    .toBeGreaterThan(viewportYBefore)
-})
+  test(`${renderer}: touch swipe down scrolls terminal up (viewportY decreases)`, async ({ page }) => {
+    await loadMobileRenderer(page, renderer)
+    const id = await newSessionMobile(page)
+    await waitForPrompt(page, id)
+    await fillTerminalWithScrollback(page)
 
-test('touch swipe down scrolls terminal up (viewportY decreases)', async ({ page }) => {
-  const id = await newSessionMobile(page)
-  await waitForPrompt(page, id)
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const debug = (window as any).__wt_terminal_debug
+      const activeId = (window as any).__wt_get_attached_id?.()
+      if (debug?.scrollToBottom && activeId) debug.scrollToBottom(activeId)
+    })
+    await page.waitForTimeout(50)
 
-  await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(window as any).__wt_send({ type: 'input', data: 'printf "%0.s\\n" {1..200}\r' })
-  })
-  await page.waitForTimeout(1500)
+    const bounds = await getActivePaneBounds(page)
+    const { viewportYBefore, viewportYAfter } = await touchSwipe(page, {
+      startY: bounds.top + bounds.height * 0.2,
+      endY: bounds.top + bounds.height * 0.7,
+    })
 
-  // Ensure viewport starts at bottom via terminal API
-  await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const debug = (window as any).__wt_terminal_debug
-    const activeId = (window as any).__wt_get_attached_id?.()
-    if (debug?.scrollToBottom && activeId) debug.scrollToBottom(activeId)
-  })
-  await page.waitForTimeout(50)
-
-  const bounds = await page.evaluate(() => {
-    const el = document.querySelector<HTMLElement>('.terminal-pane.active')!
-    const r = el.getBoundingClientRect()
-    return { top: r.top, height: r.height }
+    expect(viewportYAfter, `viewportY should decrease: before=${viewportYBefore} after=${viewportYAfter}`)
+      .toBeLessThan(viewportYBefore)
   })
 
-  // Finger moves from 20% → 70% = swipe down = scroll up
-  const { viewportYBefore, viewportYAfter } = await touchSwipe(page, {
-    startY: bounds.top + bounds.height * 0.2,
-    endY:   bounds.top + bounds.height * 0.7,
-  })
+  test(`${renderer}: switching sessions on mobile does not auto-focus the terminal`, async ({ page }) => {
+    await loadMobileRenderer(page, renderer)
+    const id1 = await newSessionMobile(page)
+    await waitForPrompt(page, id1)
+    const id2 = await newSessionMobile(page)
+    await waitForPrompt(page, id2)
 
-  expect(viewportYAfter, `viewportY should decrease: before=${viewportYBefore} after=${viewportYAfter}`)
-    .toBeLessThan(viewportYBefore)
-})
+    await page.click('.hamburger')
+    await expect(page.locator('.sidebar')).toHaveClass(/open/)
+    await switchToSession(page, id1)
+
+    const focusInfo = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null
+      return {
+        tag: active?.tagName ?? null,
+        role: active?.getAttribute('role') ?? null,
+        ariaLabel: active?.getAttribute('aria-label') ?? null,
+        inActivePane: !!active?.closest('.terminal-pane.active'),
+      }
+    })
+
+    expect(focusInfo.inActivePane).toBe(false)
+    expect(focusInfo.role).not.toBe('textbox')
+    expect(focusInfo.ariaLabel).not.toBe('Terminal input')
+  })
+}
 
 test('mobile sidebar rows are not draggable (touch scroll is not hijacked)', async ({ page }) => {
+  await loadMobileRenderer(page, 'xterm')
   for (let i = 0; i < 8; i++) {
     const id = await newSessionMobile(page)
     await waitForPrompt(page, id)
@@ -253,6 +277,7 @@ test('mobile sidebar rows are not draggable (touch scroll is not hijacked)', asy
 })
 
 test('opening paste closes arrow pad and keeps it closed', async ({ page }) => {
+  await loadMobileRenderer(page, 'xterm')
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 
@@ -273,6 +298,7 @@ test('opening paste closes arrow pad and keeps it closed', async ({ page }) => {
 })
 
 test('hotkey editor can switch from special key back to char mode', async ({ page }) => {
+  await loadMobileRenderer(page, 'xterm')
   const id = await newSessionMobile(page)
   await waitForPrompt(page, id)
 

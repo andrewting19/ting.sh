@@ -115,7 +115,7 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
       }
       terminal.setActive(entry.shouldBeActive)
       flushPendingWrites(sessionKey, entry)
-      if (entry.pendingFocus || entry.shouldBeActive) {
+      if (entry.pendingFocus) {
         entry.pendingFocus = false
         entry.suppressFocusReportUntil = performance.now() + PROGRAMMATIC_FOCUS_REPORT_SUPPRESS_MS
         terminal.focus()
@@ -167,7 +167,7 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
         }
         entry.terminal.setActive(entry.shouldBeActive)
         flushPendingWrites(sessionKey, entry)
-        if (entry.pendingFocus || entry.shouldBeActive) {
+        if (entry.pendingFocus) {
           entry.pendingFocus = false
           entry.suppressFocusReportUntil = performance.now() + PROGRAMMATIC_FOCUS_REPORT_SUPPRESS_MS
           entry.terminal.focus()

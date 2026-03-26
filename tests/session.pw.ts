@@ -59,6 +59,11 @@ async function getAttachedClientCount(page: import('@playwright/test').Page, id:
 /** Read the PTY rows/cols by running `stty size` and parsing marked output. */
 async function getSttySize(page: import('@playwright/test').Page, id: string): Promise<{ rows: number; cols: number }> {
   const marker = `__WT_SIZE_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}__`
+  await page.evaluate((sessionId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const debug = (window as any).__wt_terminal_debug
+    debug?.focus?.(sessionId)
+  }, id)
   await page.keyboard.type(`printf '${marker} '; stty size`)
   await page.keyboard.press('Enter')
   await waitForTerminal(page, id, marker)

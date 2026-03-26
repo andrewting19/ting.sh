@@ -95,6 +95,11 @@ function getMobileKeyboardInset(): number {
   return raw >= 80 ? raw : 0
 }
 
+function shouldAutoFocusTerminalOnSessionSelect(): boolean {
+  if (typeof window === 'undefined') return true
+  return !window.matchMedia('(max-width: 640px)').matches
+}
+
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
@@ -465,6 +470,10 @@ export function App() {
         const key = resolveTerminalKey(sessionId)
         if (key) tm.scrollToBottom(key)
       },
+      focus: (sessionId: string) => {
+        const key = resolveTerminalKey(sessionId)
+        if (key) tm.focus(key)
+      },
     }
     ;(window as any).__wt_renderer = {
       get: () => terminalRenderer,
@@ -656,7 +665,9 @@ export function App() {
     } else if (attachedKeyRef.current === currentKey && dims) {
       sendToHost(parseKey(currentKey).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
     }
-    tm.focus(currentKey)
+    if (shouldAutoFocusTerminalOnSessionSelect()) {
+      tm.focus(currentKey)
+    }
   }, [currentKey, prepareTerminalForAttach, sendAttachRequest, sendToHost, sessions.length, tm])
 
   // If another client resized the shared PTY while this tab was in the
@@ -825,7 +836,9 @@ export function App() {
         setCurrentKey(fallback)
         if (fallback) {
           tm.setActive(fallback)
-          tm.focus(fallback)
+          if (shouldAutoFocusTerminalOnSessionSelect()) {
+            tm.focus(fallback)
+          }
           const name = getSessionByKey(fallback)?.name ?? parseKey(fallback).sessionId
           replaceHash(parseKey(fallback).hostId, name)
         } else {
@@ -909,7 +922,9 @@ export function App() {
   function attachSession(key: SessionKey) {
     if (key === currentKeyRef.current) {
       syncSessionSize(key)
-      tm.focus(key)
+      if (shouldAutoFocusTerminalOnSessionSelect()) {
+        tm.focus(key)
+      }
       return
     }
     const currentHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : null
@@ -921,11 +936,14 @@ export function App() {
     // Clear existing content — server always replays the full scrollback buffer
     // on every attach, so we must reset first to avoid duplication.
     tm.reset(key)
-    // Optimistic: make pane visible immediately so focus() fires within the
-    // user gesture (required for iOS keyboard), without waiting for ready.
+    // Optimistic: make pane visible immediately. On narrow mobile layouts we
+    // intentionally avoid auto-focus so session taps do not summon/zoom the
+    // on-screen keyboard; the toolbar keyboard button remains the explicit path.
     currentKeyRef.current = key
     setCurrentKey(key)
-    tm.focus(key)
+    if (shouldAutoFocusTerminalOnSessionSelect()) {
+      tm.focus(key)
+    }
     if (dims) {
       sendAttachRequest(key, dims)
     } else {
