@@ -44,7 +44,7 @@
 - [x] Terminal backend abstraction scaffold — `useTerminalManager` now talks to a backend interface while xterm remains the active implementation
 - [x] Backend-neutral dev/test terminal helper — E2E no longer depends on raw xterm instances for text and scroll assertions
 - [x] Ghostty backend scaffolded behind the shared contract — xterm remains the default until renderer selection overrides it
-- [x] Startup renderer selection/remount path — renderer is chosen once per page load and switched via localStorage + reload
+- [x] Startup renderer selection/remount path — renderer is chosen once per page load and switched via localStorage or the header toggle + reload
 - [x] Backend-aware smoke coverage — Ghostty create/switch/reload flows now run in Playwright
 - [x] Shared renderer-matrix coverage — core create/input/switch/reload/reconnect/focus-report flows now run under both xterm and Ghostty
 - [x] Browser-use smoke verification — xterm and Ghostty both exercised manually for create/input/switch/reload against the live dev server

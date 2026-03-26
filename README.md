@@ -111,6 +111,8 @@ location.reload()
 
 Renderer choice is read once at startup and switched by a full-page reload on purpose. That avoids trying to migrate live terminal state between renderers.
 
+There is also a minimal header toggle in the UI: `>_` for xterm.js and `👻` for Ghostty.
+
 ## Current state
 
 Working:
@@ -124,7 +126,7 @@ Working:
 - Terminal backend boundary scaffolded — `useTerminalManager` now orchestrates a shared backend interface and ships both xterm and Ghostty implementations on this branch
 - Dev/test terminal inspection no longer depends on raw xterm instances — E2E now uses a backend-neutral `__wt_terminal_debug` helper
 - Terminal manager now supports async backend initialization, and Ghostty has been added as a second backend implementation behind the shared contract
-- Startup renderer selection is supported via `localStorage['wt-terminal-renderer']` with a full-page reload remount path (`xterm` default, `ghostty` opt-in)
+- Startup renderer selection is supported via `localStorage['wt-terminal-renderer']` and a minimal header toggle, both using a full-page reload remount path (`xterm` default, `ghostty` opt-in)
 - Core Playwright parity coverage now runs under both renderers for create/input/switch/reload/reconnect/focus-report flows
 - Browser-use smoke coverage has also been exercised under both renderers for create/input/switch/reload flows against the live dev server
 - Session rename — double-click or right-click/long-press context menu, persisted server-side

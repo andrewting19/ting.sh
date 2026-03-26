@@ -97,6 +97,7 @@ function getMobileKeyboardInset(): number {
 
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
+  const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -1016,6 +1017,13 @@ export function App() {
     setTextSelectionOpen(true)
   }
 
+  const switchTerminalRenderer = useCallback((nextRenderer: TerminalRenderer) => {
+    if (nextRenderer === terminalRenderer || switchingRenderer) return
+    setSwitchingRenderer(nextRenderer)
+    persistTerminalRenderer(nextRenderer)
+    location.reload()
+  }, [switchingRenderer, terminalRenderer])
+
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
   const showScrollToBottomOverlay = !!(currentKey && showScrollToBottomByKey[currentKey])
   const terminalEntries = useMemo(() => {
@@ -1037,6 +1045,30 @@ export function App() {
         <div className="wordmark"><span className="prompt">$</span> ting<span className="dot">.</span>sh<span className="cursor" /></div>
         <div className="header-spacer" />
         <div className="header-time">
+          <div className="renderer-toggle" role="group" aria-label="Terminal renderer">
+            <button
+              type="button"
+              className={`renderer-toggle-btn${terminalRenderer === 'xterm' ? ' active' : ''}`}
+              onClick={() => switchTerminalRenderer('xterm')}
+              aria-pressed={terminalRenderer === 'xterm'}
+              aria-label="Use xterm.js renderer"
+              title="Use xterm.js"
+              disabled={!!switchingRenderer}
+            >
+              <span className="renderer-toggle-icon">&gt;_</span>
+            </button>
+            <button
+              type="button"
+              className={`renderer-toggle-btn${terminalRenderer === 'ghostty' ? ' active' : ''}`}
+              onClick={() => switchTerminalRenderer('ghostty')}
+              aria-pressed={terminalRenderer === 'ghostty'}
+              aria-label="Use Ghostty renderer"
+              title="Use Ghostty"
+              disabled={!!switchingRenderer}
+            >
+              <span className="renderer-toggle-icon" aria-hidden="true">👻</span>
+            </button>
+          </div>
           <div className="sky-indicator" ref={skyRef} />
           <div className="header-clock" ref={clockRef} />
         </div>

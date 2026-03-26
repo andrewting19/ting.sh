@@ -113,6 +113,58 @@ html, body, #root {
   gap: 6px;
 }
 
+.renderer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  background: rgba(25, 26, 40, 0.9);
+}
+
+.renderer-toggle-btn {
+  width: 28px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg3);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, color .12s, transform .12s;
+}
+
+.renderer-toggle-btn:disabled {
+  cursor: default;
+}
+
+.renderer-toggle-btn.active {
+  background: rgba(122, 162, 247, 0.14);
+  color: var(--blue);
+  box-shadow: 0 0 0 1px rgba(122, 162, 247, 0.18) inset;
+}
+
+@media (hover: hover) {
+  .renderer-toggle-btn:hover:not(:disabled) {
+    color: var(--fg2);
+    background: rgba(31, 33, 50, 0.95);
+  }
+
+  .renderer-toggle-btn.active:hover:not(:disabled) {
+    color: var(--blue);
+    background: rgba(122, 162, 247, 0.18);
+  }
+}
+
+.renderer-toggle-icon {
+  line-height: 1;
+}
+
 .header-clock {
   font-size: 11px;
   font-weight: 500;
@@ -674,6 +726,12 @@ html, body, #root {
   }
 
   .hamburger { display: flex; }
+
+  .renderer-toggle-btn {
+    width: 26px;
+    height: 20px;
+    font-size: 10px;
+  }
 
   .sidebar-backdrop {
     display: block;
