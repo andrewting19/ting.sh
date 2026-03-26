@@ -48,7 +48,7 @@
 - [x] Backend-aware smoke coverage — Ghostty create/switch/reload flows now run in Playwright
 - [x] Shared renderer-matrix coverage — core create/input/switch/reload/reconnect/focus-report flows now run under both xterm and Ghostty
 - [x] Browser-use smoke verification — xterm and Ghostty both exercised manually for create/input/switch/reload against the live dev server
-- [x] Ghostty fork parity fixes — published `@andrewting19/ghostty-web@0.5.5` with real line-height support, OSC 52 clipboard writes, `macOptionIsMeta`, WASM page zero-init, stable scrollback/page rendering, wheel-coordinate forwarding for mouse-tracked TUIs, FitAddon width calculations that no longer leave a fake right-edge gap, and JS-side `OSC 10/11/12` query responses to avoid allocator warnings
+- [x] Ghostty fork parity fixes — published `@andrewting19/ghostty-web@0.5.6` with real line-height support, OSC 52 clipboard writes, `macOptionIsMeta`, WASM page zero-init, stable scrollback/page rendering, wheel-coordinate forwarding for mouse-tracked TUIs, FitAddon width calculations that no longer leave a fake right-edge gap, JS-side `OSC 10/11/12` query responses to avoid allocator warnings, and mobile focus that stays on Ghostty's hidden textarea instead of a visible full-screen iOS input
 - [x] Mobile session switching no longer auto-focuses the terminal on narrow layouts — prevents iOS keyboard summon/zoom on session taps while preserving explicit toolbar keyboard focus
 - [x] Ghostty mobile touch scrolling direction matches xterm — swipe-up/down semantics are now consistent across both renderers
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
