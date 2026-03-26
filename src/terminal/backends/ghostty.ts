@@ -54,6 +54,29 @@ function isIOSDevice(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
+function shouldSuppressOpenAutoFocus(): boolean {
+  if (typeof window === 'undefined') return false
+  return isIOSDevice() || window.matchMedia('(max-width: 640px)').matches
+}
+
+function suppressGhosttyOpenFocus(container: HTMLElement, term: Terminal, previousActive: HTMLElement | null): void {
+  const restoreOrBlur = () => {
+    if (previousActive && previousActive !== document.body && previousActive !== container) {
+      previousActive.focus({ preventScroll: true })
+      return
+    }
+
+    term.blur()
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && container.contains(focused)) {
+      focused.blur()
+    }
+  }
+
+  restoreOrBlur()
+  setTimeout(restoreOrBlur, 0)
+}
+
 function getTerminalLineHeight(container: HTMLElement, term: Terminal): number {
   const canvas = container.querySelector('canvas')
   if (canvas && term.rows > 0) {
@@ -204,9 +227,12 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     this.resizeObserver.observe(container)
     this.opened = true
 
-    // ghostty-web focuses during open(); restore the previous element so
-    // mounting an inactive pane doesn't steal input from the active session.
-    if (previousActive && previousActive !== document.body && previousActive !== container) {
+    // ghostty-web focuses during open(). On mobile, lazy-opening a pane after
+    // refresh/session switch must not summon the keyboard; on desktop, opening
+    // an inactive pane also should not steal focus from the active session.
+    if (shouldSuppressOpenAutoFocus()) {
+      suppressGhosttyOpenFocus(container, this.term, previousActive)
+    } else if (previousActive && previousActive !== document.body && previousActive !== container) {
       previousActive.focus({ preventScroll: true })
     }
   }

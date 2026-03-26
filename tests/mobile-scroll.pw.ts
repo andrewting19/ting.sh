@@ -249,6 +249,36 @@ for (const renderer of ['xterm', 'ghostty'] as const) {
   })
 }
 
+test('ghostty: refresh then switching sessions on mobile does not focus lazy-opened pane', async ({ page }) => {
+  await loadMobileRenderer(page, 'ghostty')
+  const id1 = await newSessionMobile(page)
+  await waitForPrompt(page, id1)
+  const id2 = await newSessionMobile(page)
+  await waitForPrompt(page, id2)
+
+  await page.reload()
+  await page.waitForSelector(`[data-session-id="${id1}"]`)
+  await page.waitForSelector(`[data-session-id="${id2}"]`)
+
+  await page.click('.hamburger')
+  await expect(page.locator('.sidebar')).toHaveClass(/open/)
+  await switchToSession(page, id1)
+
+  const focusInfo = await page.evaluate(() => {
+    const active = document.activeElement as HTMLElement | null
+    return {
+      tag: active?.tagName ?? null,
+      role: active?.getAttribute('role') ?? null,
+      ariaLabel: active?.getAttribute('aria-label') ?? null,
+      inActivePane: !!active?.closest('.terminal-pane.active'),
+    }
+  })
+
+  expect(focusInfo.inActivePane).toBe(false)
+  expect(focusInfo.role).not.toBe('textbox')
+  expect(focusInfo.ariaLabel).not.toBe('Terminal input')
+})
+
 test('mobile sidebar rows are not draggable (touch scroll is not hijacked)', async ({ page }) => {
   await loadMobileRenderer(page, 'xterm')
   for (let i = 0; i < 8; i++) {
