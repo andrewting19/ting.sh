@@ -100,6 +100,8 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
   return !window.matchMedia('(max-width: 640px)').matches
 }
 
+const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
+
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
@@ -618,19 +620,14 @@ export function App() {
 
   useEffect(() => {
     if (!currentKey) return
-    let frame1 = 0
-    let frame2 = 0
-
-    const apply = () => {
-      frame2 = requestAnimationFrame(() => {
+    const timeoutId = window.setTimeout(() => {
+      requestAnimationFrame(() => {
         syncSessionSize(currentKey)
       })
-    }
+    }, MOBILE_KEYBOARD_RESIZE_SETTLE_MS)
 
-    frame1 = requestAnimationFrame(apply)
     return () => {
-      if (frame1) cancelAnimationFrame(frame1)
-      if (frame2) cancelAnimationFrame(frame2)
+      window.clearTimeout(timeoutId)
     }
   }, [currentKey, mobileKeyboardInset, syncSessionSize])
 
