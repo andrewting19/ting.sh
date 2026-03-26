@@ -103,6 +103,7 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
+  const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -587,6 +588,7 @@ export function App() {
       const next = getMobileKeyboardInset()
       if (next === last) return
       last = next
+      setMobileKeyboardInset(next)
       root.style.setProperty('--mobile-keyboard-inset', `${next}px`)
     }
 
@@ -609,9 +611,28 @@ export function App() {
       vv?.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
       window.removeEventListener('orientationchange', schedule)
+      setMobileKeyboardInset(0)
       root.style.setProperty('--mobile-keyboard-inset', '0px')
     }
   }, [])
+
+  useEffect(() => {
+    if (!currentKey) return
+    let frame1 = 0
+    let frame2 = 0
+
+    const apply = () => {
+      frame2 = requestAnimationFrame(() => {
+        syncSessionSize(currentKey)
+      })
+    }
+
+    frame1 = requestAnimationFrame(apply)
+    return () => {
+      if (frame1) cancelAnimationFrame(frame1)
+      if (frame2) cancelAnimationFrame(frame2)
+    }
+  }, [currentKey, mobileKeyboardInset, syncSessionSize])
 
   const prevStatusesRef = useRef<Map<string, ConnectionStatus>>(new Map())
   useEffect(() => {
