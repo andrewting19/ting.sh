@@ -48,6 +48,7 @@
 - [x] Backend-aware smoke coverage — Ghostty create/switch/reload flows now run in Playwright
 - [x] Shared renderer-matrix coverage — core create/input/switch/reload/reconnect/focus-report flows now run under both xterm and Ghostty
 - [x] Browser-use smoke verification — xterm and Ghostty both exercised manually for create/input/switch/reload against the live dev server
+- [x] Ghostty fork parity fixes — published `@andrewting19/ghostty-web@0.5.2` with real line-height support, OSC 52 clipboard writes, and `macOptionIsMeta`; app backends now enable Option-as-Meta consistently
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host

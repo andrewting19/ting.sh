@@ -14,6 +14,7 @@ import '@xterm/xterm/css/xterm.css'
 const TERMINAL_OPTIONS = {
   fontSize: 13,
   lineHeight: 1.2,
+  macOptionIsMeta: true,
   fontFamily: '"JetBrains Mono", "Fira Code", Menlo, monospace',
   cursorBlink: true,
   cursorStyle: 'block' as const,
