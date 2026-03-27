@@ -35,6 +35,7 @@
 - [x] Mobile toolbar overflowed horizontally on narrow phones — fixed (7-button primary row + collapsible macro tray for modifiers/hotkeys/select)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
 - [x] Attach replay/session-switch viewport could land at top and sometimes miss the `Latest` overlay after fit/resize races — fixed (defer attach auto-scroll until replay flush/layout settles + recompute scroll-overlay state after terminal fits/resizes)
+- [x] Browser/sidebar resize animations could spam PTY resize messages and leave TUIs like Claude Code in a half-redrawn state across both xterm and Ghostty — fixed (debounce terminal-originated resize sends in shared app logic while keeping explicit attach/reclaim resizes immediate)
 - [x] Windows hosts defaulted to `cmd.exe`, had no live CWD parity, and depended on ambient Node installs — fixed (prefer Git Bash / OpenSSH default shell, parse hidden Git Bash cwd OSC frames, and bundle Node in the Windows installer)
 - [x] Windows `LocalSystem` service sessions started in `systemprofile` instead of the intended user home — fixed (installer seeds `TING_WINDOWS_SESSION_HOME`, runtime falls back to the last login profile, and `install.ps1` now supports optional `ServiceUser` + password for true per-user services)
 

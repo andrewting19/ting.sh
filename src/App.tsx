@@ -101,6 +101,7 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
 }
 
 const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
+const TERMINAL_RESIZE_SETTLE_MS = 150
 
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
@@ -140,6 +141,9 @@ export function App() {
   // marker for attach requests and clear it once the first replay/output frame
   // has flushed and we've had a chance to settle resize/fit work.
   const scrollToBottomAfterAttachBinaryRef = useRef<SessionKey | null>(null)
+  const pendingTerminalResizeRef = useRef<{ key: SessionKey; cols: number; rows: number } | null>(null)
+  const terminalResizeTimeoutRef = useRef<number | null>(null)
+  const lastSentResizeByKeyRef = useRef<Map<SessionKey, string>>(new Map())
 
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceKeyRef = useRef<SessionKey | null>(null)
@@ -290,6 +294,40 @@ export function App() {
     onMessage: (hostId, msg) => handleMessage(hostId, msg),
   })
 
+  const sendTerminalResize = useCallback((key: SessionKey, cols: number, rows: number, force = false) => {
+    const nextSize = `${cols}x${rows}`
+    if (!force && lastSentResizeByKeyRef.current.get(key) === nextSize) return
+    lastSentResizeByKeyRef.current.set(key, nextSize)
+    sendToHost(parseKey(key).hostId, { type: 'resize', cols, rows })
+  }, [sendToHost])
+
+  const flushPendingTerminalResize = useCallback((force = false) => {
+    if (terminalResizeTimeoutRef.current !== null) {
+      window.clearTimeout(terminalResizeTimeoutRef.current)
+      terminalResizeTimeoutRef.current = null
+    }
+    const pending = pendingTerminalResizeRef.current
+    pendingTerminalResizeRef.current = null
+    if (!pending) return
+    if (pending.key !== currentKeyRef.current) return
+    sendTerminalResize(pending.key, pending.cols, pending.rows, force)
+  }, [sendTerminalResize])
+
+  const scheduleTerminalResize = useCallback((key: SessionKey, cols: number, rows: number) => {
+    pendingTerminalResizeRef.current = { key, cols, rows }
+    if (terminalResizeTimeoutRef.current !== null) {
+      window.clearTimeout(terminalResizeTimeoutRef.current)
+    }
+    terminalResizeTimeoutRef.current = window.setTimeout(() => {
+      terminalResizeTimeoutRef.current = null
+      const pending = pendingTerminalResizeRef.current
+      pendingTerminalResizeRef.current = null
+      if (!pending) return
+      if (pending.key !== currentKeyRef.current) return
+      sendTerminalResize(pending.key, pending.cols, pending.rows)
+    }, TERMINAL_RESIZE_SETTLE_MS)
+  }, [sendTerminalResize])
+
   const tm = useTerminalManager({
     onData: (sessionKey, data) => {
       if (sessionKey !== currentKeyRef.current) return
@@ -297,7 +335,7 @@ export function App() {
     },
     onResize: (sessionKey, cols, rows) => {
       if (sessionKey !== currentKeyRef.current) return
-      sendToHost(parseKey(sessionKey).hostId, { type: 'resize', cols, rows })
+      scheduleTerminalResize(sessionKey, cols, rows)
     },
     onScrollStateChange: (sessionKey, showScrollToBottom) => {
       setShowScrollToBottomByKey(prev => {
@@ -312,6 +350,14 @@ export function App() {
       })
     },
   }, { backendId: terminalRenderer })
+
+  useEffect(() => {
+    return () => {
+      if (terminalResizeTimeoutRef.current !== null) {
+        window.clearTimeout(terminalResizeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.terminalRenderer = terminalRenderer
@@ -419,9 +465,10 @@ export function App() {
   const syncSessionSize = useCallback((key: SessionKey) => {
     const dims = prepareTerminalForAttach(key)
     if (!dims) return null
-    sendToHost(parseKey(key).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
+    flushPendingTerminalResize()
+    sendTerminalResize(key, dims.cols, dims.rows, true)
     return dims
-  }, [prepareTerminalForAttach, sendToHost])
+  }, [flushPendingTerminalResize, prepareTerminalForAttach, sendTerminalResize])
 
   // Expose send on window in dev so Playwright tests can send WS messages
   // directly (e.g. bulk-kill sessions) without driving the UI.
@@ -681,12 +728,13 @@ export function App() {
       queuedAttachKeyRef.current = null
       sendAttachRequest(currentKey, dims)
     } else if (attachedKeyRef.current === currentKey && dims) {
-      sendToHost(parseKey(currentKey).hostId, { type: 'resize', cols: dims.cols, rows: dims.rows })
+      flushPendingTerminalResize()
+      sendTerminalResize(currentKey, dims.cols, dims.rows, true)
     }
     if (shouldAutoFocusTerminalOnSessionSelect()) {
       tm.focus(currentKey)
     }
-  }, [currentKey, prepareTerminalForAttach, sendAttachRequest, sendToHost, sessions.length, tm])
+  }, [currentKey, flushPendingTerminalResize, prepareTerminalForAttach, sendAttachRequest, sendTerminalResize, sessions.length, tm])
 
   // If another client resized the shared PTY while this tab was in the
   // background (e.g. phone <-> desktop), reclaim local dimensions on return.
