@@ -2,7 +2,7 @@
 
 ## Bugs (lower priority)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
-- [x] Optional Claude Code resize compatibility mode — fixed as an opt-in shared-stream filter (`localStorage['wt-claude-code-compat']='1'`) that buffers post-resize synchronized-output batches and drops only the pathological blank redraw variant before it reaches xterm or Ghostty
+- [x] Optional Claude Code resize compatibility mode — fixed as an opt-in shared-stream filter (header `CC` toggle or `localStorage['wt-claude-code-compat']='1'`) that buffers post-resize synchronized-output batches and drops only the pathological blank redraw variant before it reaches xterm or Ghostty
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)

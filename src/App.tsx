@@ -1233,6 +1233,12 @@ export function App() {
     location.reload()
   }, [switchingRenderer, terminalRenderer])
 
+  const switchClaudeCodeCompat = useCallback((enabled: boolean) => {
+    if (enabled === claudeCodeCompatEnabled) return
+    persistClaudeCodeCompat(enabled)
+    location.reload()
+  }, [claudeCodeCompatEnabled])
+
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
   const showScrollToBottomOverlay = !!(currentKey && showScrollToBottomByKey[currentKey])
   const terminalEntries = useMemo(() => {
@@ -1278,6 +1284,16 @@ export function App() {
               <span className="renderer-toggle-icon" aria-hidden="true">👻</span>
             </button>
           </div>
+          <button
+            type="button"
+            className={`header-tool-btn header-toggle-btn${claudeCodeCompatEnabled ? ' active' : ''}`}
+            onClick={() => switchClaudeCodeCompat(!claudeCodeCompatEnabled)}
+            aria-pressed={claudeCodeCompatEnabled}
+            aria-label="Toggle Claude Code resize compatibility mode"
+            title={claudeCodeCompatEnabled ? 'Claude Code resize compat on' : 'Claude Code resize compat off'}
+          >
+            CC
+          </button>
           <button
             type="button"
             className="header-tool-btn"
