@@ -27,6 +27,13 @@ test('drops pathological resize-time blank redraw batches', () => {
   expect(collectClaudeCodeCompatStats(data).blankAdvanceCount).toBe(512)
 })
 
+test('drops clear-screen sync batches that match the captured Claude Code redraw shape', () => {
+  const blankRun = '\r\r\n'.repeat(200)
+  const body = 'Read 2 files\r\r\n● still plenty of printable content after the blank section'
+  const data = encoder.encode(`\u001b[?2026h\u001b[2D\u001b[4B\u001b[2J\u001b[3J\u001b[H${blankRun}${body}\u001b[?2026l`)
+  expect(shouldDropClaudeCodeResizeSyncBatch(data)).toBe(true)
+})
+
 test('does not drop large batches without sync-output markers', () => {
   const data = encoder.encode(`${'\r\r\n'.repeat(700)}footer redraw`)
   expect(shouldDropClaudeCodeResizeSyncBatch(data)).toBe(false)

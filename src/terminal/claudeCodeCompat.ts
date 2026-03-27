@@ -3,6 +3,9 @@ export const CLAUDE_CODE_COMPAT_STORAGE_KEY = 'wt-claude-code-compat'
 const SYNC_OUTPUT_ENTER = '\u001b[?2026h'
 const SYNC_OUTPUT_EXIT = '\u001b[?2026l'
 const BLANK_ADVANCE = '\r\r\n'
+const CLEAR_SCREEN = '\u001b[2J'
+const CLEAR_SCROLLBACK = '\u001b[3J'
+const CURSOR_HOME = '\u001b[H'
 
 export type ClaudeCodeCompatDecision = 'pass' | 'drop'
 
@@ -12,6 +15,9 @@ export type ClaudeCodeCompatBatchStats = {
   printableCount: number
   entersSyncOutput: boolean
   exitsSyncOutput: boolean
+  clearsScreen: boolean
+  clearsScrollback: boolean
+  homesCursor: boolean
 }
 
 export function resolveClaudeCodeCompat(): boolean {
@@ -37,12 +43,24 @@ export function collectClaudeCodeCompatStats(data: Uint8Array): ClaudeCodeCompat
     printableCount,
     entersSyncOutput: text.includes(SYNC_OUTPUT_ENTER),
     exitsSyncOutput: text.includes(SYNC_OUTPUT_EXIT),
+    clearsScreen: text.includes(CLEAR_SCREEN),
+    clearsScrollback: text.includes(CLEAR_SCROLLBACK),
+    homesCursor: text.includes(CURSOR_HOME),
   }
 }
 
 export function shouldDropClaudeCodeResizeSyncBatch(data: Uint8Array): boolean {
   const stats = collectClaudeCodeCompatStats(data)
   if (!stats.entersSyncOutput || !stats.exitsSyncOutput) return false
+  if (
+    stats.totalBytes >= 512 &&
+    stats.blankAdvanceCount >= 32 &&
+    stats.clearsScreen &&
+    stats.clearsScrollback &&
+    stats.homesCursor
+  ) {
+    return true
+  }
   if (stats.totalBytes < 1024) return false
   if (stats.blankAdvanceCount < 64) return false
   // Only drop batches overwhelmingly dominated by blank physical line advances.
