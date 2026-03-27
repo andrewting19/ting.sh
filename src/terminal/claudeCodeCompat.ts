@@ -75,6 +75,14 @@ export function findSyncOutputExit(data: Uint8Array): number {
   return findBytes(data, SYNC_OUTPUT_EXIT_BYTES)
 }
 
+export function findSyncOutputEnterAfter(data: Uint8Array, start: number): number {
+  return findBytesFrom(data, SYNC_OUTPUT_ENTER_BYTES, start)
+}
+
+export function findSyncOutputExitAfter(data: Uint8Array, start: number): number {
+  return findBytesFrom(data, SYNC_OUTPUT_EXIT_BYTES, start)
+}
+
 export const SYNC_OUTPUT_ENTER_BYTES = new TextEncoder().encode(SYNC_OUTPUT_ENTER)
 export const SYNC_OUTPUT_EXIT_BYTES = new TextEncoder().encode(SYNC_OUTPUT_EXIT)
 
@@ -90,8 +98,12 @@ function countOccurrences(text: string, needle: string): number {
 }
 
 function findBytes(haystack: Uint8Array, needle: Uint8Array): number {
+  return findBytesFrom(haystack, needle, 0)
+}
+
+function findBytesFrom(haystack: Uint8Array, needle: Uint8Array, start: number): number {
   if (needle.length === 0 || haystack.length < needle.length) return -1
-  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+  outer: for (let i = Math.max(0, start); i <= haystack.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
       if (haystack[i + j] !== needle[j]) continue outer
     }

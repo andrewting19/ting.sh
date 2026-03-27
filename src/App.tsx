@@ -8,8 +8,9 @@ import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
 import {
   CLAUDE_CODE_COMPAT_STORAGE_KEY,
-  findSyncOutputEnter,
+  findSyncOutputEnterAfter,
   findSyncOutputExit,
+  findSyncOutputExitAfter,
   persistClaudeCodeCompat,
   resolveClaudeCodeCompat,
   shouldDropClaudeCodeResizeSyncBatch,
@@ -341,46 +342,70 @@ export function App() {
     const now = Date.now()
     const lastResize = recentClaudeCompatResizeByKeyRef.current.get(key) ?? 0
     const withinResizeWindow = now - lastResize <= CLAUDE_CODE_COMPAT_RESIZE_WINDOW_MS
-    const capture = claudeCompatCaptureRef.current
+    let offset = 0
 
-    if (capture) {
-      if (capture.key !== key) flushClaudeCodeCompatCapture('pass')
-      const nextCapture = claudeCompatCaptureRef.current
-      if (nextCapture && nextCapture.key === key) {
-        nextCapture.chunks.push(data)
-        nextCapture.totalBytes += data.length
-        const merged = concatChunks(nextCapture.chunks)
-        if (findSyncOutputExit(merged) !== -1) {
-          flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(merged) ? 'drop' : 'pass')
+    while (offset < data.length) {
+      const capture = claudeCompatCaptureRef.current
+      if (capture) {
+        if (capture.key !== key) {
+          flushClaudeCodeCompatCapture('pass')
+          continue
+        }
+        const exitIndex = findSyncOutputExitAfter(data, offset)
+        if (exitIndex === -1) {
+          const tail = data.slice(offset)
+          capture.chunks.push(tail)
+          capture.totalBytes += tail.length
+          return
+        }
+
+        const exitEnd = exitIndex + '\u001b[?2026l'.length
+        const chunk = data.slice(offset, exitEnd)
+        capture.chunks.push(chunk)
+        capture.totalBytes += chunk.length
+        const merged = concatChunks(capture.chunks)
+        flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(merged) ? 'drop' : 'pass')
+        offset = exitEnd
+        continue
+      }
+
+      if (!withinResizeWindow) {
+        forwardTerminalBinary(key, data.slice(offset))
+        return
+      }
+
+      const enterIndex = findSyncOutputEnterAfter(data, offset)
+      if (enterIndex === -1) {
+        forwardTerminalBinary(key, data.slice(offset))
+        return
+      }
+
+      if (enterIndex > offset) {
+        forwardTerminalBinary(key, data.slice(offset, enterIndex))
+      }
+
+      const exitIndex = findSyncOutputExitAfter(data, enterIndex)
+      if (exitIndex === -1) {
+        const chunk = data.slice(enterIndex)
+        claudeCompatCaptureRef.current = {
+          key,
+          startedAt: now,
+          chunks: [chunk],
+          totalBytes: chunk.length,
         }
         return
       }
-    }
 
-    if (!withinResizeWindow) {
-      forwardTerminalBinary(key, data)
-      return
-    }
-
-    const syncEnterIndex = findSyncOutputEnter(data)
-    if (syncEnterIndex === -1) {
-      forwardTerminalBinary(key, data)
-      return
-    }
-
-    if (syncEnterIndex > 0) {
-      forwardTerminalBinary(key, data.slice(0, syncEnterIndex))
-    }
-
-    const batchStart = data.slice(syncEnterIndex)
-    claudeCompatCaptureRef.current = {
-      key,
-      startedAt: now,
-      chunks: [batchStart],
-      totalBytes: batchStart.length,
-    }
-    if (findSyncOutputExit(batchStart) !== -1) {
-      flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(batchStart) ? 'drop' : 'pass')
+      const exitEnd = exitIndex + '\u001b[?2026l'.length
+      const batch = data.slice(enterIndex, exitEnd)
+      claudeCompatCaptureRef.current = {
+        key,
+        startedAt: now,
+        chunks: [batch],
+        totalBytes: batch.length,
+      }
+      flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(batch) ? 'drop' : 'pass')
+      offset = exitEnd
     }
   }
 
