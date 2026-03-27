@@ -201,6 +201,12 @@ This appears inconsistent because the TUI does not emit the same redraw sequence
 
 If this becomes a recurring UX issue, the safest mitigation is an **opt-in compatibility mode** that ignores only `CSI 3J` (clear scrollback) on the client, ideally via xterm parser hooks (`parser.registerCsiHandler` for `CSI J` with param `3`). Do not blindly auto-scroll after every redraw; that fights the app and causes jank. Trade-off: ignoring `CSI 3J` means apps (or `clear`/`reset`) can no longer intentionally clear scrollback in that mode.
 
+**Claude Code can also emit a broken resize redraw in the normal buffer (reproduced in ting.sh, xterm.js, ghostty-web, and native Ghostty).** The observed pattern after a PTY `resize` is: `CSI ? 2026 h` (synchronized output), then a very large run of blank `\\r\\r\\n` lines in the normal buffer, then only the bottom prompt/footer is redrawn before `CSI ? 2026 l`. This leaves the viewport sitting at the bottom of a blank block, which looks like “the whole upper terminal went black after resize.”
+
+This is not currently believed to be a ting.sh renderer bug. Debouncing browser-driven resize storms helps reduce how often the TUI gets kicked into that path, but once Claude Code emits the broken redraw, browsers and native terminals alike appear to render it faithfully.
+
+If this becomes intolerable, the only realistic client-side mitigation is an **opt-in resize compatibility filter** that detects and suppresses this exact post-resize synchronized-output blank redraw pattern. Trade-off: that is protocol surgery against a specific app behavior, so it risks breaking legitimate full-screen resize redraws in other TUIs.
+
 ## Future ideas
 
 ### Multiplayer
