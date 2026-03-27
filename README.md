@@ -166,6 +166,7 @@ Working:
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
 - Manual terminal layout refresh button — header `↻` button sends a one-column PTY width nudge out/back for the active session, which can recover Claude Code from the known bad resize redraw state
+- Opt-in Claude Code resize compatibility mode — when `localStorage['wt-claude-code-compat'] = '1'`, shared app logic buffers synchronized-output redraw batches immediately after a real PTY resize and drops only the pathological blank-batch variant (`?2026h` + huge blank `\r\r\n` run + `?2026l`) before it reaches either renderer
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
@@ -206,7 +207,21 @@ If this becomes a recurring UX issue, the safest mitigation is an **opt-in compa
 
 This is not currently believed to be a ting.sh renderer bug. Debouncing browser-driven resize storms helps reduce how often the TUI gets kicked into that path, but once Claude Code emits the broken redraw, browsers and native terminals alike appear to render it faithfully.
 
-If this becomes intolerable, the only realistic client-side mitigation is an **opt-in resize compatibility filter** that detects and suppresses this exact post-resize synchronized-output blank redraw pattern. Trade-off: that is protocol surgery against a specific app behavior, so it risks breaking legitimate full-screen resize redraws in other TUIs.
+ting.sh now ships an **opt-in resize compatibility filter** for this exact case. Enable it with:
+
+```js
+localStorage.setItem('wt-claude-code-compat', '1')
+location.reload()
+```
+
+Disable it with:
+
+```js
+localStorage.removeItem('wt-claude-code-compat')
+location.reload()
+```
+
+The filter only engages for synchronized-output batches (`?2026h ... ?2026l`) shortly after a real PTY resize and only drops batches dominated by the pathological blank `\r\r\n` pattern. Trade-off: this is still protocol surgery against a specific app behavior, so it could suppress a legitimate full-screen redraw from another TUI if the heuristic is too broad.
 
 ## Future ideas
 
