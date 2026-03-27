@@ -165,6 +165,7 @@ Working:
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
+- Manual terminal layout refresh button — header `↻` button sends a one-column PTY width nudge out/back for the active session, which can recover Claude Code from the known bad resize redraw state
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)

@@ -1081,6 +1081,19 @@ export function App() {
     })
   }
 
+  function refreshTerminalLayout() {
+    const key = currentKeyRef.current
+    if (!key) return
+    const { cols, rows } = tm.getDimensions(key)
+    if (cols <= 1 || rows <= 0) return
+    const hostId = parseKey(key).hostId
+    sendToHost(hostId, { type: 'resize', cols: cols + 1, rows })
+    window.setTimeout(() => {
+      if (currentKeyRef.current !== key) return
+      sendToHost(hostId, { type: 'resize', cols, rows })
+    }, 100)
+  }
+
   function scrollToBottom() {
     const key = currentKeyRef.current
     if (!key) return
@@ -1153,6 +1166,16 @@ export function App() {
               <span className="renderer-toggle-icon" aria-hidden="true">👻</span>
             </button>
           </div>
+          <button
+            type="button"
+            className="header-tool-btn"
+            onClick={refreshTerminalLayout}
+            disabled={!currentKey}
+            aria-label="Refresh terminal layout"
+            title="Refresh terminal layout"
+          >
+            ↻
+          </button>
           <div className="sky-indicator" ref={skyRef} />
           <div className="header-clock" ref={clockRef} />
         </div>
