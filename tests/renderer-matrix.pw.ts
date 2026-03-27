@@ -3,6 +3,7 @@ import { getActiveRenderer, getTerminalText, killAllSessions, loadWithRenderer, 
 import type { TerminalRenderer } from '../src/terminal/backends'
 
 const CORE_RENDERERS: TerminalRenderer[] = ['xterm', 'ghostty']
+const CLAUDE_COMPAT_STORAGE_KEY = 'wt-claude-code-compat'
 
 for (const renderer of CORE_RENDERERS) {
   test.describe(`${renderer} renderer core flows`, () => {
@@ -26,6 +27,43 @@ for (const renderer of CORE_RENDERERS) {
 
       const text = await getTerminalText(page, id)
       expect(text).toContain(`${renderer}_matrix_output`)
+    })
+
+    test('Claude Code compat header toggle persists and terminal stays responsive', async ({ page }) => {
+      const compatToggle = page.getByRole('button', { name: 'Toggle Claude Code resize compatibility mode' })
+      await expect(compatToggle).toHaveAttribute('aria-pressed', 'false')
+
+      await Promise.all([
+        page.waitForLoadState('domcontentloaded'),
+        compatToggle.click(),
+      ])
+
+      await page.waitForFunction(
+        (expectedRenderer: TerminalRenderer) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const debug = (window as any).__wt_terminal_debug
+          const value = debug?.getRenderer?.() ?? document.documentElement.dataset.terminalRenderer
+          return value === expectedRenderer
+        },
+        renderer,
+        { timeout: 12000 },
+      )
+
+      expect(await getActiveRenderer(page)).toBe(renderer)
+      await expect(compatToggle).toHaveAttribute('aria-pressed', 'true')
+
+      const compatValue = await page.evaluate((storageKey: string) => localStorage.getItem(storageKey), CLAUDE_COMPAT_STORAGE_KEY)
+      expect(compatValue).toBe('1')
+
+      const id = await newSession(page)
+      await waitForPrompt(page, id, 12000)
+
+      await page.keyboard.type(`echo "${renderer}_compat_toggle_output"`)
+      await page.keyboard.press('Enter')
+      await waitForTerminal(page, id, `${renderer}_compat_toggle_output`, 12000)
+
+      const text = await getTerminalText(page, id)
+      expect(text).toContain(`${renderer}_compat_toggle_output`)
     })
 
     test('switch sessions without duplicating scrollback', async ({ page }) => {
