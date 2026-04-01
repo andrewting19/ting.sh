@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { existsSync, readFileSync, readlinkSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
 import { hostname } from "os";
 import { join } from "path";
-import { sanitizeReplayBuffer } from "./serverBuffer";
+import { getReplayBufferStats } from "./serverBuffer";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
@@ -508,6 +508,7 @@ const server = Bun.serve<WSData>({
           const cwd = cwdRaw && cwdRaw.trim().length > 0 ? cwdRaw : undefined;
           const requestId = asString(data.requestId);
           const s = createSession(name, cols, rows, cwd);
+          const replay = getReplayBufferStats(s.buffer, s.bufferTrimmed);
           ws.data.sessionId = s.id;
           // sessions before ready — client needs the new session in its list so
           // the container div exists in the DOM when the ready handler fires.
@@ -517,12 +518,15 @@ const server = Bun.serve<WSData>({
             id: s.id,
             name: s.name,
             fresh: true,
+            replayBytes: replay.replayBytes,
+            replayLineBreaks: replay.replayLineBreaks,
+            replayTrimmed: replay.replayTrimmed,
             ...(requestId !== null ? { requestId } : {}),
           }));
           // Attach only after ready so no binary from the new PTY can arrive
           // before client-side routing flips to this new session.
           s.clients.add(ws);
-          if (s.buffer.length > 0) ws.sendBinary(s.buffer);
+          if (replay.replayBytes > 0) ws.sendBinary(replay.replay);
           broadcastSessions();
           break;
         }
@@ -552,17 +556,20 @@ const server = Bun.serve<WSData>({
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
           if (cols && rows) s.proc?.resize(cols, rows);
+          const replay = getReplayBufferStats(s.buffer, s.bufferTrimmed);
 
           ws.send(JSON.stringify({
             type: "ready",
             id: s.id,
             name: s.name,
+            replayBytes: replay.replayBytes,
+            replayLineBreaks: replay.replayLineBreaks,
+            replayTrimmed: replay.replayTrimmed,
             ...(requestId !== null ? { requestId } : {}),
           }));
           // Replay after ready so client can validate requestId first and drop
           // stale attach responses before any scrollback bytes are applied.
-          const replay = sanitizeReplayBuffer(s.buffer, s.bufferTrimmed);
-          if (replay.length > 0) ws.sendBinary(replay);
+          if (replay.replayBytes > 0) ws.sendBinary(replay.replay);
           break;
         }
 

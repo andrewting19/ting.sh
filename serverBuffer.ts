@@ -19,3 +19,26 @@ export function sanitizeReplayBuffer(buffer: Buffer, wasTrimmed: boolean): Buffe
 
   return buffer.subarray(start)
 }
+
+function countByte(buffer: Buffer, value: number): number {
+  let count = 0
+  for (let i = 0; i < buffer.length; i += 1) {
+    if (buffer[i] === value) count += 1
+  }
+  return count
+}
+
+export function getReplayBufferStats(buffer: Buffer, wasTrimmed: boolean): {
+  replay: Buffer
+  replayBytes: number
+  replayLineBreaks: number
+  replayTrimmed: boolean
+} {
+  const replay = sanitizeReplayBuffer(buffer, wasTrimmed)
+  return {
+    replay,
+    replayBytes: replay.length,
+    replayLineBreaks: countByte(replay, 0x0a),
+    replayTrimmed: wasTrimmed,
+  }
+}

@@ -162,6 +162,7 @@ Working:
 - Shared-session resize reclaim — re-selecting the active session (or returning foreground) reapplies local cols/rows after another client resized the PTY
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Measured attach handshake — hash-load/reconnect attaches now wait for a real fitted xterm size before sending `attach`, so shared PTYs are never briefly resized to fallback `80x24` before replay
+- Dev attach replay diagnostics — `ready` now reports replay bytes/line breaks/trim status, and the dev build exposes `window.__wt_attach_metrics.measureSession()` / `.measureAll()` so live sessions can be profiled by attach latency versus replay size without restarting the server
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes

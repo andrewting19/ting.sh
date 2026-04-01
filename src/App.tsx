@@ -24,6 +24,23 @@ import './App.css'
 const LEGACY_LOCAL_HOST_ID = 'local'
 type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
 type SessionOrderByHost = Record<string, string[]>
+type AttachReplayMetric = {
+  key: SessionKey
+  hostId: string
+  sessionId: string
+  sessionName: string
+  requestId: string
+  requestedAt: number
+  readyAt: number | null
+  firstByteAt: number | null
+  replayReceivedAt: number | null
+  firstWriteFlushAt: number | null
+  replayBytesExpected: number | null
+  replayLineBreaks: number | null
+  replayTrimmed: boolean
+  replayBytesReceived: number
+  replayChunkCount: number
+}
 
 const LEGACY_SESSION_ORDER_KEY = 'wt-session-order'
 const SESSION_ORDER_STORAGE_PREFIX = 'wt-session-order:'
@@ -175,6 +192,9 @@ export function App() {
   const lastSentResizeByKeyRef = useRef<Map<SessionKey, string>>(new Map())
   const recentClaudeCompatResizeByKeyRef = useRef<Map<SessionKey, number>>(new Map())
   const claudeCompatCaptureRef = useRef<ClaudeCodeCompatCapture | null>(null)
+  const attachMetricsByRequestIdRef = useRef<Map<string, AttachReplayMetric>>(new Map())
+  const latestAttachMetricByKeyRef = useRef<Map<SessionKey, AttachReplayMetric>>(new Map())
+  const attachSessionRef = useRef<(key: SessionKey) => void>(() => {})
 
   // When set, the next ready response is a duplicate — insert after this ID
   const duplicateSourceKeyRef = useRef<SessionKey | null>(null)
@@ -299,10 +319,37 @@ export function App() {
     return hostSessionsRef.current.get(hostId)?.find(s => s.id === sessionId) ?? null
   }, [])
 
+  const updateAttachMetric = useCallback((metric: AttachReplayMetric) => {
+    latestAttachMetricByKeyRef.current.set(metric.key, { ...metric })
+    attachMetricsByRequestIdRef.current.set(metric.requestId, { ...metric })
+  }, [])
+
   function forwardTerminalBinary(key: SessionKey, data: Uint8Array) {
+    const now = performance.now()
+    const metric = latestAttachMetricByKeyRef.current.get(key)
+    if (metric && metric.readyAt !== null && metric.replayReceivedAt === null) {
+      const next = { ...metric }
+      if (next.firstByteAt === null) next.firstByteAt = now
+      if (typeof next.replayBytesExpected === 'number') {
+        const remaining = Math.max(0, next.replayBytesExpected - next.replayBytesReceived)
+        const consumed = Math.min(remaining, data.length)
+        if (consumed > 0) {
+          next.replayBytesReceived += consumed
+          next.replayChunkCount += 1
+        }
+        if (next.replayBytesReceived >= next.replayBytesExpected) {
+          next.replayReceivedAt = now
+        }
+      }
+      updateAttachMetric(next)
+    }
     const shouldScrollToBottom = scrollToBottomAfterAttachBinaryRef.current === key
     tm.write(key, data, shouldScrollToBottom
       ? () => {
+          const currentMetric = latestAttachMetricByKeyRef.current.get(key)
+          if (currentMetric && currentMetric.firstWriteFlushAt === null) {
+            updateAttachMetric({ ...currentMetric, firstWriteFlushAt: performance.now() })
+          }
           if (scrollToBottomAfterAttachBinaryRef.current !== key) return
           scrollToBottomAfterAttachBinaryRef.current = null
           requestAnimationFrame(() => {
@@ -312,7 +359,12 @@ export function App() {
             })
           })
         }
-      : undefined)
+      : () => {
+          const currentMetric = latestAttachMetricByKeyRef.current.get(key)
+          if (currentMetric && currentMetric.firstWriteFlushAt === null) {
+            updateAttachMetric({ ...currentMetric, firstWriteFlushAt: performance.now() })
+          }
+        })
   }
 
   function flushClaudeCodeCompatCapture(decision: 'pass' | 'drop') {
@@ -577,12 +629,30 @@ export function App() {
   const sendAttachRequest = useCallback((key: SessionKey, dims: { cols: number; rows: number }) => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
     const { hostId, sessionId } = parseKey(key)
+    const metric: AttachReplayMetric = {
+      key,
+      hostId,
+      sessionId,
+      sessionName: getSessionByKey(key)?.name ?? sessionId,
+      requestId,
+      requestedAt: performance.now(),
+      readyAt: null,
+      firstByteAt: null,
+      replayReceivedAt: null,
+      firstWriteFlushAt: null,
+      replayBytesExpected: null,
+      replayLineBreaks: null,
+      replayTrimmed: false,
+      replayBytesReceived: 0,
+      replayChunkCount: 0,
+    }
+    updateAttachMetric(metric)
     pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
     sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
-  }, [sendToHost, tm])
+  }, [getSessionByKey, sendToHost, updateAttachMetric])
 
   const prepareTerminalForAttach = useCallback((key: SessionKey) => {
     const container = containerRefs.current.get(key)
@@ -603,6 +673,7 @@ export function App() {
   // directly (e.g. bulk-kill sessions) without driving the UI.
   useEffect(() => {
     if (!import.meta.env.DEV) return
+    const roundMs = (value: number | null) => value == null ? null : Math.round(value * 10) / 10
     const resolveTerminalKey = (rawId: string) => {
       if (!rawId) return null
       if (currentKeyRef.current && parseKey(currentKeyRef.current).sessionId === rawId) return currentKeyRef.current
@@ -614,6 +685,87 @@ export function App() {
       }
       return null
     }
+    const getOrderedSessionTargets = (hostId?: string) => {
+      const targetHostIds = hostId ? [hostId] : hosts.map(host => host.id)
+      const targets: Array<{ key: SessionKey; hostId: string; sessionId: string; sessionName: string }> = []
+      for (const nextHostId of targetHostIds) {
+        const list = hostSessionsRef.current.get(nextHostId) ?? []
+        const order = sessionOrderByHostRef.current[nextHostId] ?? []
+        const sorted = [...list].sort((a, b) => {
+          const ai = order.indexOf(a.id)
+          const bi = order.indexOf(b.id)
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+        })
+        for (const session of sorted) {
+          targets.push({
+            key: makeKey(nextHostId, session.id),
+            hostId: nextHostId,
+            sessionId: session.id,
+            sessionName: session.name,
+          })
+        }
+      }
+      return targets
+    }
+    const summarizeAttachMetric = (metric: AttachReplayMetric) => ({
+      hostId: metric.hostId,
+      sessionId: metric.sessionId,
+      sessionName: metric.sessionName,
+      requestId: metric.requestId,
+      replayBytes: metric.replayBytesExpected,
+      replayKiB: metric.replayBytesExpected == null ? null : Math.round((metric.replayBytesExpected / 1024) * 10) / 10,
+      replayLineBreaks: metric.replayLineBreaks,
+      replayTrimmed: metric.replayTrimmed,
+      replayChunks: metric.replayChunkCount,
+      readyMs: roundMs(metric.readyAt == null ? null : metric.readyAt - metric.requestedAt),
+      firstByteMs: roundMs(metric.firstByteAt == null ? null : metric.firstByteAt - metric.requestedAt),
+      replayReceivedMs: roundMs(metric.replayReceivedAt == null ? null : metric.replayReceivedAt - metric.requestedAt),
+      firstWriteFlushMs: roundMs(metric.firstWriteFlushAt == null ? null : metric.firstWriteFlushAt - metric.requestedAt),
+      readyToFirstByteMs: roundMs(metric.readyAt == null || metric.firstByteAt == null ? null : metric.firstByteAt - metric.readyAt),
+      readyToReplayReceivedMs: roundMs(metric.readyAt == null || metric.replayReceivedAt == null ? null : metric.replayReceivedAt - metric.readyAt),
+      readyToFirstWriteFlushMs: roundMs(metric.readyAt == null || metric.firstWriteFlushAt == null ? null : metric.firstWriteFlushAt - metric.readyAt),
+    })
+    const waitForAttachMetric = (key: SessionKey, startedAfter: number, timeoutMs: number) => new Promise((resolve) => {
+      const deadline = performance.now() + timeoutMs
+      const timer = window.setInterval(() => {
+        const latestMetric = latestAttachMetricByKeyRef.current.get(key)
+        if (latestMetric && latestMetric.requestedAt >= startedAfter) {
+          const replayBytes = latestMetric.replayBytesExpected ?? 0
+          const done = latestMetric.replayReceivedAt !== null && (replayBytes === 0 || latestMetric.firstWriteFlushAt !== null)
+          if (done) {
+            window.clearInterval(timer)
+            resolve({ ...summarizeAttachMetric(latestMetric), timedOut: false })
+            return
+          }
+        }
+        if (performance.now() < deadline) return
+        window.clearInterval(timer)
+        if (latestMetric && latestMetric.requestedAt >= startedAfter) {
+          resolve({ ...summarizeAttachMetric(latestMetric), timedOut: true })
+          return
+        }
+        const fallback = parseKey(key)
+        resolve({
+          hostId: fallback.hostId,
+          sessionId: fallback.sessionId,
+          sessionName: getSessionByKey(key)?.name ?? fallback.sessionId,
+          requestId: null,
+          replayBytes: null,
+          replayKiB: null,
+          replayLineBreaks: null,
+          replayTrimmed: null,
+          replayChunks: null,
+          readyMs: null,
+          firstByteMs: null,
+          replayReceivedMs: null,
+          firstWriteFlushMs: null,
+          readyToFirstByteMs: null,
+          readyToReplayReceivedMs: null,
+          readyToFirstWriteFlushMs: null,
+          timedOut: true,
+        })
+      }, 25)
+    })
     ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)
     ;(window as any).__wt_ws_close = () => forceClose(localHostId)
     ;(window as any).__wt_get_attached_id = () => {
@@ -668,6 +820,41 @@ export function App() {
         location.reload()
       },
       storageKey: CLAUDE_CODE_COMPAT_STORAGE_KEY,
+    }
+    ;(window as any).__wt_attach_metrics = {
+      latest: (rawId?: string) => {
+        if (rawId) {
+          const key = resolveTerminalKey(rawId)
+          if (!key) return null
+          const metric = latestAttachMetricByKeyRef.current.get(key)
+          return metric ? summarizeAttachMetric(metric) : null
+        }
+        return [...latestAttachMetricByKeyRef.current.values()]
+          .sort((a, b) => b.requestedAt - a.requestedAt)
+          .map(summarizeAttachMetric)
+      },
+      measureSession: async (rawId: string, options?: { timeoutMs?: number }) => {
+        const key = resolveTerminalKey(rawId)
+        if (!key) throw new Error(`Unknown session: ${rawId}`)
+        const startedAfter = performance.now()
+        attachSessionRef.current(key)
+        return await waitForAttachMetric(key, startedAfter, options?.timeoutMs ?? 60_000)
+      },
+      measureAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
+        const rows = []
+        const targets = getOrderedSessionTargets(options?.hostId)
+        for (const target of targets) {
+          const startedAfter = performance.now()
+          attachSessionRef.current(target.key)
+          rows.push(await waitForAttachMetric(target.key, startedAfter, options?.timeoutMs ?? 60_000))
+          if ((options?.pauseMs ?? 150) > 0) {
+            await new Promise(resolve => window.setTimeout(resolve, options?.pauseMs ?? 150))
+          }
+        }
+        console.table(rows)
+        return rows
+      },
+      help: 'Use __wt_attach_metrics.measureAll() for all sessions or __wt_attach_metrics.measureSession(sessionId).',
     }
   }, [claudeCodeCompatEnabled, forceClose, getSessionByKey, hosts, localHostId, sendToHost, terminalRenderer, tm])
 
@@ -976,6 +1163,13 @@ export function App() {
       case 'ready': {
         const id = m.id as string
         const name = m.name as string
+        const replayBytes = typeof m.replayBytes === 'number' && Number.isFinite(m.replayBytes)
+          ? Math.max(0, Math.floor(m.replayBytes))
+          : 0
+        const replayLineBreaks = typeof m.replayLineBreaks === 'number' && Number.isFinite(m.replayLineBreaks)
+          ? Math.max(0, Math.floor(m.replayLineBreaks))
+          : 0
+        const replayTrimmed = m.replayTrimmed === true
         let key: SessionKey | null = pendingAttachTargetKeyRef.current
         const requestId = typeof m.requestId === 'string' ? m.requestId : null
         if (requestId) {
@@ -995,6 +1189,24 @@ export function App() {
           dropBinaryUntilReadyRef.current = false
         }
         if (!key) key = makeKey(hostId, id)
+        const readyAt = performance.now()
+        if (requestId) {
+          const metric = attachMetricsByRequestIdRef.current.get(requestId)
+          if (metric) {
+            updateAttachMetric({
+              ...metric,
+              key,
+              hostId: parseKey(key).hostId,
+              sessionId: parseKey(key).sessionId,
+              sessionName: name,
+              readyAt,
+              replayBytesExpected: replayBytes,
+              replayLineBreaks,
+              replayTrimmed,
+              replayReceivedAt: replayBytes === 0 ? readyAt : metric.replayReceivedAt,
+            })
+          }
+        }
         attachedKeyRef.current = key
         // Update sync ref immediately so binary routing is correct
         currentKeyRef.current = key
@@ -1157,6 +1369,7 @@ export function App() {
     const name = getSessionByKey(key)?.name ?? parsed.sessionId
     replaceHash(parsed.hostId, name)
   }
+  attachSessionRef.current = attachSession
 
   function killSession(key: SessionKey) {
     const { hostId, sessionId } = parseKey(key)
