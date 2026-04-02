@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react'
 import type { SessionKey } from '../types'
 import { createTerminalBackend, type TerminalRenderer } from '../terminal/backends'
 import type { DebuggableTerminalBackendInstance, TerminalBackendInstance, TerminalScrollState } from '../terminal/backends/types'
-import type { XtermVtSnapshot } from '../snapshot/xtermVtSnapshot'
+import type { TerminalSnapshot } from '../snapshot/types'
 
 interface PendingWrite {
   data: Uint8Array
@@ -216,7 +216,7 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
     })
   }, [emitScrollState, ensureEntry, ensureTerminalInstance])
 
-  const restoreSnapshot = useCallback((sessionKey: SessionKey, snapshot: XtermVtSnapshot, onFlushed?: () => void) => {
+  const restoreSnapshot = useCallback((sessionKey: SessionKey, snapshot: TerminalSnapshot, onFlushed?: () => void) => {
     const entry = ensureEntry(sessionKey)
     entry.pendingWrites = []
     ensureTerminalInstance(sessionKey, entry)
@@ -224,11 +224,11 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
       return false
     }
     entry.pendingReset = false
-    entry.terminal.restoreSnapshot(snapshot, () => {
+    const restored = entry.terminal.restoreSnapshot(snapshot, () => {
       emitScrollState(sessionKey)
       onFlushed?.()
     })
-    return true
+    return restored
   }, [emitScrollState, ensureEntry, ensureTerminalInstance])
 
   const reset = useCallback((sessionKey: SessionKey) => {

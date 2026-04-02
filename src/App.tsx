@@ -10,7 +10,7 @@ import { persistTerminalRenderer, resolveTerminalRenderer } from './terminal/ren
 import type { TerminalRenderer } from './terminal/backends'
 import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
-import type { XtermVtSnapshot } from './snapshot/xtermVtSnapshot'
+import type { TerminalSnapshot } from './snapshot/types'
 import './App.css'
 
 const LEGACY_LOCAL_HOST_ID = 'local'
@@ -555,7 +555,7 @@ export function App() {
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
     const useSnapshotAttach = SNAPSHOT_ATTACH_ENABLED && terminalRenderer === 'xterm'
-    sendToHost(hostId, { type: useSnapshotAttach ? 'attach-snapshot' : 'attach', id: sessionId, requestId, ...dims })
+    sendToHost(hostId, { type: useSnapshotAttach ? 'attach-snapshot' : 'attach', id: sessionId, requestId, renderer: terminalRenderer, ...dims })
   }, [getSessionByKey, sendToHost, terminalRenderer, updateAttachMetric])
 
   const prepareTerminalForAttach = useCallback((key: SessionKey) => {
@@ -1154,9 +1154,9 @@ export function App() {
         dropBinaryUntilReadyRef.current = false
         if (!key) key = makeKey(hostId, id)
 
-        const snapshot = m.snapshot as XtermVtSnapshot | undefined
+        const snapshot = m.snapshot as TerminalSnapshot | undefined
         const cutSeq = typeof m.cutSeq === 'number' && Number.isFinite(m.cutSeq) ? Math.max(0, Math.floor(m.cutSeq)) : 0
-        if (!snapshot || snapshot.format !== 'xterm-vt-snapshot-v1' || typeof snapshot.payload !== 'string') {
+        if (!snapshot || typeof snapshot !== 'object' || !('format' in snapshot)) {
           sendToHost(hostId, { type: 'attach', id, requestId, cols: tm.getDimensions(key).cols, rows: tm.getDimensions(key).rows })
           pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
           pendingAttachTargetKeyRef.current = key
@@ -1171,14 +1171,14 @@ export function App() {
             key,
             hostId: parseKey(key).hostId,
             sessionId: parseKey(key).sessionId,
-            sessionName: name,
-            readyAt,
-            firstByteAt: readyAt,
-            replayBytesExpected: snapshot.payload.length,
-            replayBytesReceived: snapshot.payload.length,
-            replayLineBreaks: metric.replayLineBreaks,
-            replayTrimmed: false,
-            replayReceivedAt: readyAt,
+              sessionName: name,
+              readyAt,
+              firstByteAt: readyAt,
+              replayBytesExpected: 'payload' in snapshot && typeof snapshot.payload === 'string' ? snapshot.payload.length : null,
+              replayBytesReceived: 'payload' in snapshot && typeof snapshot.payload === 'string' ? snapshot.payload.length : 0,
+              replayLineBreaks: metric.replayLineBreaks,
+              replayTrimmed: false,
+              replayReceivedAt: readyAt,
           })
         }
 

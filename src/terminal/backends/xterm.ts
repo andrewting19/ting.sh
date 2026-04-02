@@ -2,7 +2,7 @@ import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { FitAddon } from '@xterm/addon-fit'
 import type { SessionKey } from '../../types'
-import type { XtermVtSnapshot } from '../../snapshot/xtermVtSnapshot'
+import type { TerminalSnapshot } from '../../snapshot/types'
 import type {
   DebuggableTerminalBackendInstance,
   TerminalBackend,
@@ -206,12 +206,14 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.term.write(data, onFlushed)
   }
 
-  restoreSnapshot(snapshot: XtermVtSnapshot, onFlushed?: () => void) {
+  restoreSnapshot(snapshot: TerminalSnapshot, onFlushed?: () => void) {
+    if (snapshot.format !== 'xterm-vt-snapshot-v1') return false
     this.term.reset()
     if (this.term.cols !== snapshot.cols || this.term.rows !== snapshot.rows) {
       this.term.resize(snapshot.cols, snapshot.rows)
     }
     this.term.write(snapshot.payload, onFlushed)
+    return true
   }
 
   reset() {

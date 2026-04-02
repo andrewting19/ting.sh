@@ -1,5 +1,5 @@
 import type { SessionKey } from '../../types'
-import type { XtermVtSnapshot } from '../../snapshot/xtermVtSnapshot'
+import type { TerminalSnapshot } from '../../snapshot/types'
 
 export interface TerminalDimensions {
   cols: number
@@ -21,7 +21,7 @@ export interface TerminalBackendInstance {
   open: (container: HTMLElement) => void
   fit: () => void
   write: (data: Uint8Array, onFlushed?: () => void) => void
-  restoreSnapshot?: (snapshot: XtermVtSnapshot, onFlushed?: () => void) => void
+  restoreSnapshot?: (snapshot: TerminalSnapshot, onFlushed?: () => void) => boolean
   reset: () => void
   focus: () => void
   scrollToTop: () => void

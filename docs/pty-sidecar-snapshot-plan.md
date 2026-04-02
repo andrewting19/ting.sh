@@ -27,6 +27,7 @@ This document is the high-level execution plan for that work.
   - for normal-buffer sessions, a rendered-text VT script can reproduce the readable line content and semantic scrollback history well enough for reading
   - but it still does not preserve xterm-equivalent internal buffer offsets
   - and once the active state is alternate-screen, that same approach still loses the preserved normal scrollback
+- That partial Ghostty result is now wired into the real app path: Ghostty attach requests receive a rendered-text snapshot, the Ghostty backend restores it only for normal-buffer sessions, and alternate-screen cases automatically fall back to raw attach.
 - Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
 - `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
 - An initial xterm production rollout is now wired through the real app path: xterm reconnect requests `attach-snapshot`, restores the serialized VT snapshot locally, acknowledges with `snapshot-applied`, receives ordered `snapshot-tail` chunks, and only then transitions back to the live binary stream.

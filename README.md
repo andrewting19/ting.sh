@@ -121,6 +121,7 @@ Working:
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
 - Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
+- Ghostty now uses snapshot attach for normal-buffer sessions via a rendered-text snapshot path, and falls back to raw attach when the active state is alternate-screen
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously

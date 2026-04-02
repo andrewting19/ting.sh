@@ -4,6 +4,8 @@ import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
+import { captureRenderedTextSnapshot } from "./src/snapshot/renderedTextSnapshot";
+import type { TerminalSnapshot } from "./src/snapshot/types";
 import { LiveTailBuffer } from "./src/snapshot/liveTail";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
@@ -431,6 +433,7 @@ const server = Bun.serve<WSData>({
         case "attach-snapshot": {
           const id = asString(data.id);
           const requestId = asString(data.requestId);
+          const renderer = asString(data.renderer);
           const target = id ? sessions.get(id) : null;
           if (!target) {
             ws.send(JSON.stringify({
@@ -447,7 +450,9 @@ const server = Bun.serve<WSData>({
           if (cols && rows) target.proc?.resize(cols, rows);
           if (cols && rows) target.snapshotTracker.resize(cols, rows);
           await target.snapshotWriteChain;
-          const snapshot = target.snapshotTracker.capture();
+          const snapshot: TerminalSnapshot = renderer === "ghostty"
+            ? captureRenderedTextSnapshot(target.snapshotTracker.terminal)
+            : target.snapshotTracker.capture();
           const cutSeq = target.snapshotSeq;
           ws.data.sessionId = null;
           ws.data.pendingSnapshot = {
