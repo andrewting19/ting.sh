@@ -64,6 +64,7 @@
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
+- [x] Reconnect measurement helper — `scripts/measure-session-reconnect.ts` compares raw attach versus snapshot attach against the active server and reports payload/timing metrics
 - [x] Synthetic PTY trace benchmarking — `scripts/benchmark-pty-trace.ts` now reports raw-vs-snapshot size ratios for redraw-heavy and alternate-buffer scenarios without needing a live session
 - [x] Snapshot benchmark baseline recorded — synthetic `redraw` trace measured `3464` raw bytes vs `152` xterm-snapshot bytes and `164` rendered-text bytes (`~22x` smaller), while synthetic `alternate` measured `590` raw bytes vs `574` / `627` bytes (roughly parity)
 - [x] WebSocket auto-reconnect with status indicator
