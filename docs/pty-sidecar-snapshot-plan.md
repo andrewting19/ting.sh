@@ -41,6 +41,11 @@ This document is the high-level execution plan for that work.
 - A clean direct-PTY alternate-screen baseline is now also recorded:
   - `altbench` session on the dev server: `3214` raw bytes, `1372` xterm snapshot bytes, `1524` rendered-text bytes
   - local protocol timings on that small session were slightly better for raw attach than snapshot attach
+- Real agent-TUI baselines are now also recorded:
+  - `Jax`: `112033` raw bytes, `62012` xterm snapshot bytes, `61113` rendered-text bytes (`~1.8x` smaller than raw)
+  - `Viego`: `302449` raw bytes, `130277` xterm snapshot bytes, `93959` rendered-text bytes (`~2.3x` / `~3.2x` smaller than raw)
+  - browser-side xterm attach metrics on localhost for the currently running sessions showed first-write-flush around `23.3ms` (`Jax`) and `26.3ms` (`Viego`)
+  - implication: real coding-agent TUIs can preserve a large amount of meaningful visible content in the normal buffer, so snapshot reconnect still helps but no longer looks like an overwhelmingly tiny payload in all cases
 - Architectural implication from those baselines: snapshot attach clearly wins for redraw-heavy normal-buffer churn, but direct alternate-screen sessions do not necessarily compress enough to make snapshot reconnect an automatic performance win. Ghostty alternate-screen still needs a fidelity-first decision informed by real app traces rather than by one generic payload heuristic.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs

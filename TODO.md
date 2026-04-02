@@ -69,6 +69,7 @@
 - [x] Snapshot benchmark baseline recorded — synthetic `redraw` trace measured `3464` raw bytes vs `152` xterm-snapshot bytes and `164` rendered-text bytes (`~22x` smaller), while synthetic `alternate` measured `590` raw bytes vs `574` / `627` bytes (roughly parity)
 - [x] Live dev-server redraw baseline recorded — local `tracebench` session measured `8908` raw bytes vs `56` xterm-snapshot bytes and `107` Ghostty rendered-text bytes; local reconnect timing was ~`254ms` raw vs ~`11.6ms` xterm snapshot vs ~`1.7ms` Ghostty snapshot
 - [x] Live direct-PTY alternate-screen baseline recorded — non-tmux `altbench` measured `3214` raw replay vs `1372` xterm snapshot and `1524` Ghostty rendered-text bytes; on small direct alternate-screen sessions raw can be as fast or faster locally, so alternate-screen decisions must be driven by real app shape plus fidelity
+- [x] Live agent-TUI baselines recorded — `Jax` and `Viego` Codex/Claude-style sessions measured only moderate snapshot shrinkage (`~1.8x` to `~3.2x`), which is more representative than the tiny synthetic redraw baseline
 - [x] Snapshot mojibake fix — snapshot capture now uses streaming UTF-8 decode instead of `latin1`, preserving box-drawing glyphs in agent-TUI snapshots (existing live sessions still need a sidecar restart to pick up the fix)
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
