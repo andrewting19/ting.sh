@@ -22,6 +22,7 @@ This document is the high-level execution plan for that work.
 - The POC now also consumes captured shell PTY traces and shows that serialized snapshots collapse redraw-heavy churn into a much smaller self-contained VT payload.
 - Ghostty feasibility now has a concrete result from a browser-backed harness: Ghostty can consume the xterm-emitted VT snapshot and recover the visible alternate-screen content, but it does not preserve xterm's full normal-buffer/scrollback semantics or exact alternate-screen layout/cursor positioning from that same snapshot.
 - Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
+- `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty

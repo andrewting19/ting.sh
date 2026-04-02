@@ -4,11 +4,13 @@ import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
+import { LiveTailBuffer } from "./src/snapshot/liveTail";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
 const PORT = resolvePtydPort();
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024), 10);
+const LIVE_TAIL_BUFFER_BYTES = parseInt(process.env.LIVE_TAIL_BUFFER_BYTES ?? String(512 * 1024), 10);
 const IDLE_EXIT_MS = parseInt(process.env.PTYD_IDLE_EXIT_MS ?? "0", 10);
 
 interface Session {
@@ -18,6 +20,8 @@ interface Session {
   shell: string;
   buffer: Buffer;
   bufferTrimmed: boolean;
+  outputSeq: number;
+  liveTail: LiveTailBuffer;
   snapshotTracker: XtermVtSnapshotTracker;
   clients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
@@ -164,6 +168,8 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     shell,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
+    outputSeq: 0,
+    liveTail: new LiveTailBuffer(LIVE_TAIL_BUFFER_BYTES),
     snapshotTracker: new XtermVtSnapshotTracker(cols, rows),
     clients: new Set(),
     createdAt: Date.now(),
@@ -207,6 +213,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       }
 
       if (payload.length > 0) {
+        session.outputSeq = session.liveTail.append(payload);
         void session.snapshotTracker.write(payload);
         for (const ws of session.clients) ws.sendBinary(payload);
       }
