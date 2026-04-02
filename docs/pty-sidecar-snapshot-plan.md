@@ -14,6 +14,19 @@ The long-term direction is:
 
 This document is the high-level execution plan for that work.
 
+## Current Status
+
+- Phase 1 sidecar foundation is complete locally: Bun now proxies browser traffic to a local-only `ptyd` process, and PTYs survive real Bun server restarts under integration test coverage.
+- Initial snapshot feasibility work has identified a concrete xterm path: `@xterm/headless` plus `@xterm/addon-serialize`.
+- A local roundtrip POC now passes for both redraw-heavy normal-buffer state and alternate-buffer state by serializing a headless xterm snapshot and restoring it into a fresh headless terminal.
+- The POC now also consumes captured shell PTY traces and shows that serialized snapshots collapse redraw-heavy churn into a much smaller self-contained VT payload.
+- Ghostty feasibility now has a concrete result from a browser-backed harness: Ghostty can consume the xterm-emitted VT snapshot and recover the visible alternate-screen content, but it does not preserve xterm's full normal-buffer/scrollback semantics or exact alternate-screen layout/cursor positioning from that same snapshot.
+- Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
+- The biggest remaining unknowns are:
+  - fidelity against real redraw-heavy traces from coding-agent TUIs
+  - restore parity in Ghostty
+  - race-safe snapshot plus live-tail handoff during attach
+
 ## Non-Negotiable Constraints
 
 - Session continuity matters more than developer convenience.
@@ -208,16 +221,17 @@ Decision gate:
 - [ ] Make Bun reconnect to the sidecar on startup and after sidecar disconnects.
 - [x] Add tests proving PTYs survive Bun server restart.
 - [x] Add tests proving attached clients can reconnect after Bun restart.
+- [x] Evaluate server-side headless terminal state engine options and select POC target.
 - [ ] Capture real PTY traces from redraw-heavy sessions for snapshot feasibility testing.
-- [ ] Prototype a headless terminal state engine that consumes recorded PTY traces.
-- [ ] Evaluate fidelity for normal shell sessions.
+- [x] Prototype a headless terminal state engine that consumes recorded PTY traces.
+- [x] Evaluate fidelity for normal shell sessions.
 - [ ] Evaluate fidelity for Claude Code / Codex-style redraw-heavy TUIs.
 - [ ] Evaluate fidelity for resize-heavy sessions.
-- [ ] Draft a renderer-neutral `TerminalSnapshot` type.
-- [ ] Measure snapshot payload size on representative sessions.
-- [ ] Prototype xterm snapshot restore.
-- [ ] Prototype Ghostty snapshot restore.
-- [ ] Decide whether the restore path needs backend-specific adapters.
+- [x] Draft a renderer-neutral `TerminalSnapshot` type.
+- [ ] Measure snapshot payload size on representative real sessions.
+- [x] Prototype xterm snapshot restore.
+- [x] Prototype Ghostty snapshot restore.
+- [x] Decide whether the restore path needs backend-specific adapters.
 - [ ] Design the snapshot attach protocol including sequence/handoff semantics.
 - [ ] Prototype snapshot cut + live tail handoff under concurrent output.
 - [ ] Add a feature flag for snapshot attach.

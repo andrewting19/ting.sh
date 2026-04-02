@@ -4,6 +4,7 @@ import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
+import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
 const PORT = resolvePtydPort();
@@ -17,6 +18,7 @@ interface Session {
   shell: string;
   buffer: Buffer;
   bufferTrimmed: boolean;
+  snapshotTracker: XtermVtSnapshotTracker;
   clients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
   cwd: string;
@@ -162,6 +164,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     shell,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
+    snapshotTracker: new XtermVtSnapshotTracker(cols, rows),
     clients: new Set(),
     createdAt: Date.now(),
     cwd: "",
@@ -204,6 +207,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       }
 
       if (payload.length > 0) {
+        void session.snapshotTracker.write(payload);
         for (const ws of session.clients) ws.sendBinary(payload);
       }
     },
@@ -337,6 +341,7 @@ const server = Bun.serve<WSData>({
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
           if (cols && rows) target.proc?.resize(cols, rows);
+          if (cols && rows) target.snapshotTracker.resize(cols, rows);
           const replay = getReplayBufferStats(target.buffer, target.bufferTrimmed);
           ws.send(JSON.stringify({
             type: "ready",
@@ -364,6 +369,7 @@ const server = Bun.serve<WSData>({
           const rows = asPositiveInt(data.rows);
           if (!session || !cols || !rows) return;
           session.proc?.resize(cols, rows);
+          session.snapshotTracker.resize(cols, rows);
           break;
         }
 

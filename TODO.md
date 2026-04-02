@@ -89,6 +89,7 @@
 - [x] Manual Windows production verification (`mom`) — Git Bash default shell, correct initial home/cwd, live CWD tracking, duplicate/create-with-CWD, rename, kill, and bundled-Node PTY worker path validated end-to-end
 
 ## Up next (in order)
+- [ ] Snapshot reconnect POC 1: validate headless xterm + serialize against real redraw-heavy agent traces, then design backend-specific restore adapters for Ghostty parity
 - [x] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [x] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [x] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics
@@ -106,7 +107,7 @@
 - [ ] Multi-machine dashboard — each Tailscale machine runs its own server, one page lists all
 - [x] Auto-update — server polls GitHub releases, downloads new tarball, extracts in-place, exits for systemd restart
 - [x] Deployment tooling — systemd unit, install script (`curl | sh`), release script (`bun run release`)
-- [ ] Session persistence across restarts — detach PTYs into own process group (`setsid`) so they survive server restart/update
+- [x] Session persistence across Bun server restarts — local `ptyd` sidecar now owns PTYs instead of relying on in-process hot-reload persistence
 - [ ] Auto-update: only restart when idle (zero active sessions) to avoid killing running work
 - [ ] Windows phase 5 — run Playwright / multi-host CI on Windows
 - [ ] Custom launch command per session — start directly into `claude`, `ssh host`, etc.
