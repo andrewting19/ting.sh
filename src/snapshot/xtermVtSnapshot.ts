@@ -16,6 +16,7 @@ type HeadlessTerminalWithAddon = Terminal & {
 export class XtermVtSnapshotTracker {
   private readonly term: HeadlessTerminalWithAddon;
   private readonly serializeAddon: SerializeAddon;
+  private readonly decoder = new TextDecoder("utf-8");
   private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(cols: number, rows: number, scrollback = 10_000) {
@@ -40,7 +41,7 @@ export class XtermVtSnapshotTracker {
   }
 
   async write(data: string | Uint8Array): Promise<void> {
-    const chunk = typeof data === "string" ? data : Buffer.from(data).toString("latin1");
+    const chunk = typeof data === "string" ? data : this.decoder.decode(data, { stream: true });
     const next = this.pendingWrite.then(
       () => new Promise<void>((resolve) => this.term.write(chunk, () => resolve())),
     );

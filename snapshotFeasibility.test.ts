@@ -114,3 +114,28 @@ test("serialized snapshot collapses redraw-heavy raw churn", async () => {
   expect(snapshot.payload.length).toBeGreaterThan(0);
   expect(snapshot.payload.length).toBeLessThan(raw.length / 3);
 });
+
+test("snapshot tracker preserves UTF-8 box drawing across split writes", async () => {
+  const source = new XtermVtSnapshotTracker(20, 6, 100);
+  const frame = Buffer.from("╭────╮\r\n│ box │\r\n╰────╯\r\n", "utf8");
+
+  await source.write(frame.subarray(0, 5));
+  await source.write(frame.subarray(5, 11));
+  await source.write(frame.subarray(11));
+
+  const snapshot = source.capture();
+  const before = snapshotTerminal(source.terminal);
+
+  expect(snapshot.payload).toContain("╭");
+  expect(snapshot.payload).toContain("─");
+  expect(snapshot.payload).toContain("│");
+  expect(snapshot.payload).not.toContain("â");
+  expect(before.normal.lines.some((line) => line.includes("╭────╮"))).toBe(true);
+  expect(before.normal.lines.some((line) => line.includes("│ box │"))).toBe(true);
+
+  const restored = new XtermVtSnapshotTracker(20, 6, 100);
+  await restored.restore(snapshot);
+  const after = snapshotTerminal(restored.terminal);
+
+  expect(after).toEqual(before);
+});
