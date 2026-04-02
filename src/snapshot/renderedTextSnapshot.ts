@@ -65,10 +65,10 @@ function escapeTextForVt(text: string): string {
 export function renderedTextSnapshotToVt(snapshot: RenderedTextSnapshot): string {
   const parts: string[] = ["\x1b[0m\x1b[?25h"];
   const normalLines = logicalLines(snapshot.normalLines);
-  for (const line of normalLines) {
+  normalLines.forEach((line, index) => {
     parts.push(escapeTextForVt(line));
-    parts.push("\r\n");
-  }
+    if (index < normalLines.length - 1) parts.push("\r\n");
+  });
 
   if (snapshot.activeBuffer === "alternate") {
     parts.push("\x1b[?1049h\x1b[2J\x1b[H");

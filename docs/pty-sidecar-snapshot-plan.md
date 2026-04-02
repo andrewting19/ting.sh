@@ -23,6 +23,10 @@ This document is the high-level execution plan for that work.
 - Ghostty feasibility now has a concrete result from a browser-backed harness: Ghostty can consume the xterm-emitted VT snapshot and recover the visible alternate-screen content, but it does not preserve xterm's full normal-buffer/scrollback semantics or exact alternate-screen layout/cursor positioning from that same snapshot.
 - A second Ghostty browser-backed POC now shows that a simpler rendered-text VT script also fails to preserve normal-buffer scrollback semantics, so the gap is not just a quirk of xterm's serialize output.
 - A richer `canonical-terminal-snapshot-v1` shape is now codified from the headless xterm state model, capturing both buffers, scrollback offsets, cursor state, and wrapped-line metadata as the likely source model for any future Ghostty adapter.
+- The latest Ghostty browser-backed POCs refine that result:
+  - for normal-buffer sessions, a rendered-text VT script can reproduce the readable line content and semantic scrollback history well enough for reading
+  - but it still does not preserve xterm-equivalent internal buffer offsets
+  - and once the active state is alternate-screen, that same approach still loses the preserved normal scrollback
 - Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
 - `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
 - An initial xterm production rollout is now wired through the real app path: xterm reconnect requests `attach-snapshot`, restores the serialized VT snapshot locally, acknowledges with `snapshot-applied`, receives ordered `snapshot-tail` chunks, and only then transitions back to the live binary stream.

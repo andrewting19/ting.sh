@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { chromium } from "@playwright/test";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
+import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
 import { captureRenderedTextSnapshot, renderedTextSnapshotToVt } from "./src/snapshot/renderedTextSnapshot";
 
 interface BufferState {
@@ -40,10 +41,16 @@ async function getFreePort(): Promise<number> {
   return port;
 }
 
-test("ghostty rendered-text VT restore reproduces normal-buffer text but not xterm buffer offsets", async () => {
+test("ghostty rendered-text VT restore shows alternate content but still loses preserved normal scrollback", async () => {
   const source = new XtermVtSnapshotTracker(32, 8, 200);
   await source.write("normal-1\r\nnormal-2\r\nnormal-3\r\nnormal-4\r\nnormal-5\r\nnormal-6\r\nnormal-7\r\nnormal-8\r\nnormal-9\r\n");
+  await source.write("\x1b[?1049h");
+  await source.write("\x1b[2J\x1b[H");
+  await source.write("ALT HEADER\r\n");
+  await source.write("status: running");
+  await source.write("\x1b[4;6Hcursor-here");
 
+  const canonical = captureCanonicalTerminalSnapshot(source.terminal);
   const renderedSnapshot = captureRenderedTextSnapshot(source.terminal);
   const renderedVt = renderedTextSnapshotToVt(renderedSnapshot);
   const expectedNormal = snapshotBuffer(source.terminal.buffer.normal);
@@ -122,10 +129,12 @@ test("ghostty rendered-text VT restore reproduces normal-buffer text but not xte
     await page.goto(`http://127.0.0.1:${server.port}/`);
     await page.waitForFunction(() => Boolean((window as Window & { __STATE__?: unknown }).__STATE__));
     const actual = await page.evaluate(() => (window as Window & { __STATE__: TerminalState }).__STATE__);
-    expect(actual.activeType).toBe("normal");
+    expect(actual.activeType).toBe("alternate");
+    expect(actual.normal.lines).not.toEqual(expectedNormal.lines);
     expect(actual.normal.baseY).not.toBe(expectedNormal.baseY);
-    expect(actual.normal.lines.some((line) => line.includes("normal-9"))).toBe(true);
-    expect(actual.normal.lines).toEqual(expectedNormal.lines);
+    expect(actual.alternate.lines.some((line) => line.includes("ALT HEADER"))).toBe(true);
+    expect(actual.alternate.lines.some((line) => line.includes("status: running"))).toBe(true);
+    expect(actual.alternate.lines.some((line) => line.includes("cursor-here"))).toBe(true);
   } finally {
     await browser.close();
     await server.stop();

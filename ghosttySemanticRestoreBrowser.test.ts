@@ -1,36 +1,27 @@
 import { expect, test } from "bun:test";
 import { chromium } from "@playwright/test";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
+import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
 import { captureRenderedTextSnapshot, renderedTextSnapshotToVt } from "./src/snapshot/renderedTextSnapshot";
 
-interface BufferState {
-  type: "normal" | "alternate";
-  cursorX: number;
-  cursorY: number;
-  baseY: number;
+interface GhosttySemanticState {
+  scrollbackLength: number;
+  scrollbackLines: string[];
+  viewportLines: string[];
   viewportY: number;
-  lines: string[];
 }
 
-interface TerminalState {
-  activeType: "normal" | "alternate";
-  normal: BufferState;
-  alternate: BufferState;
-}
-
-function snapshotBuffer(buffer: XtermVtSnapshotTracker["terminal"]["buffer"]["active"]): BufferState {
-  const lines: string[] = [];
-  for (let i = 0; i < buffer.length; i += 1) {
-    lines.push(buffer.getLine(i)?.translateToString(true) ?? "");
+function logicalLines(lines: Array<{ text: string; wrapped: boolean }>): string[] {
+  const out: string[] = [];
+  let current = "";
+  for (const line of lines) {
+    current += line.text;
+    if (line.wrapped) continue;
+    out.push(current);
+    current = "";
   }
-  return {
-    type: buffer.type,
-    cursorX: buffer.cursorX,
-    cursorY: buffer.cursorY,
-    baseY: buffer.baseY,
-    viewportY: buffer.viewportY,
-    lines,
-  };
+  if (current.length > 0 || out.length === 0) out.push(current);
+  return out;
 }
 
 async function getFreePort(): Promise<number> {
@@ -40,13 +31,16 @@ async function getFreePort(): Promise<number> {
   return port;
 }
 
-test("ghostty rendered-text VT restore reproduces normal-buffer text but not xterm buffer offsets", async () => {
+test("ghostty rendered-text VT restore preserves semantic normal scrollback", async () => {
   const source = new XtermVtSnapshotTracker(32, 8, 200);
   await source.write("normal-1\r\nnormal-2\r\nnormal-3\r\nnormal-4\r\nnormal-5\r\nnormal-6\r\nnormal-7\r\nnormal-8\r\nnormal-9\r\n");
 
+  const canonical = captureCanonicalTerminalSnapshot(source.terminal);
   const renderedSnapshot = captureRenderedTextSnapshot(source.terminal);
   const renderedVt = renderedTextSnapshotToVt(renderedSnapshot);
-  const expectedNormal = snapshotBuffer(source.terminal.buffer.normal);
+  const expectedLogical = logicalLines(canonical.normal.lines);
+  const expectedScrollback = expectedLogical.slice(0, -canonical.rows);
+  const expectedViewport = expectedLogical.slice(-canonical.rows);
   const port = await getFreePort();
   const server = Bun.serve({
     port,
@@ -69,20 +63,11 @@ test("ghostty rendered-text VT restore reproduces normal-buffer text but not xte
         return new Response(`
           import { init, Terminal } from "/ghostty-web.js";
 
-          function snapshotBuffer(buffer) {
-            const lines = [];
-            for (let i = 0; i < buffer.length; i += 1) {
-              const line = buffer.getLine(i);
-              lines.push(line ? line.translateToString(true) : "");
-            }
-            return {
-              type: buffer.type,
-              cursorX: buffer.cursorX,
-              cursorY: buffer.cursorY,
-              baseY: buffer.baseY,
-              viewportY: buffer.viewportY,
-              lines,
-            };
+          function lineToString(cells) {
+            return (cells ?? []).map((cell) => {
+              if (!cell || cell.codepoint === 0) return "";
+              return String.fromCodePoint(cell.codepoint);
+            }).join("").trimEnd();
           }
 
           const snapshot = window.__SNAPSHOT__;
@@ -90,10 +75,20 @@ test("ghostty rendered-text VT restore reproduces normal-buffer text but not xte
           const term = new Terminal({ cols: snapshot.cols, rows: snapshot.rows });
           term.open(document.getElementById("terminal"));
           await new Promise((resolve) => term.write(snapshot.payload, resolve));
+          const scrollbackLength = term.getScrollbackLength();
+          const scrollbackLines = [];
+          for (let i = 0; i < scrollbackLength; i += 1) {
+            scrollbackLines.push(lineToString(term.getScrollbackLine(i)));
+          }
+          const viewportLines = [];
+          for (let i = 0; i < term.buffer.normal.length; i += 1) {
+            viewportLines.push(term.buffer.normal.getLine(i)?.translateToString(true) ?? "");
+          }
           window.__STATE__ = {
-            activeType: term.buffer.active.type,
-            normal: snapshotBuffer(term.buffer.normal),
-            alternate: snapshotBuffer(term.buffer.alternate),
+            scrollbackLength,
+            scrollbackLines,
+            viewportLines,
+            viewportY: term.getViewportY(),
           };
         `, {
           headers: { "content-type": "text/javascript; charset=utf-8" },
@@ -121,11 +116,11 @@ test("ghostty rendered-text VT restore reproduces normal-buffer text but not xte
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.port}/`);
     await page.waitForFunction(() => Boolean((window as Window & { __STATE__?: unknown }).__STATE__));
-    const actual = await page.evaluate(() => (window as Window & { __STATE__: TerminalState }).__STATE__);
-    expect(actual.activeType).toBe("normal");
-    expect(actual.normal.baseY).not.toBe(expectedNormal.baseY);
-    expect(actual.normal.lines.some((line) => line.includes("normal-9"))).toBe(true);
-    expect(actual.normal.lines).toEqual(expectedNormal.lines);
+    const actual = await page.evaluate(() => (window as Window & { __STATE__: GhosttySemanticState }).__STATE__);
+    expect(actual.scrollbackLength).toBe(expectedScrollback.length);
+    expect(actual.scrollbackLines).toEqual(expectedScrollback);
+    expect(actual.viewportLines).toEqual(canonical.normal.lines.map((line) => line.text));
+    expect(actual.viewportY).toBe(0);
   } finally {
     await browser.close();
     await server.stop();
