@@ -50,7 +50,7 @@ This document is the high-level execution plan for that work.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty
-  - long-term history semantics beyond the reconnect snapshot
+  - long-term history retention implementation beyond the reconnect snapshot
 
 ## Non-Negotiable Constraints
 
@@ -274,7 +274,7 @@ Decision gate:
 - [x] Validate snapshot attach on local desktop workflows.
 - [ ] Validate snapshot attach on iPad over Tailscale.
 - [ ] Validate multi-client/shared-session behavior under snapshot attach.
-- [ ] Define the long-term story for deep readable history versus reconnect state.
+- [x] Define the long-term story for deep readable history versus reconnect state.
 - [ ] Decide whether to retain a separate text-history store for export/search/deep reading.
 - [ ] Remove raw-replay attach from the normal path once snapshot attach is proven.
 - [ ] Update README and TODO to describe the new architecture and semantics.
