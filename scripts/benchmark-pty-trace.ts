@@ -26,6 +26,11 @@ const scenarios: Record<string, { cols: number; rows: number; script: string }> 
       "printf '\\033[4;6Hcursor-here';",
     ].join(" "),
   },
+  resize: {
+    cols: 40,
+    rows: 10,
+    script: "",
+  },
 };
 
 const scenario = scenarios[kind];
@@ -35,16 +40,32 @@ if (!scenario) {
   process.exit(1);
 }
 
-const trace = await capturePtyTrace({
-  ...scenario,
-  idleMs: 250,
-  timeoutMs: 10_000,
-});
+const trace = await capturePtyTrace(
+  kind === "resize"
+    ? {
+        ...scenario,
+        steps: [
+          { type: "write", data: "printf 'alpha\\nbeta\\ngamma\\n'\r", delayMs: 0 },
+          { type: "resize", cols: 60, rows: 14, delayMs: 100 },
+          { type: "write", data: "printf '\\033[2J\\033[Hwide-1\\nwide-2\\nwide-3\\nwide-4\\n'\r", delayMs: 100 },
+          { type: "resize", cols: 32, rows: 8, delayMs: 100 },
+          { type: "write", data: "printf '\\033[Hnarrow\\nfinal\\n'\r", delayMs: 100 },
+          { type: "exit", delayMs: 100 },
+        ],
+        idleMs: 250,
+        timeoutMs: 10_000,
+      }
+    : {
+        ...scenario,
+        idleMs: 250,
+        timeoutMs: 10_000,
+      },
+);
 
 const result = await benchmarkTrace({
   cols: trace.cols,
   rows: trace.rows,
-  payload: trace.combined,
+  events: trace.events,
 });
 
-console.log(JSON.stringify({ scenario: kind, ...result }, null, 2));
+console.log(JSON.stringify({ scenario: kind, traceFinalCols: trace.finalCols, traceFinalRows: trace.finalRows, ...result }, null, 2));

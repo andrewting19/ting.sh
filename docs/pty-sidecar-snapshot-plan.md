@@ -251,7 +251,7 @@ Decision gate:
 - [x] Prototype a headless terminal state engine that consumes recorded PTY traces.
 - [x] Evaluate fidelity for normal shell sessions.
 - [ ] Evaluate fidelity for Claude Code / Codex-style redraw-heavy TUIs.
-- [ ] Evaluate fidelity for resize-heavy sessions.
+- [x] Evaluate fidelity for resize-heavy sessions.
 - [x] Draft a renderer-neutral `TerminalSnapshot` type.
 - [ ] Measure snapshot payload size on representative real sessions.
 - [x] Prototype xterm snapshot restore.

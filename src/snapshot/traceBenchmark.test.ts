@@ -59,3 +59,35 @@ test("benchmarkTrace records alternate-buffer sessions separately", async () => 
   expect(result.xtermSnapshotBytes).toBeGreaterThan(0);
   expect(result.renderedTextSnapshotBytes).toBeGreaterThan(0);
 });
+
+test("benchmarkTrace tracks explicit resize-heavy traces", async () => {
+  const trace = await capturePtyTrace({
+    cols: 40,
+    rows: 10,
+    script: "",
+    steps: [
+      { type: "write", data: "printf 'alpha\\nbeta\\ngamma\\n'\r", delayMs: 0 },
+      { type: "resize", cols: 60, rows: 14, delayMs: 100 },
+      { type: "write", data: "printf '\\033[2J\\033[Hwide-1\\nwide-2\\nwide-3\\n'\r", delayMs: 100 },
+      { type: "resize", cols: 32, rows: 8, delayMs: 100 },
+      { type: "write", data: "printf '\\033[Hnarrow\\nfinal\\n'\r", delayMs: 100 },
+      { type: "exit", delayMs: 100 },
+    ],
+    idleMs: 250,
+    timeoutMs: 10_000,
+  });
+
+  const result = await benchmarkTrace({
+    cols: trace.cols,
+    rows: trace.rows,
+    events: trace.events,
+  });
+
+  expect(result.rawBytes).toBeGreaterThan(0);
+  expect(result.finalCols).toBe(32);
+  expect(result.finalRows).toBe(8);
+  expect(result.activeBuffer).toBe("normal");
+  expect(result.xtermSnapshotBytes).toBeGreaterThan(0);
+  expect(result.renderedTextSnapshotBytes).toBeGreaterThan(0);
+  expect(result.rawToXtermRatio).not.toBeNull();
+});
