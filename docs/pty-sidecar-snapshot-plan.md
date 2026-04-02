@@ -1,0 +1,278 @@
+# PTY Sidecar And Snapshot Reconnect Plan
+
+## Context
+
+The current architecture keeps PTYs inside the Bun web server process and restores sessions by replaying a capped raw byte buffer on attach. That creates two structural problems:
+
+- Server restarts kill live sessions because the PTYs are child processes of the Bun server.
+- Reconnect correctness and performance depend on replaying raw PTY history, which is both slow for redraw-heavy TUIs and fragile when the retained tail depends on older discarded state.
+
+The long-term direction is:
+
+1. Move PTY ownership into a long-lived local sidecar process.
+2. Make reconnect restore terminal state from snapshots instead of raw replay.
+
+This document is the high-level execution plan for that work.
+
+## Non-Negotiable Constraints
+
+- Session continuity matters more than developer convenience.
+- The PTY/runtime boundary must survive Bun server restarts.
+- The sidecar must be local-only and never exposed to the public network.
+- The final reconnect model must be renderer-neutral and support both xterm and Ghostty unless feasibility work proves otherwise.
+- Raw PTY replay must stop being the source of truth for reconnect correctness.
+- We should prefer a clean architectural boundary over a narrowly scoped workaround.
+
+## Phase Overview
+
+### Phase 0: Land Current Branch
+
+Goal:
+- Merge the current feature branch into `main` and continue all follow-up work from a fresh branch off `main`.
+
+Requirements / constraints:
+- Merge the branch as-is after removing the Claude-specific compat mode.
+- Keep the repo clean before merge.
+
+Success criteria:
+- `main` contains the current terminal-backend work and attach diagnostics.
+- Follow-up work starts from a fresh branch based on `main`.
+
+### Phase 1: Introduce A PTY Sidecar
+
+Goal:
+- Decouple PTYs from the Bun server so server restarts no longer kill sessions.
+
+Requirements / constraints:
+- Existing frontend behavior should remain largely unchanged.
+- Sidecar must own PTY lifecycle and session identity.
+- IPC should be local-only: Unix socket on Unix/macOS, named pipe or equivalent on Windows.
+
+Success criteria:
+- PTYs survive Bun server restart.
+- Bun can reconnect to the sidecar and recover the active session list.
+- Core flows still work: create, attach, input, resize, kill, reconnect.
+
+### Phase 2: Stabilize The Sidecar Boundary
+
+Goal:
+- Turn the Bun server into a gateway/control server rather than the PTY owner.
+
+Requirements / constraints:
+- Session IDs and lifecycle semantics must be explicit across the boundary.
+- Output ordering must remain deterministic.
+- The boundary should be suitable for later snapshot/state ownership.
+
+Success criteria:
+- A defined internal API exists for session create/list/attach/detach/input/resize/kill.
+- Server restarts are operationally safe because PTYs are independent.
+
+### Phase 3: Run Snapshot Feasibility POCs
+
+Goal:
+- Validate the reconnect architecture before committing to a full build-out.
+
+Requirements / constraints:
+- Use real redraw-heavy traces, not only toy examples.
+- Keep this phase exploratory and measurable.
+
+Success criteria:
+- We know whether a server-side terminal state engine and frontend snapshot restore are feasible enough to continue.
+
+### Phase 4: Add Server-Authoritative Terminal State
+
+Goal:
+- Maintain the current rendered terminal state continuously on the backend side.
+
+Requirements / constraints:
+- PTY bytes remain the live input stream.
+- Terminal state becomes the reconnect source of truth.
+- Raw retained bytes stop being correctness-critical.
+
+Success criteria:
+- Each session has a maintained terminal-state model that can generate a reconnect snapshot.
+
+### Phase 5: Replace Raw-Replay Attach With Snapshot Attach
+
+Goal:
+- Restore from snapshot plus a small live tail instead of replaying large raw histories.
+
+Requirements / constraints:
+- Snapshot cutover must be race-safe.
+- Attach must remain deterministic during live output.
+- Rollout should support side-by-side validation before full cutover.
+
+Success criteria:
+- Attach latency is bounded by snapshot size rather than raw PTY churn.
+- Truncated raw replay is no longer a reconnect correctness issue.
+
+### Phase 6: Formalize History Semantics
+
+Goal:
+- Define what "scrollback" means in the new architecture.
+
+Requirements / constraints:
+- Separate reconnect state from deeper readable history.
+- Preserve useful scroll-up behavior for coding agent TUIs.
+
+Success criteria:
+- Product behavior is intentional and documented.
+- Reconnect no longer depends on preserving arbitrary raw ANSI history.
+
+### Phase 7: Hardening And Final Cutover
+
+Goal:
+- Make snapshot-based reconnect the default path and retire raw-replay attach.
+
+Requirements / constraints:
+- Validate against real iPad/Tailscale and redraw-heavy TUI usage.
+- Keep strong automated coverage across both renderers.
+
+Success criteria:
+- Snapshot attach is the normal behavior.
+- Server restarts are safe.
+- Long-running TUI sessions reconnect quickly and cleanly.
+
+## Required POCs
+
+### POC 1: Headless Terminal State Engine
+
+Question:
+- Can we maintain accurate terminal state on the backend side from PTY bytes alone?
+
+Must validate:
+- normal buffer
+- alternate buffer
+- cursor state
+- scrollback
+- resize behavior
+- redraw-heavy TUIs
+
+Decision gate:
+- If the state engine cannot model real sessions with acceptable fidelity, do not proceed with the snapshot architecture as planned.
+
+### POC 2: Common Snapshot Schema
+
+Question:
+- Can one snapshot shape drive both xterm and Ghostty restore paths?
+
+Must validate:
+- lines/cells
+- wrapped-line metadata
+- active buffer
+- cursor information
+- dimensions
+- payload size
+
+Decision gate:
+- If the schema becomes too renderer-specific, we need either a stronger abstraction or a narrowed renderer scope.
+
+### POC 3: xterm Restore From Snapshot
+
+Question:
+- Can xterm restore from a structured snapshot without requiring historical ANSI replay?
+
+Decision gate:
+- If xterm restore cannot be made deterministic, reconnect architecture must be reconsidered.
+
+### POC 4: Ghostty Restore From Snapshot
+
+Question:
+- Can Ghostty restore from the same structured snapshot with acceptable fidelity?
+
+Decision gate:
+- If Ghostty cannot restore from the common snapshot, we need to decide whether to add backend-specific adaptation or reduce scope.
+
+### POC 5: Snapshot + Live Tail Handoff
+
+Question:
+- Can we cut a snapshot, resume live output, and avoid dropped/doubled bytes during attach?
+
+Decision gate:
+- If handoff is race-prone, the protocol design must be revised before implementation continues.
+
+## Detailed Checklist
+
+- [ ] Merge the current feature branch into `main`.
+- [ ] Create a fresh follow-up branch from `main` for sidecar/snapshot work.
+- [ ] Define the sidecar's responsibility boundary versus the Bun server.
+- [ ] Choose local IPC transport per platform.
+- [ ] Define a versioned internal protocol for Bun <-> sidecar communication.
+- [ ] Decide whether the sidecar is implemented in Bun, Node, or split by platform.
+- [ ] Define stable session identity semantics across sidecar and Bun restarts.
+- [ ] Move PTY creation into the sidecar.
+- [ ] Move PTY input/write handling into the sidecar.
+- [ ] Move PTY resize handling into the sidecar.
+- [ ] Move session kill/lifecycle handling into the sidecar.
+- [ ] Expose session listing and attach metadata from the sidecar.
+- [ ] Make Bun reconnect to the sidecar on startup and after sidecar disconnects.
+- [ ] Add tests proving PTYs survive Bun server restart.
+- [ ] Add tests proving attached clients can reconnect after Bun restart.
+- [ ] Capture real PTY traces from redraw-heavy sessions for snapshot feasibility testing.
+- [ ] Prototype a headless terminal state engine that consumes recorded PTY traces.
+- [ ] Evaluate fidelity for normal shell sessions.
+- [ ] Evaluate fidelity for Claude Code / Codex-style redraw-heavy TUIs.
+- [ ] Evaluate fidelity for resize-heavy sessions.
+- [ ] Draft a renderer-neutral `TerminalSnapshot` type.
+- [ ] Measure snapshot payload size on representative sessions.
+- [ ] Prototype xterm snapshot restore.
+- [ ] Prototype Ghostty snapshot restore.
+- [ ] Decide whether the restore path needs backend-specific adapters.
+- [ ] Design the snapshot attach protocol including sequence/handoff semantics.
+- [ ] Prototype snapshot cut + live tail handoff under concurrent output.
+- [ ] Add a feature flag for snapshot attach.
+- [ ] Add side-by-side debug tooling to compare replay attach versus snapshot attach.
+- [ ] Introduce a server-authoritative terminal-state store per session.
+- [ ] Feed PTY bytes into the state store continuously.
+- [ ] Ensure resize events update state-store dimensions correctly.
+- [ ] Ensure alternate-buffer transitions are represented correctly.
+- [ ] Implement snapshot generation from the state store.
+- [ ] Teach the frontend backend contract to restore from snapshot.
+- [ ] Implement xterm production restore path.
+- [ ] Implement Ghostty production restore path.
+- [ ] Change attach flow to request/receive/restore snapshot before live tail.
+- [ ] Keep raw replay attach as a temporary debug fallback only.
+- [ ] Validate snapshot attach on local desktop workflows.
+- [ ] Validate snapshot attach on iPad over Tailscale.
+- [ ] Validate multi-client/shared-session behavior under snapshot attach.
+- [ ] Define the long-term story for deep readable history versus reconnect state.
+- [ ] Decide whether to retain a separate text-history store for export/search/deep reading.
+- [ ] Remove raw-replay attach from the normal path once snapshot attach is proven.
+- [ ] Update README and TODO to describe the new architecture and semantics.
+
+## Phase-by-Phase Exit Criteria
+
+### Exit Phase 1
+
+- Bun restart no longer kills PTYs.
+- The sidecar is the only PTY owner.
+- Existing user workflows still function.
+
+### Exit Phase 2
+
+- The Bun <-> sidecar contract is stable enough to support new reconnect behavior.
+- Restart behavior is exercised in tests.
+
+### Exit Phase 3
+
+- All required POCs have a documented result.
+- We have explicit go/no-go answers on fidelity, payload size, and restore feasibility.
+
+### Exit Phase 4
+
+- Backend-side state can represent the current terminal well enough to generate reconnect snapshots reliably.
+
+### Exit Phase 5
+
+- Snapshot attach works end-to-end behind a flag.
+- Attach no longer depends on replaying large raw histories for correctness.
+
+### Exit Phase 6
+
+- Scrollback/history semantics are intentional and documented.
+
+### Exit Phase 7
+
+- Snapshot attach is the default reconnect path.
+- Raw replay is no longer a normal reconnect mechanism.
+- Real-world redraw-heavy TUI reconnects are fast and visually stable.
