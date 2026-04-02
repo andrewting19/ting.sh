@@ -18,10 +18,26 @@ interface AttachMeasurement {
   durationMs: number | null;
 }
 
+interface DebugSnapshotShape {
+  cols?: number;
+  rows?: number;
+}
+
+interface DebugSessionShape {
+  snapshot?: DebugSnapshotShape;
+  renderedTextSnapshot?: DebugSnapshotShape;
+}
+
 function getServerWsUrl(): string {
   const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
   const port = parseInt(process.env.SERVER_PORT?.trim() || process.env.PORT?.trim() || "7681", 10);
   return `ws://${host}:${port}/ws`;
+}
+
+function getServerHttpUrl(): string {
+  const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
+  const port = parseInt(process.env.SERVER_PORT?.trim() || process.env.PORT?.trim() || "7681", 10);
+  return `http://${host}:${port}`;
 }
 
 function usage(): never {
@@ -51,7 +67,26 @@ function snapshotSize(snapshot: unknown): number | null {
   }
 }
 
+async function resolveAttachDimensions(sessionId: string): Promise<{ cols: number; rows: number }> {
+  try {
+    const url = new URL(`${getServerHttpUrl()}/api/debug/session`);
+    url.searchParams.set("id", sessionId);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`debug session fetch failed: ${res.status}`);
+    const debug = await res.json() as DebugSessionShape;
+    const cols = debug.snapshot?.cols ?? debug.renderedTextSnapshot?.cols;
+    const rows = debug.snapshot?.rows ?? debug.renderedTextSnapshot?.rows;
+    if (typeof cols === "number" && cols > 0 && typeof rows === "number" && rows > 0) {
+      return { cols, rows };
+    }
+  } catch {
+    // fall back to historical default if debug metadata is unavailable
+  }
+  return { cols: 80, rows: 24 };
+}
+
 async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
+  const dims = await resolveAttachDimensions(sessionId);
   const ws = new WebSocket(getServerWsUrl());
   ws.binaryType = "arraybuffer";
   const requestId = makeRequestId("raw");
@@ -112,7 +147,7 @@ async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
     const timeout = setTimeout(() => fail(new Error("Timed out measuring raw attach")), 10_000);
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "attach", id: sessionId, cols: 80, rows: 24, requestId }));
+      ws.send(JSON.stringify({ type: "attach", id: sessionId, cols: dims.cols, rows: dims.rows, requestId }));
     };
 
     ws.onerror = () => {
@@ -170,6 +205,7 @@ async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
 }
 
 async function measureSnapshotAttach(sessionId: string, renderer: string): Promise<AttachMeasurement> {
+  const dims = await resolveAttachDimensions(sessionId);
   const ws = new WebSocket(getServerWsUrl());
   ws.binaryType = "arraybuffer";
   const requestId = makeRequestId("snap");
@@ -225,8 +261,8 @@ async function measureSnapshotAttach(sessionId: string, renderer: string): Promi
       ws.send(JSON.stringify({
         type: "attach-snapshot",
         id: sessionId,
-        cols: 80,
-        rows: 24,
+        cols: dims.cols,
+        rows: dims.rows,
         requestId,
         renderer,
       }));
