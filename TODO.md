@@ -8,7 +8,7 @@
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
 - [x] Kill session uses native `confirm()` — replaced with custom Modal
 - [x] Session switch showed blank terminal — fixed
-- [x] Sessions die on server hot reload — fixed (globalThis persistence)
+- [x] Sessions died on Bun server restart — fixed (local `ptyd` sidecar now owns PTYs, with restart-survival integration coverage)
 - [x] Double cursor when switching — fixed (per-session terminals)
 - [x] New session blank until switch away/back — fixed (sessions before ready)
 - [x] Session name collisions after delete — fixed (champion name pool)
@@ -56,6 +56,7 @@
 - [x] Ghostty mobile touch scrolling direction matches xterm — swipe-up/down semantics are now consistent across both renderers
 - [x] Mobile keyboard dismissal reclaims terminal height cleanly — keyboard inset changes now settle briefly before forcing an active-session refit/resize, avoiding stale empty space and resize thrash after iOS closes the keyboard
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
+- [x] PTY sidecar foundation — Bun now proxies to local `ptyd`, and PTYs survive real Bun server restarts
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal

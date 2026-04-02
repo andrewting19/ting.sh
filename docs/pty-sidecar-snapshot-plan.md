@@ -193,21 +193,21 @@ Decision gate:
 
 ## Detailed Checklist
 
-- [ ] Merge the current feature branch into `main`.
-- [ ] Create a fresh follow-up branch from `main` for sidecar/snapshot work.
-- [ ] Define the sidecar's responsibility boundary versus the Bun server.
-- [ ] Choose local IPC transport per platform.
+- [x] Merge the current feature branch into `main`.
+- [x] Create a fresh follow-up branch from `main` for sidecar/snapshot work.
+- [x] Define the sidecar's responsibility boundary versus the Bun server.
+- [x] Choose local IPC transport per platform.
 - [ ] Define a versioned internal protocol for Bun <-> sidecar communication.
-- [ ] Decide whether the sidecar is implemented in Bun, Node, or split by platform.
-- [ ] Define stable session identity semantics across sidecar and Bun restarts.
-- [ ] Move PTY creation into the sidecar.
-- [ ] Move PTY input/write handling into the sidecar.
-- [ ] Move PTY resize handling into the sidecar.
-- [ ] Move session kill/lifecycle handling into the sidecar.
-- [ ] Expose session listing and attach metadata from the sidecar.
+- [x] Decide whether the sidecar is implemented in Bun, Node, or split by platform.
+- [x] Define stable session identity semantics across sidecar and Bun restarts.
+- [x] Move PTY creation into the sidecar.
+- [x] Move PTY input/write handling into the sidecar.
+- [x] Move PTY resize handling into the sidecar.
+- [x] Move session kill/lifecycle handling into the sidecar.
+- [x] Expose session listing and attach metadata from the sidecar.
 - [ ] Make Bun reconnect to the sidecar on startup and after sidecar disconnects.
-- [ ] Add tests proving PTYs survive Bun server restart.
-- [ ] Add tests proving attached clients can reconnect after Bun restart.
+- [x] Add tests proving PTYs survive Bun server restart.
+- [x] Add tests proving attached clients can reconnect after Bun restart.
 - [ ] Capture real PTY traces from redraw-heavy sessions for snapshot feasibility testing.
 - [ ] Prototype a headless terminal state engine that consumes recorded PTY traces.
 - [ ] Evaluate fidelity for normal shell sessions.

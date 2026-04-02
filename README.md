@@ -118,6 +118,7 @@ There is also a minimal header toggle in the UI: `>_` for xterm.js and `👻` fo
 Working:
 - Create / attach / kill sessions with custom confirm modal
 - PTY sessions persist when browser tab closes — reconnect and resume
+- PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
 - Scrollback replay on reconnect (10MB buffer per session)
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
@@ -170,7 +171,7 @@ Working:
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
-- Automated E2E test suite (Playwright) — 48 tests, including a shared xterm/Ghostty renderer matrix for core parity flows
+- Automated E2E test suite (Playwright) — 53 tests, including a shared xterm/Ghostty renderer matrix for core parity flows plus a Bun integration test that proves PTYs survive Bun server restart
 - Multi-host protocol groundwork in server: `detach`, live `list` subscriptions, and `requestId`-correlated `ready` responses
 - Multi-host server identity groundwork: optional `hosts.json`, `GET /api/host`, WS `host-info`, and `hostId` in session lists
 - Frontend host-aware core types added: `Host`, `SessionKey`, and key helpers (`makeKey`/`parseKey`)
