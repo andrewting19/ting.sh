@@ -35,6 +35,9 @@ This document is the high-level execution plan for that work.
 - Synthetic benchmark baselines are now recorded:
   - built-in `redraw`: `3464` raw bytes, `152` xterm snapshot bytes, `164` rendered-text bytes (`~22x` smaller than raw)
   - built-in `alternate`: `590` raw bytes, `574` xterm snapshot bytes, `627` rendered-text bytes (roughly parity with raw)
+- A live current-server redraw baseline is now also recorded:
+  - `tracebench` session on the dev server: `8908` raw bytes, `56` xterm snapshot bytes, `107` rendered-text bytes
+  - measured local reconnect timings on that session: about `254ms` raw, `11.6ms` xterm snapshot, `1.7ms` Ghostty rendered-text snapshot
 - Architectural implication from those baselines: snapshot attach clearly wins for redraw-heavy normal-buffer churn, but alternate-screen reconnect should not assume a large payload reduction and still needs fidelity-driven design rather than size-driven design.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs

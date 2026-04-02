@@ -1,3 +1,5 @@
+import { renderedTextSnapshotToVt, type RenderedTextSnapshot } from "../src/snapshot/renderedTextSnapshot";
+
 interface AttachMeasurement {
   mode: "raw" | "snapshot";
   sessionId: string;
@@ -33,6 +35,20 @@ function now(): number {
 
 function makeRequestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function snapshotSize(snapshot: unknown): number | null {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const record = snapshot as Record<string, unknown>;
+  if (typeof record.payload === "string") return record.payload.length;
+  if (record.format === "rendered-text-snapshot-v1") {
+    return renderedTextSnapshotToVt(snapshot as RenderedTextSnapshot).length;
+  }
+  try {
+    return JSON.stringify(snapshot).length;
+  } catch {
+    return null;
+  }
 }
 
 async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
@@ -227,8 +243,7 @@ async function measureSnapshotAttach(sessionId: string, renderer: string): Promi
         measurement.readyAt = now();
         measurement.sessionName = typeof parsed.name === "string" ? parsed.name : null;
         measurement.backend = typeof parsed.backend === "string" ? parsed.backend : null;
-        const snapshot = parsed.snapshot as { payload?: string } | undefined;
-        measurement.snapshotBytes = typeof snapshot?.payload === "string" ? snapshot.payload.length : null;
+        measurement.snapshotBytes = snapshotSize(parsed.snapshot);
         ws.send(JSON.stringify({ type: "snapshot-applied", id: sessionId, requestId }));
         return;
       }

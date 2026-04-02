@@ -169,22 +169,7 @@ test("measure-session-reconnect script reports raw and snapshot attach metrics",
     client.close();
     client = null;
 
-    const measure = Bun.spawn([process.execPath, "run", "scripts/measure-session-reconnect.ts", ready.id, "xterm"], {
-      cwd: import.meta.dir,
-      env: {
-        ...process.env,
-        SERVER_PORT: String(serverPort),
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdout = await new Response(measure.stdout).text();
-    const stderr = await new Response(measure.stderr).text();
-    await measure.exited;
-    expect(measure.exitCode).toBe(0);
-    expect(stderr).toBe("");
-
-    const parsed = JSON.parse(stdout) as {
+    async function runMeasure(renderer: string): Promise<{
       sessionId: string;
       renderer: string;
       raw: { replayBytesReceived: number; replayChunkCount: number; durationMs: number | null };
@@ -193,15 +178,50 @@ test("measure-session-reconnect script reports raw and snapshot attach metrics",
         snapshotBytes: number | null;
         durationMs: number | null;
       };
-    };
-    expect(parsed.sessionId).toBe(ready.id);
-    expect(parsed.renderer).toBe("xterm");
-    expect(parsed.raw.replayBytesReceived).toBeGreaterThan(0);
-    expect(parsed.raw.replayChunkCount).toBeGreaterThan(0);
-    expect(parsed.raw.durationMs).not.toBeNull();
-    expect(parsed.snapshot.backend).toBe("xterm-vt-snapshot-v1");
-    expect(parsed.snapshot.snapshotBytes).toBeGreaterThan(0);
-    expect(parsed.snapshot.durationMs).not.toBeNull();
+    }> {
+      const measure = Bun.spawn([process.execPath, "run", "scripts/measure-session-reconnect.ts", ready.id, renderer], {
+        cwd: import.meta.dir,
+        env: {
+          ...process.env,
+          SERVER_PORT: String(serverPort),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(measure.stdout).text();
+      const stderr = await new Response(measure.stderr).text();
+      await measure.exited;
+      expect(measure.exitCode).toBe(0);
+      expect(stderr).toBe("");
+      return JSON.parse(stdout) as {
+        sessionId: string;
+        renderer: string;
+        raw: { replayBytesReceived: number; replayChunkCount: number; durationMs: number | null };
+        snapshot: {
+          backend: string | null;
+          snapshotBytes: number | null;
+          durationMs: number | null;
+        };
+      };
+    }
+
+    const xterm = await runMeasure("xterm");
+    expect(xterm.sessionId).toBe(ready.id);
+    expect(xterm.renderer).toBe("xterm");
+    expect(xterm.raw.replayBytesReceived).toBeGreaterThan(0);
+    expect(xterm.raw.replayChunkCount).toBeGreaterThan(0);
+    expect(xterm.raw.durationMs).not.toBeNull();
+    expect(xterm.snapshot.backend).toBe("xterm-vt-snapshot-v1");
+    expect(xterm.snapshot.snapshotBytes).toBeGreaterThan(0);
+    expect(xterm.snapshot.durationMs).not.toBeNull();
+
+    const ghostty = await runMeasure("ghostty");
+    expect(ghostty.sessionId).toBe(ready.id);
+    expect(ghostty.renderer).toBe("ghostty");
+    expect(ghostty.raw.replayBytesReceived).toBeGreaterThan(0);
+    expect(ghostty.snapshot.backend).toBe("rendered-text-snapshot-v1");
+    expect(ghostty.snapshot.snapshotBytes).toBeGreaterThan(0);
+    expect(ghostty.snapshot.durationMs).not.toBeNull();
   } finally {
     client?.close();
     await terminateProcess(server);
