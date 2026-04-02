@@ -114,7 +114,7 @@
 
 ## Up next (in order)
 - [ ] Snapshot reconnect follow-up: validate headless xterm + serialize against real redraw-heavy agent traces, then design backend-specific restore adapters for Ghostty parity
-- [ ] Snapshot reconnect follow-up: decide Ghostty alternate-screen behavior after real-trace measurements; synthetic baseline says redraw-heavy normal-buffer churn compresses heavily under snapshots, but alternate-screen snapshots are near raw parity
+- [ ] Snapshot reconnect follow-up: validate the current Ghostty payload split against more real traces; alternate-screen now uses xterm VT snapshots, but deeper parity work still needs better real-session evidence
 - [x] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [x] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [x] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics

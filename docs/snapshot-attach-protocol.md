@@ -8,7 +8,7 @@ Replace raw-replay attach with:
 2. a bounded live tail after that cut
 3. a race-safe client handoff into the live stream
 
-This note started as a high-level protocol sketch. The xterm path described here is now wired through `ptyd` and the real frontend attach flow; Ghostty-specific restore remains future work.
+This note started as a high-level protocol sketch. The xterm path described here is now wired through `ptyd` and the real frontend attach flow, and Ghostty now also uses snapshot attach in production with backend-specific restore behavior.
 
 ## Core Requirements
 
@@ -81,19 +81,24 @@ The current xterm rollout intentionally biases toward correctness over minimal l
 
 Current feasibility results suggest this should not assume a single renderer-neutral payload.
 
-Likely payload shapes:
+Current payload shapes:
 
 - `xterm-vt-snapshot-v1`
   - self-contained VT payload from headless xterm serialize
-- `ghostty-snapshot-v1`
-  - likely needs a Ghostty-specific restore representation or adapter
+- `rendered-text-snapshot-v1`
+  - Ghostty normal-buffer reconnect path today
+
+Ghostty currently restores:
+
+- normal-buffer sessions from `rendered-text-snapshot-v1`
+- alternate-screen sessions from `xterm-vt-snapshot-v1`
 
 The envelope can still be shared:
 
 ```ts
 type SnapshotEnvelope = {
   sessionId: string;
-  backend: "xterm-vt-snapshot-v1" | "ghostty-snapshot-v1";
+  backend: "xterm-vt-snapshot-v1" | "rendered-text-snapshot-v1";
   cutSeq: number;
   capturedAt: number;
   cols: number;
@@ -112,7 +117,6 @@ type SnapshotEnvelope = {
 
 ## Recommended First Production Rollout
 
-1. Keep the current xterm snapshot attach path as the production reconnect path for xterm.
-2. Preserve raw attach as the Ghostty fallback until its restore adapter exists.
-3. Add side-by-side metrics comparing replay attach vs snapshot attach on real redraw-heavy TUI traces.
-4. Implement the Ghostty restore path only after its adapter semantics are defined.
+1. Keep snapshot attach as the production reconnect path for both renderers.
+2. Continue measuring real redraw-heavy TUI traces against both Ghostty snapshot payload shapes.
+3. Improve Ghostty parity only where the current payload split still diverges from desired behavior.
