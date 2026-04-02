@@ -55,6 +55,11 @@ function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function isTruthyFlag(value: string | null): boolean {
+  if (!value) return false;
+  return value === "1" || value === "true" || value === "yes";
+}
+
 async function getCwd(pid: number): Promise<string | null> {
   try {
     if (process.platform === "win32") return null;
@@ -114,6 +119,26 @@ function clearPendingSnapshot(ws: ServerWebSocket<WSData>): void {
   const session = sessions.get(pending.sessionId);
   session?.pendingSnapshotClients.delete(ws);
   ws.data.pendingSnapshot = null;
+}
+
+async function captureSessionDebugState(session: Session, includeRaw: boolean) {
+  await session.snapshotWriteChain;
+  const snapshot = session.snapshotTracker.capture();
+  return {
+    id: session.id,
+    name: session.name,
+    cwd: session.cwd,
+    createdAt: session.createdAt,
+    outputSeq: session.outputSeq,
+    snapshotSeq: session.snapshotSeq,
+    bufferBytes: session.buffer.length,
+    bufferTrimmed: session.bufferTrimmed,
+    liveTailBytes: session.liveTail.totalSize(),
+    liveTailSeq: session.liveTail.latestSeq(),
+    snapshotBytes: snapshot.payload.length,
+    snapshot,
+    ...(includeRaw ? { rawReplayBase64: session.buffer.toString("base64") } : {}),
+  };
 }
 
 function detachClient(ws: ServerWebSocket<WSData>): boolean {
@@ -295,6 +320,15 @@ const server = Bun.serve<WSData>({
     }
     if (url.pathname === "/health") {
       return Response.json({ ok: true, sessions: sessions.size, pid: process.pid });
+    }
+    if (url.pathname === "/debug/session") {
+      const id = url.searchParams.get("id");
+      const session = id ? sessions.get(id) : null;
+      if (!session) {
+        return Response.json({ error: "Session not found" }, { status: 404 });
+      }
+      const includeRaw = isTruthyFlag(url.searchParams.get("includeRaw"));
+      return Response.json(await captureSessionDebugState(session, includeRaw));
     }
     return new Response("Not found", { status: 404 });
   },

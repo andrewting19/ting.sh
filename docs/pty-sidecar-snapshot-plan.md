@@ -24,6 +24,7 @@ This document is the high-level execution plan for that work.
 - Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
 - `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
 - An initial xterm production rollout is now wired through the real app path: xterm reconnect requests `attach-snapshot`, restores the serialized VT snapshot locally, acknowledges with `snapshot-applied`, receives ordered `snapshot-tail` chunks, and only then transitions back to the live binary stream.
+- `ptyd` now also exposes a localhost-only debug session dump, and `scripts/capture-session-trace.ts` can persist a running session's raw replay buffer plus serialized snapshot for real-world trace analysis without restarting the app.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty
