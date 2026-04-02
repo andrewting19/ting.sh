@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { readlinkSync } from "fs";
 import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
+import { computeSidecarRuntimeInfo } from "./src/sidecarRuntime";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
 import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
@@ -16,6 +17,8 @@ const PORT = resolvePtydPort();
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024), 10);
 const LIVE_TAIL_BUFFER_BYTES = parseInt(process.env.LIVE_TAIL_BUFFER_BYTES ?? String(512 * 1024), 10);
 const IDLE_EXIT_MS = parseInt(process.env.PTYD_IDLE_EXIT_MS ?? "0", 10);
+const runtimeInfo = computeSidecarRuntimeInfo();
+const startedAt = Date.now();
 
 interface Session {
   id: string;
@@ -329,7 +332,16 @@ const server = Bun.serve<WSData>({
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, sessions: sessions.size, pid: process.pid });
+      const currentRuntimeInfo = computeSidecarRuntimeInfo();
+      return Response.json({
+        ok: true,
+        sessions: sessions.size,
+        pid: process.pid,
+        startedAt,
+        runtimeFingerprint: runtimeInfo.fingerprint,
+        currentFingerprint: currentRuntimeInfo.fingerprint,
+        staleRuntime: runtimeInfo.fingerprint !== currentRuntimeInfo.fingerprint,
+      });
     }
     if (url.pathname === "/debug/session") {
       const id = url.searchParams.get("id");

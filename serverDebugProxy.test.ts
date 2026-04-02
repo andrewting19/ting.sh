@@ -160,11 +160,24 @@ test("server debug proxy forwards to the active sidecar", async () => {
       baseUrl: string;
       wsUrl: string;
       port: number;
-      health: { ok: boolean; sessions: number };
+      health: {
+        ok: boolean;
+        sessions: number;
+        pid: number;
+        startedAt: number;
+        runtimeFingerprint: string;
+        currentFingerprint: string;
+        staleRuntime: boolean;
+      };
     };
     expect(sidecar.port).toBe(ptydPort);
     expect(sidecar.baseUrl).toBe(`http://127.0.0.1:${ptydPort}`);
     expect(sidecar.health.ok).toBe(true);
+    expect(typeof sidecar.health.pid).toBe("number");
+    expect(sidecar.health.startedAt).toBeGreaterThan(0);
+    expect(sidecar.health.runtimeFingerprint.length).toBeGreaterThan(0);
+    expect(sidecar.health.currentFingerprint.length).toBeGreaterThan(0);
+    expect(sidecar.health.staleRuntime).toBe(false);
 
     client = new WsHarness(wsUrl);
     await client.open();

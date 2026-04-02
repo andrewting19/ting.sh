@@ -32,3 +32,20 @@ export function parseKey(key: SessionKey): { hostId: string; sessionId: string }
 }
 
 export type ConnectionStatus = 'connected' | 'reconnecting'
+
+export interface SidecarHealth {
+  ok: boolean
+  sessions: number
+  pid: number
+  startedAt: number
+  runtimeFingerprint: string
+  currentFingerprint: string
+  staleRuntime: boolean
+}
+
+export interface SidecarStatus {
+  baseUrl: string
+  wsUrl: string
+  port: number
+  health: SidecarHealth | null
+}

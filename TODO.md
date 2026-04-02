@@ -71,6 +71,8 @@
 - [x] Live direct-PTY alternate-screen baseline recorded — non-tmux `altbench` measured `3214` raw replay vs `1372` xterm snapshot and `1524` Ghostty rendered-text bytes; on small direct alternate-screen sessions raw can be as fast or faster locally, so alternate-screen decisions must be driven by real app shape plus fidelity
 - [x] Live agent-TUI baselines recorded — `Jax` and `Viego` Codex/Claude-style sessions measured only moderate snapshot shrinkage (`~1.8x` to `~3.2x`), which is more representative than the tiny synthetic redraw baseline
 - [x] Snapshot mojibake fix — snapshot capture now uses streaming UTF-8 decode instead of `latin1`, preserving box-drawing glyphs in agent-TUI snapshots (existing live sessions still need a sidecar restart to pick up the fix)
+- [x] Live UTF-8 snapshot verification — after restarting `ptyd`, a fresh `utf8check` session confirmed that both snapshot paths preserve box-drawing glyphs with no mojibake
+- [x] Stale sidecar detection — `/api/sidecar` now exposes runtime-vs-disk fingerprint mismatch and the dev header shows a `stale ptyd` badge when fixes are not yet active in the running sidecar
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal

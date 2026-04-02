@@ -8,7 +8,7 @@ import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
 import { persistTerminalRenderer, resolveTerminalRenderer } from './terminal/renderer'
 import type { TerminalRenderer } from './terminal/backends'
-import type { ConnectionStatus, Host, Session, SessionKey } from './types'
+import type { ConnectionStatus, Host, Session, SessionKey, SidecarStatus } from './types'
 import { makeKey, parseKey } from './types'
 import type { TerminalSnapshot } from './snapshot/types'
 import './App.css'
@@ -143,6 +143,7 @@ export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
   const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
+  const [sidecarStatus, setSidecarStatus] = useState<SidecarStatus | null>(null)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -811,6 +812,33 @@ export function App() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    let intervalId: number | null = null
+
+    const loadSidecar = async () => {
+      try {
+        const res = await fetch('/api/sidecar')
+        if (!res.ok) return
+        const json = await res.json() as SidecarStatus
+        if (cancelled) return
+        setSidecarStatus(json)
+      } catch {
+        // ignore sidecar status failures
+      }
+    }
+
+    void loadSidecar()
+    if (import.meta.env.DEV) {
+      intervalId = window.setInterval(() => { void loadSidecar() }, 5000)
+    }
+
+    return () => {
+      cancelled = true
+      if (intervalId !== null) window.clearInterval(intervalId)
+    }
+  }, [])
+
   // Header clock + sky indicator — updates DOM directly via ref to avoid re-renders
   const clockRef = useRef<HTMLDivElement>(null)
   const skyRef = useRef<HTMLDivElement>(null)
@@ -1476,6 +1504,7 @@ export function App() {
     }
     return next
   }, [hosts, orderedHostSessions])
+  const showStaleSidecar = sidecarStatus?.health?.staleRuntime === true
 
   return (
     <div className="app">
@@ -1486,6 +1515,14 @@ export function App() {
         <div className="wordmark"><span className="prompt">$</span> ting<span className="dot">.</span>sh<span className="cursor" /></div>
         <div className="header-spacer" />
         <div className="header-time">
+          {showStaleSidecar && (
+            <div
+              className="header-runtime-warning"
+              title={`Running ptyd ${sidecarStatus?.health?.runtimeFingerprint} is older than disk ${sidecarStatus?.health?.currentFingerprint}`}
+            >
+              stale ptyd
+            </div>
+          )}
           <div className="renderer-toggle" role="group" aria-label="Terminal renderer">
             <button
               type="button"
