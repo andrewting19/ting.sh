@@ -1504,7 +1504,7 @@ export function App() {
     }
     return next
   }, [hosts, orderedHostSessions])
-  const showStaleSidecar = sidecarStatus?.health?.staleRuntime === true
+  const showStaleSidecar = sidecarStatus?.health?.staleRuntime === true || sidecarStatus?.protocolCompatible === false
 
   return (
     <div className="app">
@@ -1518,7 +1518,11 @@ export function App() {
           {showStaleSidecar && (
             <div
               className="header-runtime-warning"
-              title={`Running ptyd ${sidecarStatus?.health?.runtimeFingerprint} is older than disk ${sidecarStatus?.health?.currentFingerprint}`}
+              title={
+                sidecarStatus?.protocolCompatible === false
+                  ? `Running ptyd protocol ${sidecarStatus?.health?.protocolVersion ?? 'unknown'} does not match expected ${sidecarStatus?.expectedProtocolVersion}`
+                  : `Running ptyd ${sidecarStatus?.health?.runtimeFingerprint} is older than disk ${sidecarStatus?.health?.currentFingerprint}`
+              }
             >
               stale ptyd
             </div>

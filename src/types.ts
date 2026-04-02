@@ -38,6 +38,7 @@ export interface SidecarHealth {
   sessions: number
   pid: number
   startedAt: number
+  protocolVersion: number | null
   runtimeFingerprint: string
   currentFingerprint: string
   staleRuntime: boolean
@@ -47,5 +48,7 @@ export interface SidecarStatus {
   baseUrl: string
   wsUrl: string
   port: number
+  expectedProtocolVersion: number
+  protocolCompatible: boolean
   health: SidecarHealth | null
 }

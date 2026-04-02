@@ -141,6 +141,15 @@ async function terminateProcess(proc: Bun.Subprocess<"ignore", "pipe", "pipe"> |
   await proc.exited;
 }
 
+async function terminatePid(pid: number | null): Promise<void> {
+  if (!pid) return;
+  try {
+    process.kill(pid);
+  } catch {
+    // already exited
+  }
+}
+
 test("sessions survive Bun server restart when ptyd stays alive", async () => {
   const serverPort = await getFreePort();
   const ptydPort = await getFreePort();
@@ -221,5 +230,82 @@ test("sessions survive Bun server restart when ptyd stays alive", async () => {
     client2?.close();
     await terminateProcess(server);
     await terminateProcess(ptyd);
+  }
+}, 60_000);
+
+test("server respawns ptyd after sidecar exit", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  const ptydBaseUrl = `http://127.0.0.1:${ptydPort}`;
+  const wsUrl = `ws://127.0.0.1:${serverPort}/ws`;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let client: WsHarness | null = null;
+  let ptydPid: number | null = null;
+
+  try {
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/host`);
+
+    const sidecarRes1 = await fetch(`${serverBaseUrl}/api/sidecar`);
+    expect(sidecarRes1.ok).toBe(true);
+    const sidecar1 = await sidecarRes1.json() as {
+      protocolCompatible: boolean;
+      health: { ok: boolean; pid: number; protocolVersion: number | null };
+    };
+    expect(sidecar1.protocolCompatible).toBe(true);
+    expect(sidecar1.health.ok).toBe(true);
+    ptydPid = sidecar1.health.pid;
+
+    client = new WsHarness(wsUrl);
+    await client.open();
+    await client.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-before-exit" });
+    await client.nextJsonWhere<{ type: string; requestId?: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-before-exit",
+    );
+
+    await terminatePid(ptydPid);
+    await waitForHttpDown(`${ptydBaseUrl}/health`);
+
+    client.close();
+    client = null;
+
+    const sidecarRes2 = await fetch(`${serverBaseUrl}/api/sidecar`);
+    expect(sidecarRes2.ok).toBe(true);
+    const sidecar2 = await sidecarRes2.json() as {
+      protocolCompatible: boolean;
+      health: { ok: boolean; pid: number; protocolVersion: number | null };
+    };
+    expect(sidecar2.protocolCompatible).toBe(true);
+    expect(sidecar2.health.ok).toBe(true);
+    expect(sidecar2.health.pid).not.toBe(ptydPid);
+    expect(sidecar2.health.protocolVersion).toBe(1);
+    ptydPid = sidecar2.health.pid;
+
+    client = new WsHarness(wsUrl);
+    await client.open();
+    await client.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-after-exit" });
+    const ready = await client.nextJsonWhere<{ type: string; requestId?: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-after-exit",
+    );
+
+    const marker = `after-sidecar-respawn-${Date.now()}`;
+    client.sendJson({ type: "input", data: `printf '${marker}\\n'\r` });
+    await client.nextBinaryContaining(marker);
+    expect(ready.id.length).toBeGreaterThan(0);
+  } finally {
+    client?.close();
+    await terminateProcess(server);
+    await terminatePid(ptydPid);
   }
 }, 60_000);

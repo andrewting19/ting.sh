@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { readlinkSync } from "fs";
 import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
+import { PTYD_PROTOCOL_VERSION } from "./src/sidecarProtocol";
 import { computeSidecarRuntimeInfo } from "./src/sidecarRuntime";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
@@ -338,6 +339,7 @@ const server = Bun.serve<WSData>({
         sessions: sessions.size,
         pid: process.pid,
         startedAt,
+        protocolVersion: PTYD_PROTOCOL_VERSION,
         runtimeFingerprint: runtimeInfo.fingerprint,
         currentFingerprint: currentRuntimeInfo.fingerprint,
         staleRuntime: runtimeInfo.fingerprint !== currentRuntimeInfo.fingerprint,

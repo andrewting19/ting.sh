@@ -160,11 +160,14 @@ test("server debug proxy forwards to the active sidecar", async () => {
       baseUrl: string;
       wsUrl: string;
       port: number;
+      expectedProtocolVersion: number;
+      protocolCompatible: boolean;
       health: {
         ok: boolean;
         sessions: number;
         pid: number;
         startedAt: number;
+        protocolVersion: number | null;
         runtimeFingerprint: string;
         currentFingerprint: string;
         staleRuntime: boolean;
@@ -172,9 +175,12 @@ test("server debug proxy forwards to the active sidecar", async () => {
     };
     expect(sidecar.port).toBe(ptydPort);
     expect(sidecar.baseUrl).toBe(`http://127.0.0.1:${ptydPort}`);
+    expect(sidecar.expectedProtocolVersion).toBe(1);
+    expect(sidecar.protocolCompatible).toBe(true);
     expect(sidecar.health.ok).toBe(true);
     expect(typeof sidecar.health.pid).toBe("number");
     expect(sidecar.health.startedAt).toBeGreaterThan(0);
+    expect(sidecar.health.protocolVersion).toBe(1);
     expect(sidecar.health.runtimeFingerprint.length).toBeGreaterThan(0);
     expect(sidecar.health.currentFingerprint.length).toBeGreaterThan(0);
     expect(sidecar.health.staleRuntime).toBe(false);

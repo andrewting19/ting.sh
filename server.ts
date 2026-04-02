@@ -2,6 +2,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { hostname } from "os";
 import { join } from "path";
 import { getPtydHttpBaseUrl, getPtydWsUrl, resolvePtydPort } from "./src/sidecarConfig";
+import { PTYD_PROTOCOL_VERSION, isPtydProtocolCompatible, parsePtydProtocolVersion } from "./src/sidecarProtocol";
 
 const PORT = parseInt(process.env.PORT ?? "7681", 10);
 const PTYD_PORT = resolvePtydPort(PORT);
@@ -240,17 +241,25 @@ const server = Bun.serve<WSData>({
       try {
         const res = await fetch(`${PTYD_HTTP_BASE_URL}/health`);
         const health = await res.json() as Record<string, unknown>;
+        const protocolVersion = parsePtydProtocolVersion(health.protocolVersion);
         return Response.json({
           baseUrl: PTYD_HTTP_BASE_URL,
           wsUrl: PTYD_WS_URL,
           port: PTYD_PORT,
-          health,
+          expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
+          protocolCompatible: isPtydProtocolCompatible(protocolVersion),
+          health: {
+            ...health,
+            protocolVersion,
+          },
         });
       } catch {
         return Response.json({
           baseUrl: PTYD_HTTP_BASE_URL,
           wsUrl: PTYD_WS_URL,
           port: PTYD_PORT,
+          expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
+          protocolCompatible: false,
           health: null,
         }, { status: 502 });
       }
