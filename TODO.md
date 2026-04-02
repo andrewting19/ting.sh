@@ -3,7 +3,6 @@
 ## Bugs (lower priority)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
 - [ ] Optimize large attach replay path for remote clients — current diagnostics show session attach time scales primarily with replay bytes (often the full ~10MB cap) rather than the control-plane handshake; likely options are chunked replay, a lower warm-attach cap, or a staged "recent viewport first, deep scrollback later" strategy
-- [x] Optional Claude Code resize compatibility mode — fixed as an opt-in shared-stream filter (header `CC` toggle or `localStorage['wt-claude-code-compat']='1'`) that buffers post-resize synchronized-output batches and drops only the pathological blank redraw variant before it reaches xterm or Ghostty
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
@@ -37,8 +36,8 @@
 - [x] Mobile toolbar overflowed horizontally on narrow phones — fixed (7-button primary row + collapsible macro tray for modifiers/hotkeys/select)
 - [x] Session switch / auto-focus could inject literal `^[[I` into shell prompt when focus reporting was enabled (`?1004h`) — fixed (suppress immediate programmatic focus CSI reports in terminal manager)
 - [x] Attach replay/session-switch viewport could land at top and sometimes miss the `Latest` overlay after fit/resize races — fixed (defer attach auto-scroll until replay flush/layout settles + recompute scroll-overlay state after terminal fits/resizes)
-- [x] Browser/sidebar resize animations could spam PTY resize messages and leave TUIs like Claude Code in a half-redrawn state across both xterm and Ghostty — fixed (debounce terminal-originated resize sends in shared app logic while keeping explicit attach/reclaim resizes immediate)
-- [x] Manual recovery for Claude Code bad resize redraw state — fixed (header `↻` button sends a one-column PTY width nudge out/back for the active session)
+- [x] Browser/sidebar resize animations could spam PTY resize messages and leave redraw-heavy TUIs in a half-redrawn state across both xterm and Ghostty — fixed (debounce terminal-originated resize sends in shared app logic while keeping explicit attach/reclaim resizes immediate)
+- [x] Manual recovery for bad resize redraw state — fixed (header `↻` button sends a one-column PTY width nudge out/back for the active session)
 - [x] Windows hosts defaulted to `cmd.exe`, had no live CWD parity, and depended on ambient Node installs — fixed (prefer Git Bash / OpenSSH default shell, parse hidden Git Bash cwd OSC frames, and bundle Node in the Windows installer)
 - [x] Windows `LocalSystem` service sessions started in `systemprofile` instead of the intended user home — fixed (installer seeds `TING_WINDOWS_SESSION_HOME`, runtime falls back to the last login profile, and `install.ps1` now supports optional `ServiceUser` + password for true per-user services)
 

@@ -6,15 +6,6 @@ import { SelectionModal } from './components/SelectionModal'
 import { getArrowSequence, type ArrowDirection } from './components/ArrowPad'
 import { useHostConnections } from './hooks/useHostConnections'
 import { useTerminalManager } from './hooks/useTerminalManager'
-import {
-  CLAUDE_CODE_COMPAT_STORAGE_KEY,
-  findSyncOutputEnterAfter,
-  findSyncOutputExit,
-  findSyncOutputExitAfter,
-  persistClaudeCodeCompat,
-  resolveClaudeCodeCompat,
-  shouldDropClaudeCodeResizeSyncBatch,
-} from './terminal/claudeCodeCompat'
 import { persistTerminalRenderer, resolveTerminalRenderer } from './terminal/renderer'
 import type { TerminalRenderer } from './terminal/backends'
 import type { ConnectionStatus, Host, Session, SessionKey } from './types'
@@ -126,31 +117,11 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
   return !window.matchMedia('(max-width: 640px)').matches
 }
 
-function concatChunks(chunks: Uint8Array[]): Uint8Array {
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-  const merged = new Uint8Array(totalLength)
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.length
-  }
-  return merged
-}
-
 const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
 const TERMINAL_RESIZE_SETTLE_MS = 150
-const CLAUDE_CODE_COMPAT_RESIZE_WINDOW_MS = 5000
-
-type ClaudeCodeCompatCapture = {
-  key: SessionKey
-  startedAt: number
-  chunks: Uint8Array[]
-  totalBytes: number
-}
 
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
-  const [claudeCodeCompatEnabled] = useState<boolean>(() => resolveClaudeCodeCompat())
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
   const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
@@ -190,8 +161,6 @@ export function App() {
   const pendingTerminalResizeRef = useRef<{ key: SessionKey; cols: number; rows: number } | null>(null)
   const terminalResizeTimeoutRef = useRef<number | null>(null)
   const lastSentResizeByKeyRef = useRef<Map<SessionKey, string>>(new Map())
-  const recentClaudeCompatResizeByKeyRef = useRef<Map<SessionKey, number>>(new Map())
-  const claudeCompatCaptureRef = useRef<ClaudeCodeCompatCapture | null>(null)
   const attachMetricsByRequestIdRef = useRef<Map<string, AttachReplayMetric>>(new Map())
   const latestAttachMetricByKeyRef = useRef<Map<SessionKey, AttachReplayMetric>>(new Map())
   const attachSessionRef = useRef<(key: SessionKey) => void>(() => {})
@@ -367,107 +336,13 @@ export function App() {
         })
   }
 
-  function flushClaudeCodeCompatCapture(decision: 'pass' | 'drop') {
-    const capture = claudeCompatCaptureRef.current
-    claudeCompatCaptureRef.current = null
-    if (!capture) return
-    if (decision === 'drop') {
-      if (import.meta.env.DEV) {
-        console.warn('[claude-compat] dropped pathological resize redraw batch', {
-          key: capture.key,
-          totalBytes: capture.totalBytes,
-          chunks: capture.chunks.length,
-        })
-      }
-      return
-    }
-    for (const chunk of capture.chunks) forwardTerminalBinary(capture.key, chunk)
-  }
-
-  function routeBinaryWithClaudeCompat(key: SessionKey, data: Uint8Array) {
-    if (!claudeCodeCompatEnabled) {
-      flushClaudeCodeCompatCapture('pass')
-      forwardTerminalBinary(key, data)
-      return
-    }
-
-    const now = Date.now()
-    const lastResize = recentClaudeCompatResizeByKeyRef.current.get(key) ?? 0
-    const withinResizeWindow = now - lastResize <= CLAUDE_CODE_COMPAT_RESIZE_WINDOW_MS
-    let offset = 0
-
-    while (offset < data.length) {
-      const capture = claudeCompatCaptureRef.current
-      if (capture) {
-        if (capture.key !== key) {
-          flushClaudeCodeCompatCapture('pass')
-          continue
-        }
-        const exitIndex = findSyncOutputExitAfter(data, offset)
-        if (exitIndex === -1) {
-          const tail = data.slice(offset)
-          capture.chunks.push(tail)
-          capture.totalBytes += tail.length
-          return
-        }
-
-        const exitEnd = exitIndex + '\u001b[?2026l'.length
-        const chunk = data.slice(offset, exitEnd)
-        capture.chunks.push(chunk)
-        capture.totalBytes += chunk.length
-        const merged = concatChunks(capture.chunks)
-        flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(merged) ? 'drop' : 'pass')
-        offset = exitEnd
-        continue
-      }
-
-      if (!withinResizeWindow) {
-        forwardTerminalBinary(key, data.slice(offset))
-        return
-      }
-
-      const enterIndex = findSyncOutputEnterAfter(data, offset)
-      if (enterIndex === -1) {
-        forwardTerminalBinary(key, data.slice(offset))
-        return
-      }
-
-      if (enterIndex > offset) {
-        forwardTerminalBinary(key, data.slice(offset, enterIndex))
-      }
-
-      const exitIndex = findSyncOutputExitAfter(data, enterIndex)
-      if (exitIndex === -1) {
-        const chunk = data.slice(enterIndex)
-        claudeCompatCaptureRef.current = {
-          key,
-          startedAt: now,
-          chunks: [chunk],
-          totalBytes: chunk.length,
-        }
-        return
-      }
-
-      const exitEnd = exitIndex + '\u001b[?2026l'.length
-      const batch = data.slice(enterIndex, exitEnd)
-      claudeCompatCaptureRef.current = {
-        key,
-        startedAt: now,
-        chunks: [batch],
-        totalBytes: batch.length,
-      }
-      flushClaudeCodeCompatCapture(shouldDropClaudeCodeResizeSyncBatch(batch) ? 'drop' : 'pass')
-      offset = exitEnd
-    }
-  }
-
   const { hostStatuses, connect, disconnect, send: sendToHost, forceClose } = useHostConnections({
     onBinary: (hostId, data) => {
       if (dropBinaryUntilReadyRef.current) return
       const key = attachedKeyRef.current
       if (!key) return
       if (parseKey(key).hostId !== hostId) return
-      routeBinaryWithClaudeCompat(key, new Uint8Array(data))
+      forwardTerminalBinary(key, new Uint8Array(data))
     },
     onMessage: (hostId, msg) => handleMessage(hostId, msg),
   })
@@ -476,9 +351,6 @@ export function App() {
     const nextSize = `${cols}x${rows}`
     if (!force && lastSentResizeByKeyRef.current.get(key) === nextSize) return
     lastSentResizeByKeyRef.current.set(key, nextSize)
-    if (attachedKeyRef.current === key) {
-      recentClaudeCompatResizeByKeyRef.current.set(key, Date.now())
-    }
     sendToHost(parseKey(key).hostId, { type: 'resize', cols, rows })
   }, [sendToHost])
 
@@ -813,14 +685,6 @@ export function App() {
         location.reload()
       },
     }
-    ;(window as any).__wt_claude_compat = {
-      get: () => claudeCodeCompatEnabled,
-      set: (enabled: boolean) => {
-        persistClaudeCodeCompat(Boolean(enabled))
-        location.reload()
-      },
-      storageKey: CLAUDE_CODE_COMPAT_STORAGE_KEY,
-    }
     ;(window as any).__wt_attach_metrics = {
       latest: (rawId?: string) => {
         if (rawId) {
@@ -856,7 +720,7 @@ export function App() {
       },
       help: 'Use __wt_attach_metrics.measureAll() for all sessions or __wt_attach_metrics.measureSession(sessionId).',
     }
-  }, [claudeCodeCompatEnabled, forceClose, getSessionByKey, hosts, localHostId, sendToHost, terminalRenderer, tm])
+  }, [forceClose, getSessionByKey, hosts, localHostId, sendToHost, terminalRenderer, tm])
 
   const toWsUrl = useCallback((baseUrl: string) => {
     const next = new URL(baseUrl)
@@ -1471,12 +1335,6 @@ export function App() {
     location.reload()
   }, [switchingRenderer, terminalRenderer])
 
-  const switchClaudeCodeCompat = useCallback((enabled: boolean) => {
-    if (enabled === claudeCodeCompatEnabled) return
-    persistClaudeCodeCompat(enabled)
-    location.reload()
-  }, [claudeCodeCompatEnabled])
-
   const killTarget = killTargetKey ? getSessionByKey(killTargetKey) : null
   const showScrollToBottomOverlay = !!(currentKey && showScrollToBottomByKey[currentKey])
   const terminalEntries = useMemo(() => {
@@ -1522,16 +1380,6 @@ export function App() {
               <span className="renderer-toggle-icon" aria-hidden="true">👻</span>
             </button>
           </div>
-          <button
-            type="button"
-            className={`header-tool-btn header-toggle-btn${claudeCodeCompatEnabled ? ' active' : ''}`}
-            onClick={() => switchClaudeCodeCompat(!claudeCodeCompatEnabled)}
-            aria-pressed={claudeCodeCompatEnabled}
-            aria-label="Toggle Claude Code resize compatibility mode"
-            title={claudeCodeCompatEnabled ? 'Claude Code resize compat on' : 'Claude Code resize compat off'}
-          >
-            CC
-          </button>
           <button
             type="button"
             className="header-tool-btn"

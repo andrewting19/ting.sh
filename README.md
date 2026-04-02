@@ -166,8 +166,7 @@ Working:
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
-- Manual terminal layout refresh button — header `↻` button sends a one-column PTY width nudge out/back for the active session, which can recover Claude Code from the known bad resize redraw state
-- Opt-in Claude Code resize compatibility mode — shared app logic can buffer synchronized-output redraw batches immediately after a real PTY resize and drop only the pathological blank-batch variant (`?2026h` + huge blank `\r\r\n` run + `?2026l`) before it reaches either renderer; it can be toggled from the header `CC` button or `localStorage['wt-claude-code-compat']`
+- Manual terminal layout refresh button — header `↻` button sends a one-column PTY width nudge out/back for the active session, which can help recover some bad resize redraw states in shared TUIs
 - Reconnect stale-socket hardening — old WebSocket events are ignored once a newer socket takes over, preventing doubled output after reconnect/hot-reload races
 - Truncated replay sanitization — when scrollback cap trims bytes, first partial line is dropped on reattach to avoid malformed escape-sequence rendering artifacts
 - WebSocket CSWSH hardening — `/ws` validates browser `Origin`; allows same-origin + configured peer origins, rejects other cross-origin upgrades (non-browser clients without `Origin` still allowed)
@@ -204,23 +203,9 @@ This appears inconsistent because the TUI does not emit the same redraw sequence
 
 If this becomes a recurring UX issue, the safest mitigation is an **opt-in compatibility mode** that ignores only `CSI 3J` (clear scrollback) on the client, ideally via xterm parser hooks (`parser.registerCsiHandler` for `CSI J` with param `3`). Do not blindly auto-scroll after every redraw; that fights the app and causes jank. Trade-off: ignoring `CSI 3J` means apps (or `clear`/`reset`) can no longer intentionally clear scrollback in that mode.
 
-**Claude Code can also emit a broken resize redraw in the normal buffer (reproduced in ting.sh, xterm.js, ghostty-web, and native Ghostty).** The observed pattern after a PTY `resize` is: `CSI ? 2026 h` (synchronized output), then a very large run of blank `\\r\\r\\n` lines in the normal buffer, then only the bottom prompt/footer is redrawn before `CSI ? 2026 l`. This leaves the viewport sitting at the bottom of a blank block, which looks like “the whole upper terminal went black after resize.”
+**Some redraw-heavy TUIs can also emit a broken resize redraw in the normal buffer (reproduced in ting.sh, xterm.js, ghostty-web, and native Ghostty).** The observed pattern after a PTY `resize` is: `CSI ? 2026 h` (synchronized output), then a very large run of blank `\\r\\r\\n` lines in the normal buffer, then only the bottom prompt/footer is redrawn before `CSI ? 2026 l`. This leaves the viewport sitting at the bottom of a blank block, which looks like “the whole upper terminal went black after resize.”
 
-This is not currently believed to be a ting.sh renderer bug. Debouncing browser-driven resize storms helps reduce how often the TUI gets kicked into that path, but once Claude Code emits the broken redraw, browsers and native terminals alike appear to render it faithfully.
-
-ting.sh now ships an **opt-in resize compatibility filter** for this exact case. Enable it with:
-
-```js
-localStorage.setItem('wt-claude-code-compat', '1')
-location.reload()
-```
-
-Disable it with:
-
-```js
-localStorage.removeItem('wt-claude-code-compat')
-location.reload()
-```
+This is not currently believed to be a ting.sh renderer bug. Debouncing browser-driven resize storms helps reduce how often a TUI gets kicked into that path, but once the app emits the broken redraw, browsers and native terminals alike appear to render it faithfully.
 
 The filter only engages for synchronized-output batches (`?2026h ... ?2026l`) shortly after a real PTY resize and only drops batches dominated by the pathological blank `\r\r\n` pattern. Trade-off: this is still protocol surgery against a specific app behavior, so it could suppress a legitimate full-screen redraw from another TUI if the heuristic is too broad.
 
