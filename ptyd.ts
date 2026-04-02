@@ -10,6 +10,7 @@ import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapsh
 import { captureRenderedTextSnapshot } from "./src/snapshot/renderedTextSnapshot";
 import type { TerminalSnapshot } from "./src/snapshot/types";
 import { LiveTailBuffer } from "./src/snapshot/liveTail";
+import { TraceEventBuffer } from "./src/snapshot/traceEventBuffer";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
 import { renderedTextSnapshotToVt } from "./src/snapshot/renderedTextSnapshot";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
@@ -17,6 +18,7 @@ import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShell
 const PORT = resolvePtydPort();
 const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1024), 10);
 const LIVE_TAIL_BUFFER_BYTES = parseInt(process.env.LIVE_TAIL_BUFFER_BYTES ?? String(512 * 1024), 10);
+const TRACE_EVENT_BUFFER_BYTES = parseInt(process.env.TRACE_EVENT_BUFFER_BYTES ?? String(2 * 1024 * 1024), 10);
 const IDLE_EXIT_MS = parseInt(process.env.PTYD_IDLE_EXIT_MS ?? "0", 10);
 const runtimeInfo = computeSidecarRuntimeInfo();
 const startedAt = Date.now();
@@ -26,11 +28,14 @@ interface Session {
   name: string;
   proc: PtyProcess | null;
   shell: string;
+  initialCols: number;
+  initialRows: number;
   buffer: Buffer;
   bufferTrimmed: boolean;
   outputSeq: number;
   snapshotSeq: number;
   liveTail: LiveTailBuffer;
+  traceEvents: TraceEventBuffer;
   snapshotTracker: XtermVtSnapshotTracker;
   snapshotWriteChain: Promise<void>;
   clients: Set<ServerWebSocket<WSData>>;
@@ -140,12 +145,17 @@ async function captureSessionDebugState(session: Session, includeRaw: boolean) {
     name: session.name,
     cwd: session.cwd,
     createdAt: session.createdAt,
+    initialCols: session.initialCols,
+    initialRows: session.initialRows,
     outputSeq: session.outputSeq,
     snapshotSeq: session.snapshotSeq,
     bufferBytes: session.buffer.length,
     bufferTrimmed: session.bufferTrimmed,
     liveTailBytes: session.liveTail.totalSize(),
     liveTailSeq: session.liveTail.latestSeq(),
+    traceEventCount: session.traceEvents.count(),
+    traceDataBytes: session.traceEvents.totalDataBytes(),
+    traceEvents: session.traceEvents.serialize(),
     snapshotBytes: snapshot.payload.length,
     snapshot,
     renderedTextSnapshotBytes: renderedTextVt.length,
@@ -213,6 +223,12 @@ function scheduleCwdRefresh(session: Session) {
   session.cwdTimer = setTimeout(refresh, CWD_REFRESH_RETRY_DELAYS_MS[attempt]);
 }
 
+function applySessionResize(session: Session, cols: number, rows: number): void {
+  session.proc?.resize(cols, rows);
+  session.snapshotTracker.resize(cols, rows);
+  session.traceEvents.appendResize(cols, rows);
+}
+
 function createSession(name: string, cols: number, rows: number, cwd?: string): Session {
   cancelIdleExit();
   const id = randomUUID();
@@ -222,11 +238,14 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     name: name.trim() || pickSessionName(),
     proc: null,
     shell,
+    initialCols: cols,
+    initialRows: rows,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     outputSeq: 0,
     snapshotSeq: 0,
     liveTail: new LiveTailBuffer(LIVE_TAIL_BUFFER_BYTES),
+    traceEvents: new TraceEventBuffer(TRACE_EVENT_BUFFER_BYTES),
     snapshotTracker: new XtermVtSnapshotTracker(cols, rows),
     snapshotWriteChain: Promise.resolve(),
     clients: new Set(),
@@ -274,6 +293,7 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       if (payload.length > 0) {
         const seq = session.liveTail.append(payload);
         session.outputSeq = seq;
+        session.traceEvents.appendData(payload);
         const nextSnapshotWrite = session.snapshotWriteChain.then(async () => {
           await session.snapshotTracker.write(payload);
           session.snapshotSeq = seq;
@@ -436,8 +456,7 @@ const server = Bun.serve<WSData>({
           broadcastSessions();
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
-          if (cols && rows) target.proc?.resize(cols, rows);
-          if (cols && rows) target.snapshotTracker.resize(cols, rows);
+          if (cols && rows) applySessionResize(target, cols, rows);
           const replay = getReplayBufferStats(target.buffer, target.bufferTrimmed);
           ws.send(JSON.stringify({
             type: "ready",
@@ -469,8 +488,7 @@ const server = Bun.serve<WSData>({
           clearPendingSnapshot(ws);
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
-          if (cols && rows) target.proc?.resize(cols, rows);
-          if (cols && rows) target.snapshotTracker.resize(cols, rows);
+          if (cols && rows) applySessionResize(target, cols, rows);
           await target.snapshotWriteChain;
           const snapshot: TerminalSnapshot = renderer === "ghostty"
             ? captureRenderedTextSnapshot(target.snapshotTracker.terminal)
@@ -550,8 +568,7 @@ const server = Bun.serve<WSData>({
           const cols = asPositiveInt(data.cols);
           const rows = asPositiveInt(data.rows);
           if (!session || !cols || !rows) return;
-          session.proc?.resize(cols, rows);
-          session.snapshotTracker.resize(cols, rows);
+          applySessionResize(session, cols, rows);
           break;
         }
 

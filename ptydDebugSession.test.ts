@@ -161,12 +161,20 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
     const debug = await res.json() as {
       id: string;
       name: string;
+      initialCols: number;
+      initialRows: number;
       outputSeq: number;
       snapshotSeq: number;
       bufferBytes: number;
       bufferTrimmed: boolean;
       liveTailBytes: number;
       liveTailSeq: number;
+      traceEventCount: number;
+      traceDataBytes: number;
+      traceEvents: Array<
+        | { type: "data"; base64: string; bytes: number }
+        | { type: "resize"; cols: number; rows: number }
+      >;
       snapshotBytes: number;
       renderedTextSnapshotBytes: number;
       snapshot: { format: string; payload: string };
@@ -176,10 +184,15 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
     };
 
     expect(debug.id).toBe(ready.id);
+    expect(debug.initialCols).toBe(80);
+    expect(debug.initialRows).toBe(24);
     expect(debug.outputSeq).toBeGreaterThan(0);
     expect(debug.snapshotSeq).toBeGreaterThan(0);
     expect(debug.snapshotSeq).toBeLessThanOrEqual(debug.outputSeq);
     expect(debug.liveTailSeq).toBe(debug.outputSeq);
+    expect(debug.traceEventCount).toBeGreaterThan(0);
+    expect(debug.traceDataBytes).toBeGreaterThan(0);
+    expect(debug.traceEvents.some((event) => event.type === "data")).toBe(true);
     expect(debug.bufferBytes).toBeGreaterThan(0);
     expect(debug.snapshotBytes).toBeGreaterThan(0);
     expect(debug.renderedTextSnapshotBytes).toBeGreaterThan(0);
@@ -192,6 +205,58 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
     expect(debug.bufferTrimmed).toBe(false);
     expect(debug.rawReplayBase64).toBeTruthy();
     expect(Buffer.from(debug.rawReplayBase64!, "base64").toString("utf8")).toContain(marker);
+  } finally {
+    client?.close();
+    await terminateProcess(ptyd);
+  }
+}, 60_000);
+
+test("ptyd debug session trace events include explicit resizes", async () => {
+  const ptydPort = await getFreePort();
+  const ptydBaseUrl = `http://127.0.0.1:${ptydPort}`;
+  const wsUrl = `ws://127.0.0.1:${ptydPort}/ws`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let client: WsHarness | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${ptydBaseUrl}/health`);
+
+    client = new WsHarness(wsUrl);
+    await client.open();
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-resize" });
+    const ready = await client.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-resize",
+    );
+
+    client.sendJson({ type: "resize", cols: 100, rows: 30 });
+    client.sendJson({ type: "input", data: "printf 'after-resize\\n'\r" });
+    await client.nextBinaryContaining("after-resize");
+
+    const res = await fetch(`${ptydBaseUrl}/debug/session?id=${encodeURIComponent(ready.id)}&includeRaw=1`);
+    expect(res.ok).toBe(true);
+    const debug = await res.json() as {
+      initialCols: number;
+      initialRows: number;
+      traceEvents: Array<
+        | { type: "data"; base64: string; bytes: number }
+        | { type: "resize"; cols: number; rows: number }
+      >;
+      snapshot: { cols: number; rows: number; payload: string };
+    };
+
+    expect(debug.initialCols).toBe(80);
+    expect(debug.initialRows).toBe(24);
+    expect(debug.snapshot.cols).toBe(100);
+    expect(debug.snapshot.rows).toBe(30);
+    expect(debug.traceEvents.some((event) => event.type === "resize" && event.cols === 100 && event.rows === 30)).toBe(true);
+    expect(debug.snapshot.payload).toContain("after-resize");
   } finally {
     client?.close();
     await terminateProcess(ptyd);

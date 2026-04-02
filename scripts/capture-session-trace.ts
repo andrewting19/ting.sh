@@ -7,12 +7,20 @@ interface DebugSessionCapture {
   name: string;
   cwd: string;
   createdAt: number;
+  initialCols: number;
+  initialRows: number;
   outputSeq: number;
   snapshotSeq: number;
   bufferBytes: number;
   bufferTrimmed: boolean;
   liveTailBytes: number;
   liveTailSeq: number;
+  traceEventCount: number;
+  traceDataBytes: number;
+  traceEvents: Array<
+    | { type: "data"; base64: string; bytes: number }
+    | { type: "resize"; cols: number; rows: number }
+  >;
   snapshotBytes: number;
   renderedTextSnapshotBytes: number;
   snapshot: {
@@ -83,10 +91,14 @@ console.log(JSON.stringify({
   name: capture.name,
   outputSeq: capture.outputSeq,
   snapshotSeq: capture.snapshotSeq,
+  initialCols: capture.initialCols,
+  initialRows: capture.initialRows,
   bufferBytes: capture.bufferBytes,
   snapshotBytes: capture.snapshotBytes,
   renderedTextSnapshotBytes: capture.renderedTextSnapshotBytes,
   activeBuffer: capture.renderedTextSnapshot.activeBuffer,
   liveTailBytes: capture.liveTailBytes,
+  traceEventCount: capture.traceEventCount,
+  traceDataBytes: capture.traceDataBytes,
   outputPath,
 }, null, 2));
