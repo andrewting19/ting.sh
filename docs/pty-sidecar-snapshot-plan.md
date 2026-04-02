@@ -23,10 +23,11 @@ This document is the high-level execution plan for that work.
 - Ghostty feasibility now has a concrete result from a browser-backed harness: Ghostty can consume the xterm-emitted VT snapshot and recover the visible alternate-screen content, but it does not preserve xterm's full normal-buffer/scrollback semantics or exact alternate-screen layout/cursor positioning from that same snapshot.
 - Architectural implication: a single xterm-emitted VT snapshot is viable for the xterm reconnect path, but exact cross-renderer restore likely requires backend-specific adapters or a richer canonical state model than "VT payload only".
 - `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
+- An initial xterm production rollout is now wired through the real app path: xterm reconnect requests `attach-snapshot`, restores the serialized VT snapshot locally, acknowledges with `snapshot-applied`, receives ordered `snapshot-tail` chunks, and only then transitions back to the live binary stream.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty
-  - race-safe snapshot plus live-tail handoff during attach
+  - long-term history semantics beyond the reconnect snapshot
 
 ## Non-Negotiable Constraints
 
@@ -233,21 +234,21 @@ Decision gate:
 - [x] Prototype xterm snapshot restore.
 - [x] Prototype Ghostty snapshot restore.
 - [x] Decide whether the restore path needs backend-specific adapters.
-- [ ] Design the snapshot attach protocol including sequence/handoff semantics.
-- [ ] Prototype snapshot cut + live tail handoff under concurrent output.
-- [ ] Add a feature flag for snapshot attach.
+- [x] Design the snapshot attach protocol including sequence/handoff semantics.
+- [x] Prototype snapshot cut + live tail handoff under concurrent output.
+- [x] Add a feature flag for snapshot attach.
 - [ ] Add side-by-side debug tooling to compare replay attach versus snapshot attach.
 - [ ] Introduce a server-authoritative terminal-state store per session.
 - [ ] Feed PTY bytes into the state store continuously.
 - [ ] Ensure resize events update state-store dimensions correctly.
 - [ ] Ensure alternate-buffer transitions are represented correctly.
 - [ ] Implement snapshot generation from the state store.
-- [ ] Teach the frontend backend contract to restore from snapshot.
-- [ ] Implement xterm production restore path.
+- [x] Teach the frontend backend contract to restore from snapshot.
+- [x] Implement xterm production restore path.
 - [ ] Implement Ghostty production restore path.
-- [ ] Change attach flow to request/receive/restore snapshot before live tail.
-- [ ] Keep raw replay attach as a temporary debug fallback only.
-- [ ] Validate snapshot attach on local desktop workflows.
+- [x] Change attach flow to request/receive/restore snapshot before live tail.
+- [x] Keep raw replay attach as a temporary fallback while snapshot reconnect rolls out per renderer.
+- [x] Validate snapshot attach on local desktop workflows.
 - [ ] Validate snapshot attach on iPad over Tailscale.
 - [ ] Validate multi-client/shared-session behavior under snapshot attach.
 - [ ] Define the long-term story for deep readable history versus reconnect state.

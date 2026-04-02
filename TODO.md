@@ -3,6 +3,8 @@
 ## Bugs (lower priority)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
 - [ ] Optimize large attach replay path for remote clients — current diagnostics show session attach time scales primarily with replay bytes (often the full ~10MB cap) rather than the control-plane handshake; likely options are chunked replay, a lower warm-attach cap, or a staged "recent viewport first, deep scrollback later" strategy
+- [ ] Ghostty snapshot reconnect parity — xterm now restores from structured snapshots plus live tail, but Ghostty still falls back to raw attach until it has a production restore adapter / canonical-state path
+- [ ] Validate snapshot reconnect against real redraw-heavy agent traces (Claude Code / Codex / resize-heavy TUI captures) and measure payload sizes versus current raw replay
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
@@ -57,6 +59,8 @@
 - [x] Mobile keyboard dismissal reclaims terminal height cleanly — keyboard inset changes now settle briefly before forcing an active-session refit/resize, avoiding stale empty space and resize thrash after iOS closes the keyboard
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] PTY sidecar foundation — Bun now proxies to local `ptyd`, and PTYs survive real Bun server restarts
+- [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
+- [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal
@@ -89,7 +93,7 @@
 - [x] Manual Windows production verification (`mom`) — Git Bash default shell, correct initial home/cwd, live CWD tracking, duplicate/create-with-CWD, rename, kill, and bundled-Node PTY worker path validated end-to-end
 
 ## Up next (in order)
-- [ ] Snapshot reconnect POC 1: validate headless xterm + serialize against real redraw-heavy agent traces, then design backend-specific restore adapters for Ghostty parity
+- [ ] Snapshot reconnect follow-up: validate headless xterm + serialize against real redraw-heavy agent traces, then design backend-specific restore adapters for Ghostty parity
 - [x] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [x] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [x] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics

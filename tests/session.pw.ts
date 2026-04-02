@@ -757,10 +757,11 @@ test('url hash — initial attach waits for measured terminal size', async ({ pa
 
   const attach = await page.evaluate(() => {
     const sent = (window as unknown as { __wt_sent_messages?: Array<Record<string, unknown>> }).__wt_sent_messages ?? []
-    return sent.find((msg) => msg.type === 'attach') ?? null
-  }) as { cols?: number; rows?: number } | null
+    return sent.find((msg) => msg.type === 'attach' || msg.type === 'attach-snapshot') ?? null
+  }) as { type?: string; cols?: number; rows?: number } | null
 
   expect(attach).toBeTruthy()
+  expect(attach?.type === 'attach' || attach?.type === 'attach-snapshot').toBe(true)
   expect(typeof attach?.cols).toBe('number')
   expect(typeof attach?.rows).toBe('number')
   expect(attach!.cols).toBeGreaterThan(100)

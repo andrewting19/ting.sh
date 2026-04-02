@@ -21,9 +21,12 @@ interface Session {
   buffer: Buffer;
   bufferTrimmed: boolean;
   outputSeq: number;
+  snapshotSeq: number;
   liveTail: LiveTailBuffer;
   snapshotTracker: XtermVtSnapshotTracker;
+  snapshotWriteChain: Promise<void>;
   clients: Set<ServerWebSocket<WSData>>;
+  pendingSnapshotClients: Set<ServerWebSocket<WSData>>;
   createdAt: number;
   cwd: string;
   cwdTimer: ReturnType<typeof setTimeout> | null;
@@ -33,6 +36,11 @@ interface Session {
 
 interface WSData {
   sessionId: string | null;
+  pendingSnapshot: {
+    sessionId: string;
+    requestId: string | null;
+    cutSeq: number;
+  } | null;
 }
 
 type ParsedClientMessage = { type: string } & Record<string, unknown>;
@@ -100,7 +108,16 @@ function sessionInfo(session: Session) {
   };
 }
 
+function clearPendingSnapshot(ws: ServerWebSocket<WSData>): void {
+  const pending = ws.data.pendingSnapshot;
+  if (!pending) return;
+  const session = sessions.get(pending.sessionId);
+  session?.pendingSnapshotClients.delete(ws);
+  ws.data.pendingSnapshot = null;
+}
+
 function detachClient(ws: ServerWebSocket<WSData>): boolean {
+  clearPendingSnapshot(ws);
   const sessionId = ws.data.sessionId;
   if (!sessionId) return false;
   ws.data.sessionId = null;
@@ -169,9 +186,12 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     outputSeq: 0,
+    snapshotSeq: 0,
     liveTail: new LiveTailBuffer(LIVE_TAIL_BUFFER_BYTES),
     snapshotTracker: new XtermVtSnapshotTracker(cols, rows),
+    snapshotWriteChain: Promise.resolve(),
     clients: new Set(),
+    pendingSnapshotClients: new Set(),
     createdAt: Date.now(),
     cwd: "",
     cwdTimer: null,
@@ -213,8 +233,13 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       }
 
       if (payload.length > 0) {
-        session.outputSeq = session.liveTail.append(payload);
-        void session.snapshotTracker.write(payload);
+        const seq = session.liveTail.append(payload);
+        session.outputSeq = seq;
+        const nextSnapshotWrite = session.snapshotWriteChain.then(async () => {
+          await session.snapshotTracker.write(payload);
+          session.snapshotSeq = seq;
+        });
+        session.snapshotWriteChain = nextSnapshotWrite.catch(() => {});
         for (const ws of session.clients) ws.sendBinary(payload);
       }
     },
@@ -223,6 +248,10 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
       sessions.delete(id);
       const msg = JSON.stringify({ type: "session-exit", id });
       for (const ws of session.clients) ws.send(msg);
+      for (const ws of session.pendingSnapshotClients) {
+        ws.data.pendingSnapshot = null;
+        ws.send(msg);
+      }
       broadcastSessions();
     },
   });
@@ -260,8 +289,8 @@ const server = Bun.serve<WSData>({
 
   async fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === "/ws") {
-      if (server.upgrade(req, { data: { sessionId: null } })) return;
+      if (url.pathname === "/ws") {
+      if (server.upgrade(req, { data: { sessionId: null, pendingSnapshot: null } })) return;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
     if (url.pathname === "/health") {
@@ -275,7 +304,7 @@ const server = Bun.serve<WSData>({
       cancelIdleExit();
     },
 
-    message(ws, msg) {
+    async message(ws, msg) {
       if (typeof msg !== "string") return;
       let data: ParsedClientMessage;
       try {
@@ -312,6 +341,7 @@ const server = Bun.serve<WSData>({
           const created = createSession(name, cols, rows, cwd);
           const replay = getReplayBufferStats(created.buffer, created.bufferTrimmed);
           ws.data.sessionId = created.id;
+          ws.data.pendingSnapshot = null;
           broadcastSessions();
           ws.send(JSON.stringify({
             type: "ready",
@@ -343,6 +373,7 @@ const server = Bun.serve<WSData>({
           }
           if (session && session !== target) session.clients.delete(ws);
           ws.data.sessionId = target.id;
+          ws.data.pendingSnapshot = null;
           target.clients.add(ws);
           broadcastSessions();
           const cols = asPositiveInt(data.cols);
@@ -360,6 +391,89 @@ const server = Bun.serve<WSData>({
             ...(requestId !== null ? { requestId } : {}),
           }));
           if (replay.replayBytes > 0) ws.sendBinary(replay.replay);
+          break;
+        }
+
+        case "attach-snapshot": {
+          const id = asString(data.id);
+          const requestId = asString(data.requestId);
+          const target = id ? sessions.get(id) : null;
+          if (!target) {
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Session not found",
+              ...(requestId !== null ? { requestId } : {}),
+            }));
+            return;
+          }
+          if (session && session !== target) session.clients.delete(ws);
+          clearPendingSnapshot(ws);
+          const cols = asPositiveInt(data.cols);
+          const rows = asPositiveInt(data.rows);
+          if (cols && rows) target.proc?.resize(cols, rows);
+          if (cols && rows) target.snapshotTracker.resize(cols, rows);
+          await target.snapshotWriteChain;
+          const snapshot = target.snapshotTracker.capture();
+          const cutSeq = target.snapshotSeq;
+          ws.data.sessionId = null;
+          ws.data.pendingSnapshot = {
+            sessionId: target.id,
+            requestId,
+            cutSeq,
+          };
+          target.pendingSnapshotClients.add(ws);
+          ws.send(JSON.stringify({
+            type: "snapshot-ready",
+            id: target.id,
+            name: target.name,
+            backend: snapshot.format,
+            cutSeq,
+            snapshot,
+            ...(requestId !== null ? { requestId } : {}),
+          }));
+          break;
+        }
+
+        case "snapshot-applied": {
+          const id = asString(data.id);
+          const requestId = asString(data.requestId);
+          const pending = ws.data.pendingSnapshot;
+          if (!pending) return;
+          if (id !== pending.sessionId) return;
+          if (pending.requestId !== requestId) return;
+          const target = sessions.get(pending.sessionId);
+          if (!target) {
+            clearPendingSnapshot(ws);
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Session not found",
+              ...(requestId !== null ? { requestId } : {}),
+            }));
+            return;
+          }
+          const initialBoundarySeq = target.outputSeq;
+          for (const chunk of target.liveTail.getAfter(pending.cutSeq)) {
+            if (chunk.seq > initialBoundarySeq) break;
+            ws.send(JSON.stringify({
+              type: "snapshot-tail",
+              id: target.id,
+              seq: chunk.seq,
+              data: chunk.data.toString("base64"),
+              ...(requestId !== null ? { requestId } : {}),
+            }));
+          }
+          ws.send(JSON.stringify({
+            type: "snapshot-complete",
+            id: target.id,
+            cutSeq: pending.cutSeq,
+            tailSeq: initialBoundarySeq,
+            ...(requestId !== null ? { requestId } : {}),
+          }));
+          target.pendingSnapshotClients.delete(ws);
+          ws.data.pendingSnapshot = null;
+          ws.data.sessionId = target.id;
+          target.clients.add(ws);
+          broadcastSessions();
           break;
         }
 
@@ -400,6 +514,10 @@ const server = Bun.serve<WSData>({
           sessions.delete(id);
           const exitMsg = JSON.stringify({ type: "session-exit", id });
           for (const client of target.clients) client.send(exitMsg);
+          for (const client of target.pendingSnapshotClients) {
+            client.data.pendingSnapshot = null;
+            client.send(exitMsg);
+          }
           target.proc?.kill();
           broadcastSessions();
           break;

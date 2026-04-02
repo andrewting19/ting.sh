@@ -8,7 +8,7 @@ Replace raw-replay attach with:
 2. a bounded live tail after that cut
 3. a race-safe client handoff into the live stream
 
-This note is intentionally high level. It captures the protocol shape before the production implementation is wired through `ptyd` and the frontend terminal backends.
+This note started as a high-level protocol sketch. The xterm path described here is now wired through `ptyd` and the real frontend attach flow; Ghostty-specific restore remains future work.
 
 ## Core Requirements
 
@@ -30,11 +30,12 @@ The important point is that every PTY output chunk has an ordering token.
 
 ## Snapshot Cut
 
-When a client requests attach:
+Current xterm implementation:
 
-1. Sidecar reads current `outputSeq` as `cutSeq`.
+1. Sidecar waits for its ordered snapshot-write chain to settle.
 2. Sidecar captures a snapshot from the state tracker.
-3. Sidecar begins buffering any later PTY chunks into `liveTail` with `seq > cutSeq`.
+3. Sidecar uses the matching `snapshotSeq` as `cutSeq`.
+4. Any later PTY chunks already have `seq > cutSeq` in `liveTail`.
 
 The snapshot is therefore defined as:
 
@@ -55,7 +56,7 @@ Suggested server -> client flow:
    - ordered PTY chunks with `seq > cutSeq`
 3. transition to normal live stream
 
-Possible client -> server acknowledgement:
+Current client -> server acknowledgement:
 
 1. client receives `snapshot-ready`
 2. client restores snapshot locally
@@ -74,7 +75,7 @@ With an ack:
 - tail flush starts only after restore is complete
 - debugging is much easier
 
-The first implementation should bias toward correctness over minimal latency.
+The current xterm rollout intentionally biases toward correctness over minimal latency.
 
 ## Backend-Specific Snapshot Payloads
 
@@ -101,16 +102,17 @@ type SnapshotEnvelope = {
 };
 ```
 
-## Open Questions
+## Remaining Open Questions
 
 - Should `outputSeq` increment per PTY chunk or per byte range?
 - How large should the buffered live tail be before fallback/error?
 - Should reconnect clients receive the same tail chunks as already-attached clients or a client-specific queue?
 - Can Ghostty restore from a richer canonical state model more faithfully than from xterm VT snapshots?
+- How should deep readable history diverge from reconnect-state history once raw replay is retired?
 
 ## Recommended First Production Rollout
 
-1. xterm-only snapshot attach behind a flag
-2. explicit client ack before tail flush
-3. side-by-side metrics comparing replay attach vs snapshot attach
-4. Ghostty restore path only after its adapter semantics are defined
+1. Keep the current xterm snapshot attach path as the production reconnect path for xterm.
+2. Preserve raw attach as the Ghostty fallback until its restore adapter exists.
+3. Add side-by-side metrics comparing replay attach vs snapshot attach on real redraw-heavy TUI traces.
+4. Implement the Ghostty restore path only after its adapter semantics are defined.

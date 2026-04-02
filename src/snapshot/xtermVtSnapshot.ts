@@ -58,6 +58,11 @@ export class XtermVtSnapshotTracker {
     };
   }
 
+  async captureSettled(): Promise<XtermVtSnapshot> {
+    await this.pendingWrite;
+    return this.capture();
+  }
+
   async restore(snapshot: XtermVtSnapshot): Promise<void> {
     this.term.reset();
     if (this.term.cols !== snapshot.cols || this.term.rows !== snapshot.rows) {

@@ -56,7 +56,7 @@ Optional Windows service-account install:
 
 If `ServiceUser` is omitted, the installer keeps the NSSM service on `LocalSystem` but records the intended shell home so sessions start in your user profile instead of `C:\Windows\System32\config\systemprofile`. If you need the shell to run with your actual Windows user token (`whoami`, file/network permissions), you must install the service with `ServiceUser` + `ServicePassword`.
 
-**Note:** auto-update restarts the server, which kills all running PTY sessions. Session persistence across restarts is on the roadmap.
+**Note:** Bun server restarts no longer kill PTY sessions because a local `ptyd` sidecar owns them. Full process / machine restarts still kill sessions today; true boot-persistent sessions remain future work.
 
 ### Multi-host setup
 
@@ -119,7 +119,8 @@ Working:
 - Create / attach / kill sessions with custom confirm modal
 - PTY sessions persist when browser tab closes — reconnect and resume
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
-- Scrollback replay on reconnect (10MB buffer per session)
+- Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
+- xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously
@@ -164,6 +165,7 @@ Working:
 - Attach de-race hardening — request-ID validated attach flow; stale attach responses are ignored so replay/output cannot leak into the wrong terminal during rapid switches
 - Measured attach handshake — hash-load/reconnect attaches now wait for a real fitted xterm size before sending `attach`, so shared PTYs are never briefly resized to fallback `80x24` before replay
 - Dev attach replay diagnostics — `ready` now reports replay bytes/line breaks/trim status, and the dev build exposes `window.__wt_attach_metrics.measureSession()` / `.measureAll()` so live sessions can be profiled by attach latency versus replay size without restarting the server
+- Snapshot attach ordering hardening — `ptyd` now tracks monotonic output sequence numbers plus a bounded live tail, and xterm reconnect waits for `snapshot-ready` -> local restore -> `snapshot-applied` -> ordered tail flush before live binary resumes
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
@@ -196,7 +198,7 @@ Missing / in progress:
 
 ## Known limitations
 
-**Sessions don't survive hard restarts.** PTY processes are OS child processes of the server — when the server process dies (crash, kill, machine reboot), the kernel sends SIGHUP to all children and they die. The `globalThis` trick only preserves sessions across Bun `--hot` module reloads (same process, module re-evaluated). True cross-restart persistence would require detaching PTYs into their own process group (like tmux does with `setsid`), which is a significant architectural change.
+**Sessions still do not survive full process or machine restarts.** PTYs now survive Bun web-server restarts because `ptyd` owns them, but `ptyd` itself is still a normal process. If the sidecar or machine dies, the PTYs die too. True boot-persistent sessions would require a stronger detached runtime model.
 
 **Some full-screen TUIs can intentionally wipe xterm scrollback during redraw (observed with Claude Code).** This can look like a random "flicker/scroll jump" bug where the viewport suddenly snaps and the `latest` button cannot stay at the bottom. In the observed case, the PTY stream included `CSI 2J` (clear screen), `CSI 3J` (clear scrollback), and `CSI H` (cursor home) in the **normal buffer** (not an attach/reconnect path, and not a client-side replay/reset bug). xterm.js is behaving correctly by collapsing scrollback and resetting the viewport after `CSI 3J`.
 
@@ -207,10 +209,6 @@ If this becomes a recurring UX issue, the safest mitigation is an **opt-in compa
 **Some redraw-heavy TUIs can also emit a broken resize redraw in the normal buffer (reproduced in ting.sh, xterm.js, ghostty-web, and native Ghostty).** The observed pattern after a PTY `resize` is: `CSI ? 2026 h` (synchronized output), then a very large run of blank `\\r\\r\\n` lines in the normal buffer, then only the bottom prompt/footer is redrawn before `CSI ? 2026 l`. This leaves the viewport sitting at the bottom of a blank block, which looks like “the whole upper terminal went black after resize.”
 
 This is not currently believed to be a ting.sh renderer bug. Debouncing browser-driven resize storms helps reduce how often a TUI gets kicked into that path, but once the app emits the broken redraw, browsers and native terminals alike appear to render it faithfully.
-
-The filter only engages for synchronized-output batches (`?2026h ... ?2026l`) shortly after a real PTY resize and only drops batches dominated by the pathological blank `\r\r\n` pattern. Trade-off: this is still protocol surgery against a specific app behavior, so it could suppress a legitimate full-screen redraw from another TUI if the heuristic is too broad.
-
-There is also a small header `CC` toggle that flips the same setting and reloads the page.
 
 ## Future ideas
 

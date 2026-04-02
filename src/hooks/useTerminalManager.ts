@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react'
 import type { SessionKey } from '../types'
 import { createTerminalBackend, type TerminalRenderer } from '../terminal/backends'
 import type { DebuggableTerminalBackendInstance, TerminalBackendInstance, TerminalScrollState } from '../terminal/backends/types'
+import type { XtermVtSnapshot } from '../snapshot/xtermVtSnapshot'
 
 interface PendingWrite {
   data: Uint8Array
@@ -215,6 +216,21 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
     })
   }, [emitScrollState, ensureEntry, ensureTerminalInstance])
 
+  const restoreSnapshot = useCallback((sessionKey: SessionKey, snapshot: XtermVtSnapshot, onFlushed?: () => void) => {
+    const entry = ensureEntry(sessionKey)
+    entry.pendingWrites = []
+    ensureTerminalInstance(sessionKey, entry)
+    if (!entry.terminal || !entry.terminal.isOpened() || !entry.terminal.restoreSnapshot) {
+      return false
+    }
+    entry.pendingReset = false
+    entry.terminal.restoreSnapshot(snapshot, () => {
+      emitScrollState(sessionKey)
+      onFlushed?.()
+    })
+    return true
+  }, [emitScrollState, ensureEntry, ensureTerminalInstance])
+
   const reset = useCallback((sessionKey: SessionKey) => {
     const entry = ensureEntry(sessionKey)
     entry.pendingWrites = []
@@ -295,7 +311,7 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
   // this memo never re-computes. Without this, effects in App.tsx that list
   // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ primeTerminal, ensureTerminal, setActive, write, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy }),
-    [primeTerminal, ensureTerminal, setActive, write, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, destroy]
   )
 }

@@ -10,10 +10,19 @@ import { persistTerminalRenderer, resolveTerminalRenderer } from './terminal/ren
 import type { TerminalRenderer } from './terminal/backends'
 import type { ConnectionStatus, Host, Session, SessionKey } from './types'
 import { makeKey, parseKey } from './types'
+import type { XtermVtSnapshot } from './snapshot/xtermVtSnapshot'
 import './App.css'
 
 const LEGACY_LOCAL_HOST_ID = 'local'
 type PendingRequest = { hostId: string; requestId: string; kind: 'attach' | 'create' }
+type PendingSnapshotAttach = {
+  key: SessionKey
+  hostId: string
+  sessionId: string
+  sessionName: string
+  requestId: string
+  cutSeq: number
+}
 type SessionOrderByHost = Record<string, string[]>
 type AttachReplayMetric = {
   key: SessionKey
@@ -119,6 +128,16 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
 
 const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
 const TERMINAL_RESIZE_SETTLE_MS = 150
+const SNAPSHOT_ATTACH_ENABLED = import.meta.env.VITE_SNAPSHOT_ATTACH !== 'false'
+
+function decodeBase64Utf8(value: string): Uint8Array {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
 
 export function App() {
   const [terminalRenderer] = useState<TerminalRenderer>(() => resolveTerminalRenderer())
@@ -148,6 +167,7 @@ export function App() {
   // Latest in-flight attach request. Older ready responses are ignored.
   const pendingRequestRef = useRef<PendingRequest | null>(null)
   const pendingAttachTargetKeyRef = useRef<SessionKey | null>(null)
+  const pendingSnapshotAttachRef = useRef<PendingSnapshotAttach | null>(null)
   const queuedAttachKeyRef = useRef<SessionKey | null>(null)
   const nextRequestSeqRef = useRef(0)
   // When we ignore a stale attach ready, drop binary until the newest attach
@@ -314,20 +334,7 @@ export function App() {
     }
     const shouldScrollToBottom = scrollToBottomAfterAttachBinaryRef.current === key
     tm.write(key, data, shouldScrollToBottom
-      ? () => {
-          const currentMetric = latestAttachMetricByKeyRef.current.get(key)
-          if (currentMetric && currentMetric.firstWriteFlushAt === null) {
-            updateAttachMetric({ ...currentMetric, firstWriteFlushAt: performance.now() })
-          }
-          if (scrollToBottomAfterAttachBinaryRef.current !== key) return
-          scrollToBottomAfterAttachBinaryRef.current = null
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (currentKeyRef.current !== key) return
-              tm.scrollToBottom(key)
-            })
-          })
-        }
+      ? () => handleAttachWriteFlushed(key)
       : () => {
           const currentMetric = latestAttachMetricByKeyRef.current.get(key)
           if (currentMetric && currentMetric.firstWriteFlushAt === null) {
@@ -403,6 +410,21 @@ export function App() {
       })
     },
   }, { backendId: terminalRenderer })
+
+  function handleAttachWriteFlushed(key: SessionKey) {
+    const currentMetric = latestAttachMetricByKeyRef.current.get(key)
+    if (currentMetric && currentMetric.firstWriteFlushAt === null) {
+      updateAttachMetric({ ...currentMetric, firstWriteFlushAt: performance.now() })
+    }
+    if (scrollToBottomAfterAttachBinaryRef.current !== key) return
+    scrollToBottomAfterAttachBinaryRef.current = null
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (currentKeyRef.current !== key) return
+        tm.scrollToBottom(key)
+      })
+    })
+  }
 
   useEffect(() => {
     return () => {
@@ -482,6 +504,14 @@ export function App() {
     currentKeyRef.current = remapSessionKeyHost(currentKeyRef.current, connectionHostId, nextLocalId)
     attachedKeyRef.current = remapSessionKeyHost(attachedKeyRef.current, connectionHostId, nextLocalId)
     pendingAttachTargetKeyRef.current = remapSessionKeyHost(pendingAttachTargetKeyRef.current, connectionHostId, nextLocalId)
+    if (pendingSnapshotAttachRef.current) {
+      const mappedKey = remapSessionKeyHost(pendingSnapshotAttachRef.current.key, connectionHostId, nextLocalId)
+      pendingSnapshotAttachRef.current = mappedKey ? {
+        ...pendingSnapshotAttachRef.current,
+        key: mappedKey,
+        hostId: parseKey(mappedKey).hostId,
+      } : null
+    }
     duplicateSourceKeyRef.current = remapSessionKeyHost(duplicateSourceKeyRef.current, connectionHostId, nextLocalId)
     setCurrentKey(prev => remapSessionKeyHost(prev, connectionHostId, nextLocalId))
     setKillTargetKey(prev => remapSessionKeyHost(prev, connectionHostId, nextLocalId))
@@ -521,10 +551,12 @@ export function App() {
     updateAttachMetric(metric)
     pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
     pendingAttachTargetKeyRef.current = key
+    pendingSnapshotAttachRef.current = null
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
-    sendToHost(hostId, { type: 'attach', id: sessionId, requestId, ...dims })
-  }, [getSessionByKey, sendToHost, updateAttachMetric])
+    const useSnapshotAttach = SNAPSHOT_ATTACH_ENABLED && terminalRenderer === 'xterm'
+    sendToHost(hostId, { type: useSnapshotAttach ? 'attach-snapshot' : 'attach', id: sessionId, requestId, ...dims })
+  }, [getSessionByKey, sendToHost, terminalRenderer, updateAttachMetric])
 
   const prepareTerminalForAttach = useCallback((key: SessionKey) => {
     const container = containerRefs.current.get(key)
@@ -889,6 +921,9 @@ export function App() {
         if (pendingRequestRef.current?.hostId === host.id) {
           pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
+          if (pendingSnapshotAttachRef.current?.hostId === host.id) {
+            pendingSnapshotAttachRef.current = null
+          }
           if (queuedAttachKeyRef.current && parseKey(queuedAttachKeyRef.current).hostId === host.id) {
             queuedAttachKeyRef.current = null
           }
@@ -1103,6 +1138,98 @@ export function App() {
         break
       }
 
+      case 'snapshot-ready': {
+        const id = m.id as string
+        const name = m.name as string
+        const requestId = typeof m.requestId === 'string' ? m.requestId : null
+        const pending = pendingRequestRef.current
+        if (!requestId || !pending || pending.kind !== 'attach') return
+        if (requestId !== pending.requestId || pending.hostId !== hostId) {
+          dropBinaryUntilReadyRef.current = true
+          return
+        }
+        pendingRequestRef.current = null
+        let key: SessionKey | null = pendingAttachTargetKeyRef.current
+        pendingAttachTargetKeyRef.current = null
+        dropBinaryUntilReadyRef.current = false
+        if (!key) key = makeKey(hostId, id)
+
+        const snapshot = m.snapshot as XtermVtSnapshot | undefined
+        const cutSeq = typeof m.cutSeq === 'number' && Number.isFinite(m.cutSeq) ? Math.max(0, Math.floor(m.cutSeq)) : 0
+        if (!snapshot || snapshot.format !== 'xterm-vt-snapshot-v1' || typeof snapshot.payload !== 'string') {
+          sendToHost(hostId, { type: 'attach', id, requestId, cols: tm.getDimensions(key).cols, rows: tm.getDimensions(key).rows })
+          pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
+          pendingAttachTargetKeyRef.current = key
+          return
+        }
+
+        const readyAt = performance.now()
+        const metric = attachMetricsByRequestIdRef.current.get(requestId)
+        if (metric) {
+          updateAttachMetric({
+            ...metric,
+            key,
+            hostId: parseKey(key).hostId,
+            sessionId: parseKey(key).sessionId,
+            sessionName: name,
+            readyAt,
+            firstByteAt: readyAt,
+            replayBytesExpected: snapshot.payload.length,
+            replayBytesReceived: snapshot.payload.length,
+            replayLineBreaks: metric.replayLineBreaks,
+            replayTrimmed: false,
+            replayReceivedAt: readyAt,
+          })
+        }
+
+        currentKeyRef.current = key
+        tm.primeTerminal(key)
+        setCurrentKey(key)
+        replaceHash(parseKey(key).hostId, name)
+
+        const restored = tm.restoreSnapshot(key, snapshot, () => handleAttachWriteFlushed(key))
+        if (!restored) {
+          pendingSnapshotAttachRef.current = null
+          sendToHost(hostId, { type: 'attach', id, requestId, cols: snapshot.cols, rows: snapshot.rows })
+          pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
+          pendingAttachTargetKeyRef.current = key
+          return
+        }
+
+        pendingSnapshotAttachRef.current = {
+          key,
+          hostId,
+          sessionId: id,
+          sessionName: name,
+          requestId,
+          cutSeq,
+        }
+        sendToHost(hostId, { type: 'snapshot-applied', id, requestId })
+        break
+      }
+
+      case 'snapshot-tail': {
+        const pending = pendingSnapshotAttachRef.current
+        const requestId = typeof m.requestId === 'string' ? m.requestId : null
+        if (!pending || requestId !== pending.requestId || hostId !== pending.hostId) return
+        if (m.id !== pending.sessionId || typeof m.data !== 'string') return
+        forwardTerminalBinary(pending.key, decodeBase64Utf8(m.data))
+        break
+      }
+
+      case 'snapshot-complete': {
+        const pending = pendingSnapshotAttachRef.current
+        const requestId = typeof m.requestId === 'string' ? m.requestId : null
+        if (!pending || requestId !== pending.requestId || hostId !== pending.hostId) return
+        if (m.id !== pending.sessionId) return
+        pendingSnapshotAttachRef.current = null
+        attachedKeyRef.current = pending.key
+        currentKeyRef.current = pending.key
+        setCurrentKey(pending.key)
+        replaceHash(parseKey(pending.key).hostId, pending.sessionName)
+        break
+      }
+
       case 'error': {
         const requestId = typeof m.requestId === 'string' ? m.requestId : null
         if (!requestId || requestId !== pendingRequestRef.current?.requestId || hostId !== pendingRequestRef.current.hostId) break
@@ -1135,6 +1262,9 @@ export function App() {
           pendingRequestRef.current = null
           pendingAttachTargetKeyRef.current = null
           dropBinaryUntilReadyRef.current = false
+        }
+        if (pendingSnapshotAttachRef.current?.key === key) {
+          pendingSnapshotAttachRef.current = null
         }
         if (queuedAttachKeyRef.current === key) {
           queuedAttachKeyRef.current = null
