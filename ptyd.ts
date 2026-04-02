@@ -4,10 +4,12 @@ import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
+import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
 import { captureRenderedTextSnapshot } from "./src/snapshot/renderedTextSnapshot";
 import type { TerminalSnapshot } from "./src/snapshot/types";
 import { LiveTailBuffer } from "./src/snapshot/liveTail";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
+import { renderedTextSnapshotToVt } from "./src/snapshot/renderedTextSnapshot";
 import { isGitBashShell, stripWindowsCwdControlFrames } from "./src/windowsShellIntegration";
 
 const PORT = resolvePtydPort();
@@ -126,6 +128,9 @@ function clearPendingSnapshot(ws: ServerWebSocket<WSData>): void {
 async function captureSessionDebugState(session: Session, includeRaw: boolean) {
   await session.snapshotWriteChain;
   const snapshot = session.snapshotTracker.capture();
+  const renderedTextSnapshot = captureRenderedTextSnapshot(session.snapshotTracker.terminal);
+  const canonicalSnapshot = captureCanonicalTerminalSnapshot(session.snapshotTracker.terminal);
+  const renderedTextVt = renderedTextSnapshotToVt(renderedTextSnapshot);
   return {
     id: session.id,
     name: session.name,
@@ -139,6 +144,9 @@ async function captureSessionDebugState(session: Session, includeRaw: boolean) {
     liveTailSeq: session.liveTail.latestSeq(),
     snapshotBytes: snapshot.payload.length,
     snapshot,
+    renderedTextSnapshotBytes: renderedTextVt.length,
+    renderedTextSnapshot,
+    canonicalSnapshot,
     ...(includeRaw ? { rawReplayBase64: session.buffer.toString("base64") } : {}),
   };
 }

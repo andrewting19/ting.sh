@@ -62,6 +62,7 @@
 - [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
+- [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal

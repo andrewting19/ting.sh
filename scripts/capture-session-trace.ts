@@ -14,12 +14,25 @@ interface DebugSessionCapture {
   liveTailBytes: number;
   liveTailSeq: number;
   snapshotBytes: number;
+  renderedTextSnapshotBytes: number;
   snapshot: {
     format: string;
     cols: number;
     rows: number;
     payload: string;
     capturedAt: number;
+  };
+  renderedTextSnapshot: {
+    format: string;
+    cols: number;
+    rows: number;
+    activeBuffer: string;
+  };
+  canonicalSnapshot: {
+    format: string;
+    cols: number;
+    rows: number;
+    activeBuffer: string;
   };
   rawReplayBase64?: string;
 }
@@ -51,6 +64,8 @@ console.log(JSON.stringify({
   snapshotSeq: capture.snapshotSeq,
   bufferBytes: capture.bufferBytes,
   snapshotBytes: capture.snapshotBytes,
+  renderedTextSnapshotBytes: capture.renderedTextSnapshotBytes,
+  activeBuffer: capture.renderedTextSnapshot.activeBuffer,
   liveTailBytes: capture.liveTailBytes,
   outputPath,
 }, null, 2));

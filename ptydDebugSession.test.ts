@@ -168,7 +168,10 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
       liveTailBytes: number;
       liveTailSeq: number;
       snapshotBytes: number;
+      renderedTextSnapshotBytes: number;
       snapshot: { format: string; payload: string };
+      renderedTextSnapshot: { format: string; activeBuffer: string };
+      canonicalSnapshot: { format: string; activeBuffer: string };
       rawReplayBase64?: string;
     };
 
@@ -179,7 +182,12 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
     expect(debug.liveTailSeq).toBe(debug.outputSeq);
     expect(debug.bufferBytes).toBeGreaterThan(0);
     expect(debug.snapshotBytes).toBeGreaterThan(0);
+    expect(debug.renderedTextSnapshotBytes).toBeGreaterThan(0);
     expect(debug.snapshot.format).toBe("xterm-vt-snapshot-v1");
+    expect(debug.renderedTextSnapshot.format).toBe("rendered-text-snapshot-v1");
+    expect(debug.canonicalSnapshot.format).toBe("canonical-terminal-snapshot-v1");
+    expect(debug.renderedTextSnapshot.activeBuffer).toBe("normal");
+    expect(debug.canonicalSnapshot.activeBuffer).toBe("normal");
     expect(debug.snapshot.payload).toContain(marker);
     expect(debug.bufferTrimmed).toBe(false);
     expect(debug.rawReplayBase64).toBeTruthy();

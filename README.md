@@ -168,6 +168,7 @@ Working:
 - Dev attach replay diagnostics — `ready` now reports replay bytes/line breaks/trim status, and the dev build exposes `window.__wt_attach_metrics.measureSession()` / `.measureAll()` so live sessions can be profiled by attach latency versus replay size without restarting the server
 - Snapshot attach ordering hardening — `ptyd` now tracks monotonic output sequence numbers plus a bounded live tail, and xterm reconnect waits for `snapshot-ready` -> local restore -> `snapshot-applied` -> ordered tail flush before live binary resumes
 - Local live-trace capture tooling — `ptyd` now exposes a localhost-only debug session dump and `bun run scripts/capture-session-trace.ts <session-id>` can persist a running session’s raw replay buffer plus serialized snapshot for offline analysis
+- Capture analysis tooling — `bun run scripts/analyze-session-capture.ts <capture-json>` summarizes raw replay vs xterm snapshot vs rendered-text snapshot size ratios from a saved live-session capture
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
