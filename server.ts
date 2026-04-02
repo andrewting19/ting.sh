@@ -235,6 +235,47 @@ const server = Bun.serve<WSData>({
     if (url.pathname === "/api/host") {
       return Response.json({ self: HOST_CONFIG.self, peers: HOST_CONFIG.peers });
     }
+    if (url.pathname === "/api/sidecar") {
+      await ensurePtyd();
+      try {
+        const res = await fetch(`${PTYD_HTTP_BASE_URL}/health`);
+        const health = await res.json() as Record<string, unknown>;
+        return Response.json({
+          baseUrl: PTYD_HTTP_BASE_URL,
+          wsUrl: PTYD_WS_URL,
+          port: PTYD_PORT,
+          health,
+        });
+      } catch {
+        return Response.json({
+          baseUrl: PTYD_HTTP_BASE_URL,
+          wsUrl: PTYD_WS_URL,
+          port: PTYD_PORT,
+          health: null,
+        }, { status: 502 });
+      }
+    }
+    if (url.pathname === "/api/debug/session") {
+      await ensurePtyd();
+      const id = url.searchParams.get("id");
+      if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
+      const includeRaw = url.searchParams.get("includeRaw");
+      const targetUrl = new URL(`${PTYD_HTTP_BASE_URL}/debug/session`);
+      targetUrl.searchParams.set("id", id);
+      if (includeRaw) targetUrl.searchParams.set("includeRaw", includeRaw);
+      try {
+        const res = await fetch(targetUrl);
+        const payload = await res.text();
+        return new Response(payload, {
+          status: res.status,
+          headers: {
+            "content-type": res.headers.get("content-type") ?? "application/json; charset=utf-8",
+          },
+        });
+      } catch {
+        return Response.json({ error: "Sidecar unavailable" }, { status: 502 });
+      }
+    }
 
     const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Bun.file(`./dist${filePath}`);

@@ -42,12 +42,33 @@ function usage(): never {
   process.exit(1);
 }
 
+function getServerBaseUrl(): string {
+  const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
+  const port = parseInt(process.env.SERVER_PORT?.trim() || process.env.PORT?.trim() || "7681", 10);
+  return `http://${host}:${port}`
+}
+
+async function fetchCapture(sessionId: string): Promise<Response> {
+  const serverUrl = new URL(`${getServerBaseUrl()}/api/debug/session`);
+  serverUrl.searchParams.set("id", sessionId);
+  serverUrl.searchParams.set("includeRaw", "1");
+  try {
+    const serverRes = await fetch(serverUrl);
+    if (serverRes.ok) return serverRes;
+    if (serverRes.status !== 404 && serverRes.status !== 502) return serverRes;
+  } catch {
+    // fall through to direct sidecar access
+  }
+
+  const ptydBaseUrl = getPtydHttpBaseUrl();
+  return await fetch(`${ptydBaseUrl}/debug/session?id=${encodeURIComponent(sessionId)}&includeRaw=1`);
+}
+
 const sessionId = process.argv[2];
 if (!sessionId) usage();
 
 const outputPath = resolve(process.argv[3] ?? `captures/session-${sessionId}-${Date.now()}.json`);
-const ptydBaseUrl = getPtydHttpBaseUrl();
-const res = await fetch(`${ptydBaseUrl}/debug/session?id=${encodeURIComponent(sessionId)}&includeRaw=1`);
+const res = await fetchCapture(sessionId);
 if (!res.ok) {
   console.error(`failed to capture session ${sessionId}: ${res.status} ${res.statusText}`);
   process.exit(1);

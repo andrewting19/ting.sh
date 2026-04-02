@@ -32,6 +32,10 @@ This document is the high-level execution plan for that work.
 - `ptyd` now also maintains monotonic output sequence numbers and a bounded live-tail buffer alongside the shadow snapshot tracker, so the remaining snapshot-attach work can build on real ordering/tail primitives instead of adding them later.
 - An initial xterm production rollout is now wired through the real app path: xterm reconnect requests `attach-snapshot`, restores the serialized VT snapshot locally, acknowledges with `snapshot-applied`, receives ordered `snapshot-tail` chunks, and only then transitions back to the live binary stream.
 - `ptyd` now also exposes a localhost-only debug session dump, and `scripts/capture-session-trace.ts` can persist a running session's raw replay buffer plus serialized snapshot for real-world trace analysis without restarting the app.
+- Synthetic benchmark baselines are now recorded:
+  - built-in `redraw`: `3464` raw bytes, `152` xterm snapshot bytes, `164` rendered-text bytes (`~22x` smaller than raw)
+  - built-in `alternate`: `590` raw bytes, `574` xterm snapshot bytes, `627` rendered-text bytes (roughly parity with raw)
+- Architectural implication from those baselines: snapshot attach clearly wins for redraw-heavy normal-buffer churn, but alternate-screen reconnect should not assume a large payload reduction and still needs fidelity-driven design rather than size-driven design.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty

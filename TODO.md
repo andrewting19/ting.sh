@@ -62,8 +62,10 @@
 - [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
+- [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
 - [x] Synthetic PTY trace benchmarking — `scripts/benchmark-pty-trace.ts` now reports raw-vs-snapshot size ratios for redraw-heavy and alternate-buffer scenarios without needing a live session
+- [x] Snapshot benchmark baseline recorded — synthetic `redraw` trace measured `3464` raw bytes vs `152` xterm-snapshot bytes and `164` rendered-text bytes (`~22x` smaller), while synthetic `alternate` measured `590` raw bytes vs `574` / `627` bytes (roughly parity)
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal
@@ -97,6 +99,7 @@
 
 ## Up next (in order)
 - [ ] Snapshot reconnect follow-up: validate headless xterm + serialize against real redraw-heavy agent traces, then design backend-specific restore adapters for Ghostty parity
+- [ ] Snapshot reconnect follow-up: decide Ghostty alternate-screen behavior after real-trace measurements; synthetic baseline says redraw-heavy normal-buffer churn compresses heavily under snapshots, but alternate-screen snapshots are near raw parity
 - [x] Dual-renderer PR 2: restore/finish xterm backend coverage behind the shared backend contract
 - [x] Dual-renderer PR 3: add Ghostty as a second backend behind the same contract
 - [x] Dual-renderer PR 4: startup renderer selection with controlled remount/reconnect semantics
