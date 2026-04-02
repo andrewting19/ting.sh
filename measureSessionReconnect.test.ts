@@ -228,3 +228,86 @@ test("measure-session-reconnect script reports raw and snapshot attach metrics",
     await terminateProcess(ptyd);
   }
 }, 60_000);
+
+test("measure-session-reconnect script can measure all live sessions", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  const wsUrl = `ws://127.0.0.1:${serverPort}/ws`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let client: WsHarness | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/host`);
+
+    client = new WsHarness(wsUrl);
+    await client.open();
+    await client.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-all-1", name: "all-one" });
+    const ready1 = await client.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-all-1",
+    );
+    client.sendJson({ type: "input", data: "printf 'all-one\\n'\r" });
+    await client.nextBinaryContaining("all-one");
+
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-all-2", name: "all-two" });
+    const ready2 = await client.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-all-2",
+    );
+    client.sendJson({ type: "input", data: "printf 'all-two\\n'\r" });
+    await client.nextBinaryContaining("all-two");
+
+    const measure = Bun.spawn([process.execPath, "run", "scripts/measure-session-reconnect.ts", "--all", "ghostty"], {
+      cwd: import.meta.dir,
+      env: {
+        ...process.env,
+        SERVER_PORT: String(serverPort),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(measure.stdout).text();
+    const stderr = await new Response(measure.stderr).text();
+    await measure.exited;
+    expect(measure.exitCode).toBe(0);
+    expect(stderr).toBe("");
+
+    const parsed = JSON.parse(stdout) as {
+      renderer: string;
+      sessionCount: number;
+      results: Array<{
+        sessionId: string;
+        sessionName: string;
+        raw: { replayBytesReceived: number };
+        snapshot: { backend: string | null; snapshotBytes: number | null };
+      }>;
+    };
+
+    expect(parsed.renderer).toBe("ghostty");
+    expect(parsed.sessionCount).toBeGreaterThanOrEqual(2);
+    expect(parsed.results.some((entry) => entry.sessionId === ready1.id && entry.sessionName === "all-one")).toBe(true);
+    expect(parsed.results.some((entry) => entry.sessionId === ready2.id && entry.sessionName === "all-two")).toBe(true);
+    expect(parsed.results.every((entry) => entry.raw.replayBytesReceived > 0)).toBe(true);
+    expect(parsed.results.every((entry) => entry.snapshot.snapshotBytes != null && entry.snapshot.snapshotBytes > 0)).toBe(true);
+  } finally {
+    client?.close();
+    await terminateProcess(server);
+    await terminateProcess(ptyd);
+  }
+}, 60_000);

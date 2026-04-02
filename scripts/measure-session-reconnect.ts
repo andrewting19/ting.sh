@@ -23,6 +23,11 @@ interface DebugSnapshotShape {
   rows?: number;
 }
 
+interface SessionListItem {
+  id: string;
+  name: string;
+}
+
 interface DebugSessionShape {
   snapshot?: DebugSnapshotShape;
   renderedTextSnapshot?: DebugSnapshotShape;
@@ -42,6 +47,7 @@ function getServerHttpUrl(): string {
 
 function usage(): never {
   console.error("usage: bun run scripts/measure-session-reconnect.ts <session-id> [renderer]");
+  console.error("   or: bun run scripts/measure-session-reconnect.ts --all [renderer]");
   process.exit(1);
 }
 
@@ -83,6 +89,67 @@ async function resolveAttachDimensions(sessionId: string): Promise<{ cols: numbe
     // fall back to historical default if debug metadata is unavailable
   }
   return { cols: 80, rows: 24 };
+}
+
+async function listSessions(): Promise<SessionListItem[]> {
+  const ws = new WebSocket(getServerWsUrl());
+
+  return await new Promise<SessionListItem[]>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors
+      }
+      reject(new Error("Timed out listing sessions"));
+    }, 10_000);
+
+    const finish = (value: SessionListItem[]) => {
+      clearTimeout(timeout);
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors
+      }
+      resolve(value);
+    };
+
+    const fail = (err: Error) => {
+      clearTimeout(timeout);
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors
+      }
+      reject(err);
+    };
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "list" }));
+    };
+
+    ws.onerror = () => {
+      fail(new Error("WebSocket failed while listing sessions"));
+    };
+
+    ws.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) return;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(String(event.data)) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      if (parsed.type !== "sessions" || !Array.isArray(parsed.list)) return;
+      const list = parsed.list.flatMap((item): SessionListItem[] => {
+        if (!item || typeof item !== "object") return [];
+        const record = item as Record<string, unknown>;
+        if (typeof record.id !== "string" || typeof record.name !== "string") return [];
+        return [{ id: record.id, name: record.name }];
+      });
+      finish(list);
+    };
+  });
 }
 
 async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
@@ -318,16 +385,40 @@ async function measureSnapshotAttach(sessionId: string, renderer: string): Promi
   });
 }
 
-const sessionId = process.argv[2];
-if (!sessionId) usage();
+const target = process.argv[2];
+if (!target) usage();
 
 const renderer = process.argv[3] ?? "xterm";
-const raw = await measureRawAttach(sessionId);
-const snapshot = await measureSnapshotAttach(sessionId, renderer);
 
-console.log(JSON.stringify({
-  sessionId,
-  renderer,
-  raw,
-  snapshot,
-}, null, 2));
+if (target === "--all") {
+  const sessions = await listSessions();
+  const results = [];
+  for (const session of sessions) {
+    const raw = await measureRawAttach(session.id);
+    const snapshot = await measureSnapshotAttach(session.id, renderer);
+    results.push({
+      sessionId: session.id,
+      sessionName: session.name,
+      renderer,
+      raw,
+      snapshot,
+    });
+  }
+
+  console.log(JSON.stringify({
+    renderer,
+    sessionCount: sessions.length,
+    results,
+  }, null, 2));
+} else {
+  const sessionId = target;
+  const raw = await measureRawAttach(sessionId);
+  const snapshot = await measureSnapshotAttach(sessionId, renderer);
+
+  console.log(JSON.stringify({
+    sessionId,
+    renderer,
+    raw,
+    snapshot,
+  }, null, 2));
+}
