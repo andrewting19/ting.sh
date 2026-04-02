@@ -61,6 +61,7 @@
 - [x] PTY sidecar foundation — Bun now proxies to local `ptyd`, and PTYs survive real Bun server restarts
 - [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
+- [x] Ghostty snapshot reconnect rollout — Ghostty reconnects now request snapshot attach too, using rendered-text restore for normal-buffer sessions and xterm VT restore for alternate-screen sessions
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace

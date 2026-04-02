@@ -555,7 +555,7 @@ export function App() {
     pendingSnapshotAttachRef.current = null
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
-    const useSnapshotAttach = SNAPSHOT_ATTACH_ENABLED && terminalRenderer === 'xterm'
+    const useSnapshotAttach = SNAPSHOT_ATTACH_ENABLED
     sendToHost(hostId, { type: useSnapshotAttach ? 'attach-snapshot' : 'attach', id: sessionId, requestId, renderer: terminalRenderer, ...dims })
   }, [getSessionByKey, sendToHost, terminalRenderer, updateAttachMetric])
 
