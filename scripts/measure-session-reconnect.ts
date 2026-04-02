@@ -146,7 +146,25 @@ async function measureRawAttach(sessionId: string): Promise<AttachMeasurement> {
       measurement.readyAt = now();
       measurement.sessionName = typeof parsed.name === "string" ? parsed.name : null;
       measurement.replayBytesExpected = typeof parsed.replayBytes === "number" ? parsed.replayBytes : null;
+      if ((measurement.replayBytesExpected ?? 0) === 0) {
+        finish();
+        return;
+      }
       armIdleCompletion();
+    };
+
+    const originalOnMessage = ws.onmessage;
+    ws.onmessage = (event) => {
+      originalOnMessage?.(event);
+      if (settled) return;
+      if (!(event.data instanceof ArrayBuffer)) return;
+      if (
+        measurement.replayBytesExpected !== null &&
+        measurement.replayBytesReceived >= measurement.replayBytesExpected
+      ) {
+        clearTimeout(timeout);
+        finish();
+      }
     };
   });
 }

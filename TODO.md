@@ -68,6 +68,7 @@
 - [x] Synthetic PTY trace benchmarking — `scripts/benchmark-pty-trace.ts` now reports raw-vs-snapshot size ratios for redraw-heavy and alternate-buffer scenarios without needing a live session
 - [x] Snapshot benchmark baseline recorded — synthetic `redraw` trace measured `3464` raw bytes vs `152` xterm-snapshot bytes and `164` rendered-text bytes (`~22x` smaller), while synthetic `alternate` measured `590` raw bytes vs `574` / `627` bytes (roughly parity)
 - [x] Live dev-server redraw baseline recorded — local `tracebench` session measured `8908` raw bytes vs `56` xterm-snapshot bytes and `107` Ghostty rendered-text bytes; local reconnect timing was ~`254ms` raw vs ~`11.6ms` xterm snapshot vs ~`1.7ms` Ghostty snapshot
+- [x] Live direct-PTY alternate-screen baseline recorded — non-tmux `altbench` measured `3214` raw replay vs `1372` xterm snapshot and `1524` Ghostty rendered-text bytes; on small direct alternate-screen sessions raw can be as fast or faster locally, so alternate-screen decisions must be driven by real app shape plus fidelity
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal

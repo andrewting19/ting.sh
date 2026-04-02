@@ -38,7 +38,10 @@ This document is the high-level execution plan for that work.
 - A live current-server redraw baseline is now also recorded:
   - `tracebench` session on the dev server: `8908` raw bytes, `56` xterm snapshot bytes, `107` rendered-text bytes
   - measured local reconnect timings on that session: about `254ms` raw, `11.6ms` xterm snapshot, `1.7ms` Ghostty rendered-text snapshot
-- Architectural implication from those baselines: snapshot attach clearly wins for redraw-heavy normal-buffer churn, but alternate-screen reconnect should not assume a large payload reduction and still needs fidelity-driven design rather than size-driven design.
+- A clean direct-PTY alternate-screen baseline is now also recorded:
+  - `altbench` session on the dev server: `3214` raw bytes, `1372` xterm snapshot bytes, `1524` rendered-text bytes
+  - local protocol timings on that small session were slightly better for raw attach than snapshot attach
+- Architectural implication from those baselines: snapshot attach clearly wins for redraw-heavy normal-buffer churn, but direct alternate-screen sessions do not necessarily compress enough to make snapshot reconnect an automatic performance win. Ghostty alternate-screen still needs a fidelity-first decision informed by real app traces rather than by one generic payload heuristic.
 - The biggest remaining unknowns are:
   - fidelity against real redraw-heavy traces from coding-agent TUIs
   - restore parity in Ghostty
