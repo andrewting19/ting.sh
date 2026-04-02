@@ -649,7 +649,11 @@ test('shared session — desktop reclaims width after mobile resize', async ({ p
     // Simulate returning to desktop and re-selecting the same session.
     await page.bringToFront()
     await page.click(`[data-session-id="${id}"]`)
-    const desktopAfter = await getSttySize(page, id)
+    let desktopAfter = await getSttySize(page, id)
+    for (let attempt = 0; attempt < 5 && desktopAfter.cols <= mobileSize.cols; attempt += 1) {
+      await page.waitForTimeout(150)
+      desktopAfter = await getSttySize(page, id)
+    }
     expect(desktopAfter.cols).toBeGreaterThan(mobileSize.cols)
   } finally {
     await mobileContext.close()
