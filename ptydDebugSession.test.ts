@@ -197,3 +197,51 @@ test("ptyd debug session endpoint returns consistent snapshot and raw replay", a
     await terminateProcess(ptyd);
   }
 }, 60_000);
+
+test("ptyd debug session snapshots preserve UTF-8 box drawing glyphs", async () => {
+  const ptydPort = await getFreePort();
+  const ptydBaseUrl = `http://127.0.0.1:${ptydPort}`;
+  const wsUrl = `ws://127.0.0.1:${ptydPort}/ws`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let client: WsHarness | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${ptydBaseUrl}/health`);
+
+    client = new WsHarness(wsUrl);
+    await client.open();
+    client.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-utf8" });
+    const ready = await client.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-utf8",
+    );
+
+    client.sendJson({ type: "input", data: "printf '╭────╮\\r\\n│ menu │\\r\\n╰────╯\\r\\n'\r" });
+    await client.nextBinaryContaining("╭────╮");
+
+    const res = await fetch(`${ptydBaseUrl}/debug/session?id=${encodeURIComponent(ready.id)}&includeRaw=1`);
+    expect(res.ok).toBe(true);
+    const debug = await res.json() as {
+      snapshot: { payload: string };
+      renderedTextSnapshot: { normalLines: Array<{ text: string }> };
+      rawReplayBase64?: string;
+    };
+
+    const raw = Buffer.from(debug.rawReplayBase64 ?? "", "base64").toString("utf8");
+    const renderedText = JSON.stringify(debug.renderedTextSnapshot);
+    expect(raw).toContain("╭────╮");
+    expect(debug.snapshot.payload).toContain("╭────╮");
+    expect(renderedText).toContain("╭────╮");
+    expect(debug.snapshot.payload).not.toContain("â");
+    expect(renderedText).not.toContain("â");
+  } finally {
+    client?.close();
+    await terminateProcess(ptyd);
+  }
+}, 60_000);
