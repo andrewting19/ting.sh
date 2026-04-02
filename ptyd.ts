@@ -490,8 +490,9 @@ const server = Bun.serve<WSData>({
           const rows = asPositiveInt(data.rows);
           if (cols && rows) applySessionResize(target, cols, rows);
           await target.snapshotWriteChain;
+          const renderedSnapshot = captureRenderedTextSnapshot(target.snapshotTracker.terminal);
           const snapshot: TerminalSnapshot = renderer === "ghostty"
-            ? captureRenderedTextSnapshot(target.snapshotTracker.terminal)
+            ? (renderedSnapshot.activeBuffer === "alternate" ? target.snapshotTracker.capture() : renderedSnapshot)
             : target.snapshotTracker.capture();
           const cutSeq = target.snapshotSeq;
           ws.data.sessionId = null;

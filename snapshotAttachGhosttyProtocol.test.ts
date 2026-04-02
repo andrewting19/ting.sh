@@ -194,3 +194,71 @@ test("ghostty attach-snapshot returns rendered-text snapshot payload", async () 
     await terminateProcess(ptyd);
   }
 }, 60_000);
+
+test("ghostty attach-snapshot returns xterm VT snapshot for alternate-screen sessions", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  const wsUrl = `ws://127.0.0.1:${serverPort}/ws`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let writer: WsHarness | null = null;
+  let reader: WsHarness | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/host`);
+
+    writer = new WsHarness(wsUrl);
+    await writer.open();
+    await writer.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+    writer.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-alt" });
+    const ready = await writer.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-alt",
+    );
+    const sessionId = ready.id;
+
+    writer.sendJson({
+      type: "input",
+      data: "printf 'normal-1\\nnormal-2\\n'; printf '\\033[?1049h\\033[2J\\033[HALT HEADER\\nstatus: running'; printf '\\033[4;6Hcursor-here'\r",
+    });
+    await writer.nextBinaryContaining("ALT HEADER");
+
+    reader = new WsHarness(wsUrl);
+    await reader.open();
+    await reader.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+    reader.sendJson({ type: "attach-snapshot", id: sessionId, cols: 80, rows: 24, requestId: "snap-alt", renderer: "ghostty" });
+    const snapshotReady = await reader.nextJsonWhere<{
+      type: string;
+      backend: string;
+      snapshot: {
+        format: string;
+        payload: string;
+      };
+      requestId?: string;
+    }>((msg) => msg.type === "snapshot-ready" && msg.requestId === "snap-alt");
+
+    expect(snapshotReady.backend).toBe("xterm-vt-snapshot-v1");
+    expect(snapshotReady.snapshot.format).toBe("xterm-vt-snapshot-v1");
+    expect(snapshotReady.snapshot.payload).toContain("ALT HEADER");
+    expect(snapshotReady.snapshot.payload).toContain("cursor-here");
+  } finally {
+    writer?.close();
+    reader?.close();
+    await terminateProcess(server);
+    await terminateProcess(ptyd);
+  }
+}, 60_000);

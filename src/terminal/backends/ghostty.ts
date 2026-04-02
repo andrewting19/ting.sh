@@ -248,12 +248,20 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
   }
 
   restoreSnapshot(snapshot: TerminalSnapshot, onFlushed?: () => void) {
-    if (snapshot.format !== 'rendered-text-snapshot-v1') return false
-    if (snapshot.activeBuffer !== 'normal') return false
+    const isXtermVt = snapshot.format === 'xterm-vt-snapshot-v1'
+    const isNormalRenderedText = snapshot.format === 'rendered-text-snapshot-v1' && snapshot.activeBuffer === 'normal'
+    if (!isXtermVt && !isNormalRenderedText) return false
+
     this.term.reset()
     if (this.term.cols !== snapshot.cols || this.term.rows !== snapshot.rows) {
       this.term.resize(snapshot.cols, snapshot.rows)
     }
+
+    if (isXtermVt) {
+      this.term.write(snapshot.payload, onFlushed)
+      return true
+    }
+
     this.term.write(renderedTextSnapshotToVt(snapshot), onFlushed)
     return true
   }

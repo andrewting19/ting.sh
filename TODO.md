@@ -3,7 +3,7 @@
 ## Bugs (lower priority)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
 - [ ] Optimize large attach replay path for remote clients — current diagnostics show session attach time scales primarily with replay bytes (often the full ~10MB cap) rather than the control-plane handshake; likely options are chunked replay, a lower warm-attach cap, or a staged "recent viewport first, deep scrollback later" strategy
-- [ ] Ghostty snapshot reconnect parity — normal-buffer sessions now restore from rendered-text snapshots, but alternate-screen reconnect still falls back to raw attach and full parity is not there yet
+- [ ] Ghostty snapshot reconnect parity — Ghostty now restores normal-buffer sessions from rendered-text snapshots and alternate-screen sessions from xterm VT snapshots, but full parity is still not there yet
 - [ ] Validate snapshot reconnect against real redraw-heavy agent traces (Claude Code / Codex / resize-heavy TUI captures) and measure payload sizes versus current raw replay
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
@@ -73,6 +73,7 @@
 - [x] Live agent-TUI baselines recorded — `Jax` and `Viego` Codex/Claude-style sessions measured only moderate snapshot shrinkage (`~1.8x` to `~3.2x`), which is more representative than the tiny synthetic redraw baseline
 - [x] Resize-heavy synthetic baseline recorded — the built-in `resize` trace now applies explicit PTY resize events and still shows normal-buffer snapshot compression (`471` raw bytes versus `88` xterm snapshot bytes and `100` rendered-text bytes)
 - [x] Resize-aware live trace capture — `ptyd` debug captures now include bounded ordered trace events so real sessions can preserve raw chunk boundaries plus explicit PTY resizes for offline analysis
+- [x] Ghostty alternate-screen snapshot attach — Ghostty no longer raw-fallbacks alternate-screen reconnects; the sidecar now sends xterm VT snapshots for alternate-screen state and the Ghostty backend restores them directly
 - [x] Snapshot mojibake fix — snapshot capture now uses streaming UTF-8 decode instead of `latin1`, preserving box-drawing glyphs in agent-TUI snapshots (existing live sessions still need a sidecar restart to pick up the fix)
 - [x] Live UTF-8 snapshot verification — after restarting `ptyd`, a fresh `utf8check` session confirmed that both snapshot paths preserve box-drawing glyphs with no mojibake
 - [x] Stale sidecar detection — `/api/sidecar` now exposes runtime-vs-disk fingerprint mismatch and the dev header shows a `stale ptyd` badge when fixes are not yet active in the running sidecar
