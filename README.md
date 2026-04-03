@@ -123,6 +123,7 @@ Working:
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
 - Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using rendered-text snapshots for normal-buffer sessions and xterm VT snapshots for alternate-screen sessions
 - Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions: rendered-text snapshots for normal buffer, xterm VT snapshots for alternate screen
+- Shared-session snapshot handoff is now covered in protocol tests for both renderers — an already attached writer stays live while a second client snapshot-attaches, acknowledges the snapshot, and then both clients continue receiving subsequent PTY output
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
 - Multiple browser tabs can share the same session simultaneously

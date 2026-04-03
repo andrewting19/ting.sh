@@ -262,3 +262,72 @@ test("ghostty attach-snapshot returns xterm VT snapshot for alternate-screen ses
     await terminateProcess(ptyd);
   }
 }, 60_000);
+
+test("ghostty snapshot attach keeps shared sessions live for existing and newly attached clients", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  const wsUrl = `ws://127.0.0.1:${serverPort}/ws`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let writer: WsHarness | null = null;
+  let reader: WsHarness | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/host`);
+
+    writer = new WsHarness(wsUrl);
+    await writer.open();
+    await writer.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+    writer.sendJson({ type: "create", cols: 80, rows: 24, requestId: "create-shared-ghostty" });
+    const ready = await writer.nextJsonWhere<{ type: string; id: string }>(
+      (msg) => msg.type === "ready" && msg.requestId === "create-shared-ghostty",
+    );
+    const sessionId = ready.id;
+
+    const beforeMarker = `ghostty-shared-before-${Date.now()}`;
+    writer.sendJson({ type: "input", data: `printf '${beforeMarker}\\n'\r` });
+    await writer.nextBinaryContaining(beforeMarker);
+
+    reader = new WsHarness(wsUrl);
+    await reader.open();
+    await reader.nextJsonWhere<{ type: string }>((msg) => msg.type === "host-info");
+    reader.sendJson({ type: "attach-snapshot", id: sessionId, cols: 80, rows: 24, requestId: "snap-shared-ghostty", renderer: "ghostty" });
+    const snapshotReady = await reader.nextJsonWhere<{
+      type: string;
+      id: string;
+      backend: string;
+      requestId?: string;
+    }>((msg) => msg.type === "snapshot-ready" && msg.requestId === "snap-shared-ghostty");
+    expect(snapshotReady.backend === "rendered-text-snapshot-v1" || snapshotReady.backend === "xterm-vt-snapshot-v1").toBe(true);
+
+    reader.sendJson({ type: "snapshot-applied", id: sessionId, requestId: "snap-shared-ghostty" });
+    await reader.nextJsonWhere<{ type: string; requestId?: string }>(
+      (msg) => msg.type === "snapshot-complete" && msg.requestId === "snap-shared-ghostty",
+    );
+
+    const afterMarker = `ghostty-shared-after-${Date.now()}`;
+    writer.sendJson({ type: "input", data: `printf '${afterMarker}\\n'\r` });
+    await writer.nextBinaryContaining(afterMarker);
+    await reader.nextBinaryContaining(afterMarker);
+  } finally {
+    writer?.close();
+    reader?.close();
+    await terminateProcess(server);
+    await terminateProcess(ptyd);
+  }
+}, 60_000);

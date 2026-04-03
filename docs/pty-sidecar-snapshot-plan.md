@@ -13,6 +13,7 @@ The original foundation work is complete:
   - normal-buffer sessions from `rendered-text-snapshot-v1`
   - alternate-screen sessions from `xterm-vt-snapshot-v1`
 - Ordered live-tail handoff is implemented with `snapshot-ready` / `snapshot-applied` / `snapshot-tail` / `snapshot-complete`
+- Shared-session snapshot handoff is covered for both renderers, including a writer that stays attached while a second client joins via snapshot attach and both continue receiving subsequent PTY output
 - Rich live-session study tooling now exists:
   - batch capture
   - batch reconnect measurement
@@ -104,7 +105,7 @@ Success criteria:
 - [ ] Record more real normal-buffer baselines from live Claude/Codex-style sessions
 - [ ] Record more real alternate-screen baselines from live sessions
 - [ ] Validate reconnect behavior on iPad/Tailscale against the updated snapshot path
-- [ ] Validate multi-client/shared-session behavior under the current snapshot path
+- [x] Validate multi-client/shared-session behavior under the current snapshot path
 - [ ] Identify the highest-value remaining Ghostty parity issue from real traces
 - [ ] Implement the next Ghostty parity fix if a concrete issue is found
 - [ ] Decide whether deep readable history is needed now

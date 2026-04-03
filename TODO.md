@@ -84,6 +84,7 @@
 - [x] History semantics documented — reconnect state, immediate scrollback, and optional deeper readable history are now explicitly separated in `docs/history-semantics.md`
 - [x] Sidecar/snapshot plan refreshed — `docs/pty-sidecar-snapshot-plan.md` now tracks current state plus the actual remaining work instead of the already-completed foundation phases
 - [x] Ghostty alternate-screen snapshot attach — Ghostty no longer raw-fallbacks alternate-screen reconnects; the sidecar now sends xterm VT snapshots for alternate-screen state and the Ghostty backend restores them directly
+- [x] Shared-session snapshot handoff coverage — protocol tests now prove an existing attached client keeps receiving live output while a second client snapshot-attaches and joins the same session on both xterm and Ghostty paths
 - [x] Snapshot mojibake fix — snapshot capture now uses streaming UTF-8 decode instead of `latin1`, preserving box-drawing glyphs in agent-TUI snapshots (existing live sessions still need a sidecar restart to pick up the fix)
 - [x] Live UTF-8 snapshot verification — after restarting `ptyd`, a fresh `utf8check` session confirmed that both snapshot paths preserve box-drawing glyphs with no mojibake
 - [x] Stale sidecar detection — `/api/sidecar` now exposes runtime-vs-disk fingerprint mismatch and the dev header shows a `stale ptyd` badge when fixes are not yet active in the running sidecar
