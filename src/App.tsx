@@ -699,6 +699,13 @@ export function App() {
         results,
       }
     }
+    const copyJson = async (value: unknown) => {
+      const text = JSON.stringify(value, null, 2)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      }
+      return text
+    }
     ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)
     ;(window as any).__wt_ws_close = () => forceClose(localHostId)
     ;(window as any).__wt_get_attached_id = () => {
@@ -828,7 +835,19 @@ export function App() {
         console.log(report)
         return report
       },
-      help: 'Use sessions(), compareCurrent(), compareSession(id), measureSession(id, { mode }), measureAll(), compareAll(), studyCurrent(), or studyAll() from the browser console.',
+      copyStudyCurrent: async (options?: { pauseMs?: number; timeoutMs?: number }) => {
+        const report = await buildStudyReport('current', options)
+        const text = await copyJson(report)
+        console.log(report)
+        return text
+      },
+      copyStudyAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
+        const report = await buildStudyReport('all', options)
+        const text = await copyJson(report)
+        console.log(report)
+        return text
+      },
+      help: 'Use sessions(), compareCurrent(), compareSession(id), measureSession(id, { mode }), measureAll(), compareAll(), studyCurrent(), studyAll(), copyStudyCurrent(), or copyStudyAll() from the browser console.',
     }
   }, [forceClose, getSessionByKey, hosts, localHostId, sendAttachRequest, sendToHost, syncSessionSize, terminalRenderer, tm])
 
