@@ -23,6 +23,7 @@ type PendingSnapshotAttach = {
   requestId: string
   cutSeq: number
 }
+type AttachMode = 'raw' | 'snapshot'
 type SessionOrderByHost = Record<string, string[]>
 type AttachReplayMetric = {
   key: SessionKey
@@ -40,6 +41,8 @@ type AttachReplayMetric = {
   replayTrimmed: boolean
   replayBytesReceived: number
   replayChunkCount: number
+  attachMode: AttachMode
+  snapshotBackend: string | null
 }
 
 const LEGACY_SESSION_ORDER_KEY = 'wt-session-order'
@@ -529,7 +532,7 @@ export function App() {
     }
   }, [hosts, tm])
 
-  const sendAttachRequest = useCallback((key: SessionKey, dims: { cols: number; rows: number }) => {
+  const sendAttachRequest = useCallback((key: SessionKey, dims: { cols: number; rows: number }, mode: AttachMode = 'snapshot') => {
     const requestId = `attach-${++nextRequestSeqRef.current}`
     const { hostId, sessionId } = parseKey(key)
     const metric: AttachReplayMetric = {
@@ -548,6 +551,8 @@ export function App() {
       replayTrimmed: false,
       replayBytesReceived: 0,
       replayChunkCount: 0,
+      attachMode: mode,
+      snapshotBackend: null,
     }
     updateAttachMetric(metric)
     pendingRequestRef.current = { hostId, requestId, kind: 'attach' }
@@ -555,7 +560,7 @@ export function App() {
     pendingSnapshotAttachRef.current = null
     dropBinaryUntilReadyRef.current = false
     scrollToBottomAfterAttachBinaryRef.current = key
-    const useSnapshotAttach = SNAPSHOT_ATTACH_ENABLED
+    const useSnapshotAttach = mode === 'snapshot' && SNAPSHOT_ATTACH_ENABLED
     sendToHost(hostId, { type: useSnapshotAttach ? 'attach-snapshot' : 'attach', id: sessionId, requestId, renderer: terminalRenderer, ...dims })
   }, [getSessionByKey, sendToHost, terminalRenderer, updateAttachMetric])
 
@@ -613,6 +618,8 @@ export function App() {
       return targets
     }
     const summarizeAttachMetric = (metric: AttachReplayMetric) => ({
+      attachMode: metric.attachMode,
+      snapshotBackend: metric.snapshotBackend,
       hostId: metric.hostId,
       sessionId: metric.sessionId,
       sessionName: metric.sessionName,
@@ -730,19 +737,39 @@ export function App() {
           .sort((a, b) => b.requestedAt - a.requestedAt)
           .map(summarizeAttachMetric)
       },
-      measureSession: async (rawId: string, options?: { timeoutMs?: number }) => {
+      measureSession: async (rawId: string, options?: { timeoutMs?: number; mode?: AttachMode }) => {
         const key = resolveTerminalKey(rawId)
         if (!key) throw new Error(`Unknown session: ${rawId}`)
         const startedAfter = performance.now()
-        attachSessionRef.current(key)
+        const dims = syncSessionSize(key)
+        if (!dims) throw new Error(`Terminal not ready for attach: ${rawId}`)
+        sendAttachRequest(key, dims, options?.mode ?? 'snapshot')
         return await waitForAttachMetric(key, startedAfter, options?.timeoutMs ?? 60_000)
+      },
+      compareSession: async (rawId: string, options?: { timeoutMs?: number; pauseMs?: number }) => {
+        const raw = await (window as any).__wt_attach_metrics.measureSession(rawId, {
+          timeoutMs: options?.timeoutMs,
+          mode: 'raw',
+        })
+        if ((options?.pauseMs ?? 150) > 0) {
+          await new Promise(resolve => window.setTimeout(resolve, options?.pauseMs ?? 150))
+        }
+        const snapshot = await (window as any).__wt_attach_metrics.measureSession(rawId, {
+          timeoutMs: options?.timeoutMs,
+          mode: 'snapshot',
+        })
+        const result = { raw, snapshot }
+        console.table([raw, snapshot])
+        return result
       },
       measureAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
         const rows = []
         const targets = getOrderedSessionTargets(options?.hostId)
         for (const target of targets) {
           const startedAfter = performance.now()
-          attachSessionRef.current(target.key)
+          const dims = syncSessionSize(target.key)
+          if (!dims) throw new Error(`Terminal not ready for attach: ${target.sessionName}`)
+          sendAttachRequest(target.key, dims, 'snapshot')
           rows.push(await waitForAttachMetric(target.key, startedAfter, options?.timeoutMs ?? 60_000))
           if ((options?.pauseMs ?? 150) > 0) {
             await new Promise(resolve => window.setTimeout(resolve, options?.pauseMs ?? 150))
@@ -751,9 +778,17 @@ export function App() {
         console.table(rows)
         return rows
       },
-      help: 'Use __wt_attach_metrics.measureAll() for all sessions or __wt_attach_metrics.measureSession(sessionId).',
+      compareAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
+        const rows = []
+        const targets = getOrderedSessionTargets(options?.hostId)
+        for (const target of targets) {
+          rows.push(await (window as any).__wt_attach_metrics.compareSession(target.sessionId, options))
+        }
+        return rows
+      },
+      help: 'Use measureSession(id, { mode }), compareSession(id), measureAll(), or compareAll() from the browser console.',
     }
-  }, [forceClose, getSessionByKey, hosts, localHostId, sendToHost, terminalRenderer, tm])
+  }, [forceClose, getSessionByKey, hosts, localHostId, sendAttachRequest, sendToHost, syncSessionSize, terminalRenderer, tm])
 
   const toWsUrl = useCallback((baseUrl: string) => {
     const next = new URL(baseUrl)
@@ -1131,6 +1166,7 @@ export function App() {
               replayLineBreaks,
               replayTrimmed,
               replayReceivedAt: replayBytes === 0 ? readyAt : metric.replayReceivedAt,
+              snapshotBackend: null,
             })
           }
         }
@@ -1207,6 +1243,7 @@ export function App() {
               replayLineBreaks: metric.replayLineBreaks,
               replayTrimmed: false,
               replayReceivedAt: readyAt,
+              snapshotBackend: typeof m.backend === 'string' ? m.backend : null,
           })
         }
 

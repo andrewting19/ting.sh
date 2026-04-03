@@ -67,6 +67,7 @@
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
 - [x] Reconnect measurement helper — `scripts/measure-session-reconnect.ts` compares raw attach versus snapshot attach against the active server and reports payload/timing metrics
+- [x] Browser-side reconnect comparison helper — the dev build now exposes `window.__wt_attach_metrics.compareSession()` / `.compareAll()` so raw-vs-snapshot attach can be measured directly from a remote browser console during iPad/Tailscale validation
 - [x] Batch reconnect measurement helper — the same script now supports `--all` to measure every live session in one pass, which is more useful for real agent-trace validation
 - [x] One-shot live study workflow — `scripts/study-live-sessions.ts` now captures, measures, and summarizes all live sessions in one run, including side-by-side xterm and Ghostty mode via `both`
 - [x] Safer reconnect measurement for live shared sessions — the measurement script now reuses the session’s current snapshot dimensions instead of forcing `80x24`
