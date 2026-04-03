@@ -119,5 +119,5 @@ type SnapshotEnvelope = {
 
 1. Keep snapshot attach as the production reconnect path for both renderers.
 2. Continue measuring real redraw-heavy TUI traces against both Ghostty snapshot payload shapes.
-3. Improve Ghostty parity only where the current payload split still diverges from desired behavior.
-   Current concrete gap: rendered-text restore preserves visible content, semantic scrollback, and saved viewport position, but not xterm's exact normal-buffer baseY behavior across mixed normal/alternate-screen flows.
+3. Treat renderer-internal accounting differences carefully.
+   Current evidence suggests Ghostty's remaining xterm-vs-Ghostty `baseY` mismatch is an internal model difference, not a user-visible reconnect correctness issue.

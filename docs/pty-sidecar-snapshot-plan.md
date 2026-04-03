@@ -34,11 +34,10 @@ Supporting docs:
 
 ## What Is Still Unfinished
 
-The remaining work is no longer architectural foundation work. It is validation and parity work:
+The remaining work is no longer architectural foundation work. It is validation work:
 
 1. more real redraw-heavy agent-trace validation
-2. deeper Ghostty parity/fidelity work
-3. merging the accumulated branch work back to `main`
+2. final real-device / remote-network validation
 
 ## Remaining Plan
 
@@ -59,27 +58,15 @@ Current tools:
 - `bun run scripts/measure-session-reconnect.ts --all ghostty`
 - `bun run scripts/study-live-sessions.ts both <output-dir>`
 
-### 2. Ghostty Parity Refinement
+### 2. Final Validation / Cleanup
 
 Goal:
-- improve fidelity where Ghostty still diverges from xterm semantics
-
-Primary open area:
-- exact normal-buffer baseY semantics around rendered-text restore and mixed normal/alternate-screen redraw flows
-
-Success criteria:
-- real-session evidence shows remaining gaps clearly
-- fixes target actual user-visible divergence, not hypothetical parity
-
-### 3. Final Cutover / Cleanup
-
-Goal:
-- retire stale raw-replay assumptions and merge the branch work
+- retire stale raw-replay assumptions in docs and validate the finished reconnect path against the real environments that motivated this work
 
 Success criteria:
 - raw attach remains only where explicitly intended as compatibility/debug fallback
 - docs reflect the current architecture
-- branch is merged back to `main`
+- the current reconnect path is validated on real devices and remote links
 
 ## Remaining Checklist
 
@@ -88,11 +75,10 @@ Success criteria:
 - [ ] Record more real alternate-screen baselines from live sessions
 - [ ] Validate reconnect behavior on iPad/Tailscale against the updated snapshot path
 - [x] Validate multi-client/shared-session behavior under the current snapshot path
-- [ ] Identify the highest-value remaining Ghostty parity issue from real traces
-- [ ] Implement the next Ghostty parity fix if a concrete issue is found
+- [x] Identify the highest-value remaining Ghostty parity issue from real traces
+- [x] Implement the next Ghostty parity fix if a concrete issue is found
 - [x] Decide whether deep readable history is needed now
 - [x] Defer a separate readable-history store until real usage shows immediate snapshot scrollback is insufficient
-- [ ] Merge the branch work back to `main`
 
 ## Non-Negotiable Constraints
 
