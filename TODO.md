@@ -63,6 +63,7 @@
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
 - [x] Ghostty snapshot reconnect rollout — Ghostty reconnects now request snapshot attach too, using rendered-text restore for normal-buffer sessions and xterm VT restore for alternate-screen sessions
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
+- [x] Batch live-session trace export — the same script now supports `--all` to capture every live session in one pass
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
 - [x] Reconnect measurement helper — `scripts/measure-session-reconnect.ts` compares raw attach versus snapshot attach against the active server and reports payload/timing metrics
@@ -73,6 +74,7 @@
 - [x] Live dev-server redraw baseline recorded — local `tracebench` session measured `8908` raw bytes vs `56` xterm-snapshot bytes and `107` Ghostty rendered-text bytes; local reconnect timing was ~`254ms` raw vs ~`11.6ms` xterm snapshot vs ~`1.7ms` Ghostty snapshot
 - [x] Live direct-PTY alternate-screen baseline recorded — non-tmux `altbench` measured `3214` raw replay vs `1372` xterm snapshot and `1524` Ghostty rendered-text bytes; on small direct alternate-screen sessions raw can be as fast or faster locally, so alternate-screen decisions must be driven by real app shape plus fidelity
 - [x] Live agent-TUI baselines recorded — `Jax` and `Viego` Codex/Claude-style sessions measured only moderate snapshot shrinkage (`~1.8x` to `~3.2x`), which is more representative than the tiny synthetic redraw baseline
+- [x] Live alternate-screen agent baseline recorded — real `Tahm Kench` alternate-screen capture showed extreme payload shrinkage (`~95x` raw-to-xterm, `~160x` raw-to-rendered-text) but mixed reconnect timings locally, with xterm snapshot faster and Ghostty snapshot slower than raw on that session
 - [x] Resize-heavy synthetic baseline recorded — the built-in `resize` trace now applies explicit PTY resize events and still shows normal-buffer snapshot compression (`471` raw bytes versus `88` xterm snapshot bytes and `100` rendered-text bytes)
 - [x] Resize-aware live trace capture — `ptyd` debug captures now include bounded ordered trace events so real sessions can preserve raw chunk boundaries plus explicit PTY resizes for offline analysis
 - [x] Richer capture analysis summaries — saved capture analysis now reports initial/final dimensions plus trace event and resize counts, making resize-heavy real sessions easier to compare
