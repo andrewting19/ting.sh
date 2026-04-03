@@ -726,6 +726,12 @@ export function App() {
       },
     }
     ;(window as any).__wt_attach_metrics = {
+      sessions: (hostId?: string) => getOrderedSessionTargets(hostId).map(target => ({
+        hostId: target.hostId,
+        sessionId: target.sessionId,
+        sessionName: target.sessionName,
+        current: currentKeyRef.current === target.key,
+      })),
       latest: (rawId?: string) => {
         if (rawId) {
           const key = resolveTerminalKey(rawId)
@@ -762,6 +768,11 @@ export function App() {
         console.table([raw, snapshot])
         return result
       },
+      compareCurrent: async (options?: { timeoutMs?: number; pauseMs?: number }) => {
+        const current = currentKeyRef.current
+        if (!current) throw new Error('No current session')
+        return await (window as any).__wt_attach_metrics.compareSession(parseKey(current).sessionId, options)
+      },
       measureAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
         const rows = []
         const targets = getOrderedSessionTargets(options?.hostId)
@@ -786,7 +797,7 @@ export function App() {
         }
         return rows
       },
-      help: 'Use measureSession(id, { mode }), compareSession(id), measureAll(), or compareAll() from the browser console.',
+      help: 'Use sessions(), compareCurrent(), compareSession(id), measureSession(id, { mode }), measureAll(), or compareAll() from the browser console.',
     }
   }, [forceClose, getSessionByKey, hosts, localHostId, sendAttachRequest, sendToHost, syncSessionSize, terminalRenderer, tm])
 
