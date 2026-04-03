@@ -678,6 +678,27 @@ export function App() {
         })
       }, 25)
     })
+    const buildStudyReport = async (
+      scope: 'current' | 'all',
+      options?: { hostId?: string; pauseMs?: number; timeoutMs?: number },
+    ) => {
+      const results = scope === 'current'
+        ? [await (window as any).__wt_attach_metrics.compareCurrent(options)]
+        : await (window as any).__wt_attach_metrics.compareAll(options)
+      const sidecar = await fetch('/api/sidecar')
+        .then(async res => res.ok ? await res.json() as SidecarStatus : null)
+        .catch(() => null)
+      return {
+        capturedAt: new Date().toISOString(),
+        scope,
+        renderer: terminalRenderer,
+        userAgent: navigator.userAgent,
+        url: location.href,
+        sidecar,
+        sessions: (window as any).__wt_attach_metrics.sessions(options?.hostId),
+        results,
+      }
+    }
     ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)
     ;(window as any).__wt_ws_close = () => forceClose(localHostId)
     ;(window as any).__wt_get_attached_id = () => {
@@ -797,7 +818,17 @@ export function App() {
         }
         return rows
       },
-      help: 'Use sessions(), compareCurrent(), compareSession(id), measureSession(id, { mode }), measureAll(), or compareAll() from the browser console.',
+      studyCurrent: async (options?: { pauseMs?: number; timeoutMs?: number }) => {
+        const report = await buildStudyReport('current', options)
+        console.log(report)
+        return report
+      },
+      studyAll: async (options?: { hostId?: string; pauseMs?: number; timeoutMs?: number }) => {
+        const report = await buildStudyReport('all', options)
+        console.log(report)
+        return report
+      },
+      help: 'Use sessions(), compareCurrent(), compareSession(id), measureSession(id, { mode }), measureAll(), compareAll(), studyCurrent(), or studyAll() from the browser console.',
     }
   }, [forceClose, getSessionByKey, hosts, localHostId, sendAttachRequest, sendToHost, syncSessionSize, terminalRenderer, tm])
 
