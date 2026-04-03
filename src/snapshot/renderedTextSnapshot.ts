@@ -10,6 +10,7 @@ export interface RenderedTextSnapshot {
   cols: number;
   rows: number;
   activeBuffer: "normal" | "alternate";
+  normalViewportY: number;
   normalLines: RenderedTextLine[];
   alternateLines: RenderedTextLine[];
   cursorX: number;
@@ -37,6 +38,7 @@ export function captureRenderedTextSnapshot(term: Terminal): RenderedTextSnapsho
     cols: term.cols,
     rows: term.rows,
     activeBuffer,
+    normalViewportY: term.buffer.normal.viewportY,
     normalLines: captureBufferLines(term.buffer.normal),
     alternateLines: captureBufferLines(term.buffer.alternate),
     cursorX: activeCursor.cursorX,
@@ -80,4 +82,9 @@ export function renderedTextSnapshotToVt(snapshot: RenderedTextSnapshot): string
 
   parts.push(`\x1b[${snapshot.cursorY + 1};${snapshot.cursorX + 1}H`);
   return parts.join("");
+}
+
+export function renderedTextSnapshotViewportLine(snapshot: RenderedTextSnapshot): number | null {
+  if (snapshot.activeBuffer !== "normal") return null;
+  return Math.max(0, snapshot.normalViewportY);
 }

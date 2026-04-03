@@ -8,7 +8,7 @@ import type {
 } from './types'
 import type { SessionKey } from '../../types'
 import type { TerminalSnapshot } from '../../snapshot/types'
-import { renderedTextSnapshotToVt } from '../../snapshot/renderedTextSnapshot'
+import { renderedTextSnapshotToVt, renderedTextSnapshotViewportLine } from '../../snapshot/renderedTextSnapshot'
 
 const TERMINAL_OPTIONS = {
   fontSize: 13,
@@ -262,7 +262,11 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
       return true
     }
 
-    this.term.write(renderedTextSnapshotToVt(snapshot), onFlushed)
+    this.term.write(renderedTextSnapshotToVt(snapshot), () => {
+      const viewportLine = renderedTextSnapshotViewportLine(snapshot)
+      if (viewportLine !== null) this.term.scrollToLine(viewportLine)
+      onFlushed?.()
+    })
     return true
   }
 

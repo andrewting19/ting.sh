@@ -123,6 +123,7 @@ Working:
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
 - Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using rendered-text snapshots for normal-buffer sessions and xterm VT snapshots for alternate-screen sessions
 - Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions: rendered-text snapshots for normal buffer, xterm VT snapshots for alternate screen
+- Ghostty normal-buffer snapshot restore now also reapplies the saved scrolled viewport position from rendered-text snapshots, so reconnect no longer snaps back to live output when the user had been reading older scrollback
 - Shared-session snapshot handoff is now covered in protocol tests for both renderers — an already attached writer stays live while a second client snapshot-attaches, acknowledges the snapshot, and then both clients continue receiving subsequent PTY output
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
@@ -178,7 +179,7 @@ Working:
 - Snapshot attach protocol docs are current again — [docs/snapshot-attach-protocol.md](./docs/snapshot-attach-protocol.md) now reflects the real production split: xterm VT snapshots plus Ghostty rendered-text-or-xterm-VT restore, rather than the older raw-fallback plan
 - The main sidecar/snapshot plan doc is now current again — [docs/pty-sidecar-snapshot-plan.md](./docs/pty-sidecar-snapshot-plan.md) has been rewritten around remaining work rather than the already-completed early phases
 - Ghostty alternate-screen snapshot path — Ghostty no longer falls back to raw attach when the active buffer is alternate-screen; it now restores the visible alternate-screen state from an xterm VT snapshot while deeper parity work remains open
-- The main remaining Ghostty parity gap is now explicit: normal-buffer restores preserve visible content and semantic scrollback, but not xterm's exact baseY / viewport-offset behavior across rendered-text restore and mixed normal/alternate-screen flows
+- The main remaining Ghostty parity gap is now explicit: normal-buffer restores preserve visible content, semantic scrollback, and saved viewport position, but still do not reproduce xterm's exact internal baseY semantics across rendered-text restore and mixed normal/alternate-screen flows
 - Trace capture now prefers the active Bun server as a debug proxy (`/api/debug/session`, `/api/sidecar`) before falling back to direct sidecar access, so tooling follows whichever `ptyd` instance that server is actually using
 - Capture analysis tooling — `bun run scripts/analyze-session-capture.ts <capture-json>` summarizes raw replay vs xterm snapshot vs rendered-text snapshot size ratios from a saved live-session capture
 - Reconnect measurement tooling — `bun run scripts/measure-session-reconnect.ts <session-id> [renderer]` compares raw attach versus snapshot attach against the active server and reports replay bytes, snapshot bytes, tail bytes, and end-to-end timings

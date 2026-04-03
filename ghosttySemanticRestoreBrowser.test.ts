@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { chromium } from "@playwright/test";
 import { XtermVtSnapshotTracker } from "./src/snapshot/xtermVtSnapshot";
 import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
-import { captureRenderedTextSnapshot, renderedTextSnapshotToVt } from "./src/snapshot/renderedTextSnapshot";
+import {
+  captureRenderedTextSnapshot,
+  renderedTextSnapshotToVt,
+  renderedTextSnapshotViewportLine,
+} from "./src/snapshot/renderedTextSnapshot";
 
 interface GhosttySemanticState {
   scrollbackLength: number;
@@ -121,6 +125,85 @@ test("ghostty rendered-text VT restore preserves semantic normal scrollback", as
     expect(actual.scrollbackLines).toEqual(expectedScrollback);
     expect(actual.viewportLines).toEqual(canonical.normal.lines.map((line) => line.text));
     expect(actual.viewportY).toBe(0);
+  } finally {
+    await browser.close();
+    await server.stop();
+  }
+}, 60_000);
+
+test("ghostty rendered-text VT restore can preserve a scrolled-up normal-buffer viewport", async () => {
+  const source = new XtermVtSnapshotTracker(32, 8, 200);
+  await source.write("line-1\r\nline-2\r\nline-3\r\nline-4\r\nline-5\r\nline-6\r\nline-7\r\nline-8\r\nline-9\r\nline-10\r\n");
+  source.terminal.scrollToLine(1);
+
+  const renderedSnapshot = captureRenderedTextSnapshot(source.terminal);
+  const renderedVt = renderedTextSnapshotToVt(renderedSnapshot);
+  const expectedViewportLine = renderedTextSnapshotViewportLine(renderedSnapshot);
+  expect(expectedViewportLine).toBe(1);
+
+  const port = await getFreePort();
+  const server = Bun.serve({
+    port,
+    fetch(req) {
+      const url = new URL(req.url);
+      if (url.pathname === "/") {
+        return new Response(`<!doctype html>
+<html>
+  <body>
+    <div id="terminal" style="width: 640px; height: 240px;"></div>
+    <script>window.__SNAPSHOT__ = ${JSON.stringify({ cols: renderedSnapshot.cols, rows: renderedSnapshot.rows, payload: renderedVt, viewportLine: expectedViewportLine })};</script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>`, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+
+      if (url.pathname === "/app.js") {
+        return new Response(`
+          import { init, Terminal } from "/ghostty-web.js";
+
+          const snapshot = window.__SNAPSHOT__;
+          await init();
+          const term = new Terminal({ cols: snapshot.cols, rows: snapshot.rows });
+          term.open(document.getElementById("terminal"));
+          await new Promise((resolve) => term.write(snapshot.payload, resolve));
+          term.scrollToLine(snapshot.viewportLine);
+          window.__STATE__ = {
+            viewportY: term.getViewportY(),
+            scrollbackLength: term.getScrollbackLength(),
+          };
+        `, {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      }
+
+      if (url.pathname === "/ghostty-web.js") {
+        return new Response(Bun.file("./node_modules/@andrewting19/ghostty-web/dist/ghostty-web.js"), {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      }
+
+      if (url.pathname === "/ghostty-vt.wasm") {
+        return new Response(Bun.file("./node_modules/@andrewting19/ghostty-web/ghostty-vt.wasm"), {
+          headers: { "content-type": "application/wasm" },
+        });
+      }
+
+      return new Response("Not found", { status: 404 });
+    },
+  });
+
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${server.port}/`);
+    await page.waitForFunction(() => Boolean((window as Window & { __STATE__?: unknown }).__STATE__));
+    const actual = await page.evaluate(
+      () => (window as Window & { __STATE__: { viewportY: number; scrollbackLength: number } }).__STATE__,
+    );
+    expect(actual.scrollbackLength).toBeGreaterThan(0);
+    expect(actual.viewportY).toBe(expectedViewportLine);
   } finally {
     await browser.close();
     await server.stop();
