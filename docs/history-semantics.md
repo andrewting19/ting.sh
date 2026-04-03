@@ -132,8 +132,17 @@ The correct product promise is:
 - snapshot attach should be the normal reconnect path for both renderers
 - future deep-history work should add a dedicated readable-history mechanism instead of expanding raw replay buffers
 
+## Current Decision
+
+Deep readable history is deferred for now.
+
+Rationale:
+
+- snapshot reconnect is now the default path and already preserves the immediate in-terminal history needed for correctness
+- recent real-session studies show the highest-value remaining work is renderer parity and live-session validation, not a new history store
+- a separate readable-history system would add product surface area and retention semantics that are not yet required to make reconnect robust
+
 ## Open Follow-Up Work
 
-- decide whether deep readable history is required in-product now or can wait
-- choose the storage model for deep history if needed
 - improve Ghostty parity for preserved normal-buffer scrollback semantics
+- revisit a separate readable-history store only if real usage shows the immediate snapshot scrollback is not enough

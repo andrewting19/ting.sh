@@ -5,6 +5,7 @@
 - [ ] Optimize large attach replay path for remote clients — current diagnostics show session attach time scales primarily with replay bytes (often the full ~10MB cap) rather than the control-plane handshake; likely options are chunked replay, a lower warm-attach cap, or a staged "recent viewport first, deep scrollback later" strategy
 - [ ] Ghostty snapshot reconnect parity — Ghostty now restores normal-buffer sessions from rendered-text snapshots and alternate-screen sessions from xterm VT snapshots, but full parity is still not there yet
 - [ ] Validate snapshot reconnect against real redraw-heavy agent traces (Claude Code / Codex / resize-heavy TUI captures) and measure payload sizes versus current raw replay
+- [x] Decide deep readable history scope for now — deferred a separate readable-history store until real usage shows immediate snapshot scrollback is insufficient
 - [x] Hash-load / reconnect could briefly resize shared PTYs to fallback `80x24` before replay, corrupting interactive TUIs like Codex — fixed (queue attach until xterm has a measured fitted size; regression test covers initial hash attach dimensions)
 - [x] Sidebar CWD subtitle could stay stale after browser-driven `cd` commands — fixed (post-Enter CWD refresh now retries briefly before falling back to the 30s poll, with E2E coverage)
 - [x] `^[[O` / `^[[I` spam — fixed (onData guard + useMemo stable tm ref)
@@ -82,6 +83,7 @@
 - [x] Resize-aware live trace capture — `ptyd` debug captures now include bounded ordered trace events so real sessions can preserve raw chunk boundaries plus explicit PTY resizes for offline analysis
 - [x] Richer capture analysis summaries — saved capture analysis now reports initial/final dimensions plus trace event and resize counts, making resize-heavy real sessions easier to compare
 - [x] History semantics documented — reconnect state, immediate scrollback, and optional deeper readable history are now explicitly separated in `docs/history-semantics.md`
+- [x] Deep readable history decision recorded — a separate readable-history store is intentionally deferred while snapshot reconnect and immediate scrollback cover the current product goal
 - [x] Sidecar/snapshot plan refreshed — `docs/pty-sidecar-snapshot-plan.md` now tracks current state plus the actual remaining work instead of the already-completed foundation phases
 - [x] Ghostty alternate-screen snapshot attach — Ghostty no longer raw-fallbacks alternate-screen reconnects; the sidecar now sends xterm VT snapshots for alternate-screen state and the Ghostty backend restores them directly
 - [x] Shared-session snapshot handoff coverage — protocol tests now prove an existing attached client keeps receiving live output while a second client snapshot-attaches and joins the same session on both xterm and Ghostty paths

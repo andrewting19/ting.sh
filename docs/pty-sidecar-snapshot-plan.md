@@ -38,8 +38,7 @@ The remaining work is no longer architectural foundation work. It is validation 
 
 1. more real redraw-heavy agent-trace validation
 2. deeper Ghostty parity/fidelity work
-3. deep readable history implementation, if we decide to ship it
-4. merging the accumulated branch work back to `main`
+3. merging the accumulated branch work back to `main`
 
 ## Remaining Plan
 
@@ -72,24 +71,7 @@ Success criteria:
 - real-session evidence shows remaining gaps clearly
 - fixes target actual user-visible divergence, not hypothetical parity
 
-### 3. Deep Readable History Decision
-
-Goal:
-- decide whether to ship a separate readable-history mechanism now
-
-Reference:
-- [history-semantics.md](./history-semantics.md)
-
-Decision options:
-
-- defer deep history and keep current reconnect-focused model
-- add a separate text-oriented readable-history store
-
-Success criteria:
-- product behavior is intentional
-- reconnect correctness stays independent from deep-history retention
-
-### 4. Final Cutover / Cleanup
+### 3. Final Cutover / Cleanup
 
 Goal:
 - retire stale raw-replay assumptions and merge the branch work
@@ -108,8 +90,8 @@ Success criteria:
 - [x] Validate multi-client/shared-session behavior under the current snapshot path
 - [ ] Identify the highest-value remaining Ghostty parity issue from real traces
 - [ ] Implement the next Ghostty parity fix if a concrete issue is found
-- [ ] Decide whether deep readable history is needed now
-- [ ] If needed, design the readable-history store separately from reconnect state
+- [x] Decide whether deep readable history is needed now
+- [x] Defer a separate readable-history store until real usage shows immediate snapshot scrollback is insufficient
 - [ ] Merge the branch work back to `main`
 
 ## Non-Negotiable Constraints

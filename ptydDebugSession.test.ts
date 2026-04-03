@@ -287,7 +287,11 @@ test("ptyd debug session snapshots preserve UTF-8 box drawing glyphs", async () 
       (msg) => msg.type === "ready" && msg.requestId === "create-utf8",
     );
 
-    client.sendJson({ type: "input", data: "printf '╭────╮\\r\\n│ menu │\\r\\n╰────╯\\r\\n'\r" });
+    client.sendJson({
+      type: "input",
+      data:
+        "printf '\\xE2\\x95\\xAD\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x95\\xAE\\r\\n\\xE2\\x94\\x82 menu \\xE2\\x94\\x82\\r\\n\\xE2\\x95\\xB0\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x94\\x80\\xE2\\x95\\xAF\\r\\n'\r",
+    });
     await client.nextBinaryContaining("╭────╮");
 
     const res = await fetch(`${ptydBaseUrl}/debug/session?id=${encodeURIComponent(ready.id)}&includeRaw=1`);
