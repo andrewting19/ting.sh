@@ -65,7 +65,7 @@ Goal:
 - improve fidelity where Ghostty still diverges from xterm semantics
 
 Primary open area:
-- preserved normal-buffer scrollback semantics around alternate-screen and complex redraw flows
+- exact normal-buffer baseY / viewport-offset semantics around rendered-text restore and mixed normal/alternate-screen redraw flows
 
 Success criteria:
 - real-session evidence shows remaining gaps clearly

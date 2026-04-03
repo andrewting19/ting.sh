@@ -120,3 +120,4 @@ type SnapshotEnvelope = {
 1. Keep snapshot attach as the production reconnect path for both renderers.
 2. Continue measuring real redraw-heavy TUI traces against both Ghostty snapshot payload shapes.
 3. Improve Ghostty parity only where the current payload split still diverges from desired behavior.
+   Current concrete gap: rendered-text restore preserves visible content and semantic scrollback, but not xterm's exact normal-buffer baseY / viewport-offset behavior across mixed normal/alternate-screen flows.
