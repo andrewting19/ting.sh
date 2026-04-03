@@ -68,7 +68,7 @@
 - [x] Capture analysis helper — `scripts/analyze-session-capture.ts` summarizes raw-vs-snapshot size ratios from a saved live-session trace
 - [x] Reconnect measurement helper — `scripts/measure-session-reconnect.ts` compares raw attach versus snapshot attach against the active server and reports payload/timing metrics
 - [x] Batch reconnect measurement helper — the same script now supports `--all` to measure every live session in one pass, which is more useful for real agent-trace validation
-- [x] One-shot live study workflow — `scripts/study-live-sessions.ts` now captures, measures, and summarizes all live sessions in one run
+- [x] One-shot live study workflow — `scripts/study-live-sessions.ts` now captures, measures, and summarizes all live sessions in one run, including side-by-side xterm and Ghostty mode via `both`
 - [x] Safer reconnect measurement for live shared sessions — the measurement script now reuses the session’s current snapshot dimensions instead of forcing `80x24`
 - [x] Synthetic PTY trace benchmarking — `scripts/benchmark-pty-trace.ts` now reports raw-vs-snapshot size ratios for redraw-heavy and alternate-buffer scenarios without needing a live session
 - [x] Snapshot benchmark baseline recorded — synthetic `redraw` trace measured `3464` raw bytes vs `152` xterm-snapshot bytes and `164` rendered-text bytes (`~22x` smaller), while synthetic `alternate` measured `590` raw bytes vs `574` / `627` bytes (roughly parity)
@@ -77,6 +77,7 @@
 - [x] Live agent-TUI baselines recorded — `Jax` and `Viego` Codex/Claude-style sessions measured only moderate snapshot shrinkage (`~1.8x` to `~3.2x`), which is more representative than the tiny synthetic redraw baseline
 - [x] Live alternate-screen agent baseline recorded — real `Tahm Kench` alternate-screen capture showed extreme payload shrinkage (`~95x` raw-to-xterm, `~160x` raw-to-rendered-text) but mixed reconnect timings locally, with xterm snapshot faster and Ghostty snapshot slower than raw on that session
 - [x] One-shot live study baseline recorded — the new `study-live-sessions.ts` workflow captured a later `Tahm Kench` alternate-screen state and showed Ghostty snapshot reconnect can also beat raw on a different live cut of the same session
+- [x] Side-by-side live study baseline recorded — the new `both` mode showed snapshot reconnect beating raw for both xterm and Ghostty on a later real `Tahm Kench` alternate-screen cut
 - [x] Resize-heavy synthetic baseline recorded — the built-in `resize` trace now applies explicit PTY resize events and still shows normal-buffer snapshot compression (`471` raw bytes versus `88` xterm snapshot bytes and `100` rendered-text bytes)
 - [x] Resize-aware live trace capture — `ptyd` debug captures now include bounded ordered trace events so real sessions can preserve raw chunk boundaries plus explicit PTY resizes for offline analysis
 - [x] Richer capture analysis summaries — saved capture analysis now reports initial/final dimensions plus trace event and resize counts, making resize-heavy real sessions easier to compare

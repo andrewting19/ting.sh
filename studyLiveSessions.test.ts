@@ -128,7 +128,7 @@ async function terminateProcess(proc: Bun.Subprocess<"ignore", "pipe", "pipe"> |
   await proc.exited;
 }
 
-test("study-live-sessions script captures and measures all live sessions", async () => {
+test("study-live-sessions script captures and measures all live sessions for both renderers", async () => {
   const serverPort = await getFreePort();
   const ptydPort = await getFreePort();
   const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
@@ -168,7 +168,7 @@ test("study-live-sessions script captures and measures all live sessions", async
     client.sendJson({ type: "input", data: "printf 'study-two\\n'\r" });
     await client.nextBinaryContaining("study-two");
 
-    const proc = Bun.spawn([process.execPath, "run", "scripts/study-live-sessions.ts", "xterm", "captures/study-test"], {
+    const proc = Bun.spawn([process.execPath, "run", "scripts/study-live-sessions.ts", "both", "captures/study-test"], {
       cwd: import.meta.dir,
       env: {
         ...process.env,
@@ -185,22 +185,28 @@ test("study-live-sessions script captures and measures all live sessions", async
 
     const parsed = JSON.parse(stdout) as {
       renderer: string;
+      renderers: string[];
       sessionCount: number;
       reportPath: string;
       rows: Array<{
         sessionId: string;
         name: string;
         captureSummary: { xtermSnapshotBytes: number } | null;
-        measurement: { snapshot: { backend: string | null } } | null;
+        measurementByRenderer: {
+          xterm: { snapshot: { backend: string | null } } | null;
+          ghostty: { snapshot: { backend: string | null } } | null;
+        };
       }>;
     };
 
-    expect(parsed.renderer).toBe("xterm");
+    expect(parsed.renderer).toBe("both");
+    expect(parsed.renderers).toEqual(["xterm", "ghostty"]);
     expect(parsed.sessionCount).toBeGreaterThanOrEqual(2);
     expect(parsed.rows.some((row) => row.name === "study-one")).toBe(true);
     expect(parsed.rows.some((row) => row.name === "study-two")).toBe(true);
     expect(parsed.rows.every((row) => (row.captureSummary?.xtermSnapshotBytes ?? 0) > 0)).toBe(true);
-    expect(parsed.rows.every((row) => row.measurement?.snapshot.backend === "xterm-vt-snapshot-v1")).toBe(true);
+    expect(parsed.rows.every((row) => row.measurementByRenderer.xterm?.snapshot.backend === "xterm-vt-snapshot-v1")).toBe(true);
+    expect(parsed.rows.every((row) => row.measurementByRenderer.ghostty?.snapshot.backend != null)).toBe(true);
     expect(parsed.reportPath.endsWith(".json")).toBe(true);
   } finally {
     client?.close();

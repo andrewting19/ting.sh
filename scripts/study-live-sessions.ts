@@ -18,14 +18,14 @@ interface MeasureBatchResult {
   sessionCount: number;
   results: Array<{
     sessionId: string;
-    sessionName: string;
-    raw: { durationMs: number | null; replayBytesExpected: number | null; replayBytesReceived: number };
-    snapshot: { durationMs: number | null; backend: string | null; snapshotBytes: number | null };
+      sessionName: string;
+      raw: { durationMs: number | null; replayBytesExpected: number | null; replayBytesReceived: number };
+      snapshot: { durationMs: number | null; backend: string | null; snapshotBytes: number | null };
   }>;
 }
 
 function usage(): never {
-  console.error("usage: bun run scripts/study-live-sessions.ts [renderer] [output-dir]");
+  console.error("usage: bun run scripts/study-live-sessions.ts [renderer|both] [output-dir]");
   process.exit(1);
 }
 
@@ -55,10 +55,19 @@ const outputDir = resolve(process.argv[3] ?? `captures/study-${Date.now()}`);
 mkdirSync(outputDir, { recursive: true });
 
 const capture = await runJsonScript(["scripts/capture-session-trace.ts", "--all", outputDir]) as CaptureBatchResult;
-const measure = await runJsonScript(["scripts/measure-session-reconnect.ts", "--all", renderer]) as MeasureBatchResult;
+const renderers = renderer === "both" ? ["xterm", "ghostty"] : [renderer];
+const measurements = new Map<string, MeasureBatchResult>();
+for (const name of renderers) {
+  measurements.set(name, await runJsonScript(["scripts/measure-session-reconnect.ts", "--all", name]) as MeasureBatchResult);
+}
 
 const rows = capture.results.map((entry) => {
-  const measurement = measure.results.find((result) => result.sessionId === entry.sessionId);
+  const measurementByRenderer = Object.fromEntries(
+    renderers.map((name) => [
+      name,
+      measurements.get(name)?.results.find((result) => result.sessionId === entry.sessionId) ?? null,
+    ]),
+  );
   const captureSummary = entry.outputPath ? summarizeCapture(readJsonFile(entry.outputPath)) : null;
   return {
     sessionId: entry.sessionId,
@@ -66,12 +75,13 @@ const rows = capture.results.map((entry) => {
     capturePath: entry.outputPath ?? null,
     captureError: entry.error ?? null,
     captureSummary,
-    measurement: measurement ?? null,
+    measurementByRenderer,
   };
 });
 
 const report = {
   renderer,
+  renderers,
   outputDir,
   sessionCount: capture.sessionCount,
   rows,
