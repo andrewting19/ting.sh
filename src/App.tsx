@@ -147,6 +147,7 @@ export function App() {
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
   const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
   const [sidecarStatus, setSidecarStatus] = useState<SidecarStatus | null>(null)
+  const [studyCopyState, setStudyCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -1564,6 +1565,19 @@ export function App() {
     }, 100)
   }
 
+  async function copyCurrentStudy() {
+    const metrics = (window as any).__wt_attach_metrics
+    if (!metrics?.copyStudyCurrent) return
+    try {
+      await metrics.copyStudyCurrent()
+      setStudyCopyState('copied')
+      window.setTimeout(() => setStudyCopyState('idle'), 2000)
+    } catch {
+      setStudyCopyState('error')
+      window.setTimeout(() => setStudyCopyState('idle'), 2500)
+    }
+  }
+
   function scrollToBottom() {
     const key = currentKeyRef.current
     if (!key) return
@@ -1659,6 +1673,24 @@ export function App() {
           >
             ↻
           </button>
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              className={`header-tool-btn header-toggle-btn${studyCopyState !== 'idle' ? ' active' : ''}`}
+              onClick={copyCurrentStudy}
+              disabled={!currentKey}
+              aria-label="Copy remote study report"
+              title={
+                studyCopyState === 'copied'
+                  ? 'Study report copied'
+                  : studyCopyState === 'error'
+                    ? 'Failed to copy study report'
+                    : 'Copy remote study report'
+              }
+            >
+              {studyCopyState === 'copied' ? 'copied' : studyCopyState === 'error' ? 'error' : 'study'}
+            </button>
+          )}
           <div className="sky-indicator" ref={skyRef} />
           <div className="header-clock" ref={clockRef} />
         </div>
