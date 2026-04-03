@@ -82,6 +82,7 @@
 - [x] Resize-aware live trace capture — `ptyd` debug captures now include bounded ordered trace events so real sessions can preserve raw chunk boundaries plus explicit PTY resizes for offline analysis
 - [x] Richer capture analysis summaries — saved capture analysis now reports initial/final dimensions plus trace event and resize counts, making resize-heavy real sessions easier to compare
 - [x] History semantics documented — reconnect state, immediate scrollback, and optional deeper readable history are now explicitly separated in `docs/history-semantics.md`
+- [x] Sidecar/snapshot plan refreshed — `docs/pty-sidecar-snapshot-plan.md` now tracks current state plus the actual remaining work instead of the already-completed foundation phases
 - [x] Ghostty alternate-screen snapshot attach — Ghostty no longer raw-fallbacks alternate-screen reconnects; the sidecar now sends xterm VT snapshots for alternate-screen state and the Ghostty backend restores them directly
 - [x] Snapshot mojibake fix — snapshot capture now uses streaming UTF-8 decode instead of `latin1`, preserving box-drawing glyphs in agent-TUI snapshots (existing live sessions still need a sidecar restart to pick up the fix)
 - [x] Live UTF-8 snapshot verification — after restarting `ptyd`, a fresh `utf8check` session confirmed that both snapshot paths preserve box-drawing glyphs with no mojibake
