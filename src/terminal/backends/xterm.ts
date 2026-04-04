@@ -170,6 +170,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
   private opened = false
+  private active = false
 
   constructor(
     private readonly sessionKey: SessionKey,
@@ -208,11 +209,19 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
 
   restoreSnapshot(snapshot: TerminalSnapshot, onFlushed?: () => void) {
     if (snapshot.format !== 'xterm-vt-snapshot-v1') return false
+    const shouldReloadWebgl = this.active && this.webglAddon !== null
+    if (this.webglAddon) {
+      this.webglAddon.dispose()
+      this.webglAddon = null
+    }
     this.term.reset()
     if (this.term.cols !== snapshot.cols || this.term.rows !== snapshot.rows) {
       this.term.resize(snapshot.cols, snapshot.rows)
     }
-    this.term.write(snapshot.payload, onFlushed)
+    this.term.write(snapshot.payload, () => {
+      if (shouldReloadWebgl) this.setActive(true)
+      onFlushed?.()
+    })
     return true
   }
 
@@ -233,6 +242,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   }
 
   setActive(active: boolean) {
+    this.active = active
     if (!active) {
       this.webglAddon?.dispose()
       this.webglAddon = null

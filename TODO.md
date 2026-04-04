@@ -99,6 +99,7 @@
 - [x] Stale sidecar detection — `/api/sidecar` now exposes runtime-vs-disk fingerprint mismatch and the dev header shows a `stale ptyd` badge when fixes are not yet active in the running sidecar
 - [x] Stale sidecar restart control — when `stale ptyd` is shown, the header now exposes a confirmed restart action and server endpoint to intentionally replace the sidecar
 - [x] Duplicate Claude Code redraws from no-op resize storms — fixed (`ptyd` now ignores identical cols/rows resize requests instead of retriggering redraw-heavy TUIs on every repeated resize)
+- [x] xterm snapshot reconnect could render Claude Code in black and white until the next full redraw — fixed by recycling the WebGL addon around snapshot restore; Playwright now also verifies ANSI cell attributes survive refresh across snapshot reconnect
 - [x] Versioned sidecar protocol + respawn recovery — `/api/sidecar` now reports expected-vs-running protocol compatibility and Bun integration tests cover sidecar death followed by on-demand `ptyd` respawn
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host

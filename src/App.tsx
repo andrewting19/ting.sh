@@ -736,6 +736,49 @@ export function App() {
           text: tm.getBufferText(key),
         }
       },
+      getLineCells: (sessionId: string, lineIndex: number) => {
+        const key = resolveTerminalKey(sessionId)
+        if (!key) return null
+        const term = tm.getDebugTerm(key) as {
+          buffer?: {
+            active?: {
+              getLine?: (index: number) => {
+                length: number
+                getCell: (cellIndex: number) => {
+                  getChars: () => string
+                  getWidth: () => number
+                  getFgColor: () => number
+                  getFgColorMode: () => number
+                  getBgColor: () => number
+                  getBgColorMode: () => number
+                  isBold: () => boolean
+                  isItalic: () => boolean
+                  isUnderline: () => boolean
+                } | null
+              } | null
+            }
+          }
+        } | null
+        const line = term?.buffer?.active?.getLine?.(lineIndex)
+        if (!line) return null
+        const cells = []
+        for (let i = 0; i < line.length; i += 1) {
+          const cell = line.getCell(i)
+          if (!cell) continue
+          cells.push({
+            chars: cell.getChars(),
+            width: cell.getWidth(),
+            fg: cell.getFgColor(),
+            fgMode: cell.getFgColorMode(),
+            bg: cell.getBgColor(),
+            bgMode: cell.getBgColorMode(),
+            bold: cell.isBold(),
+            italic: cell.isItalic(),
+            underline: cell.isUnderline(),
+          })
+        }
+        return cells
+      },
       scrollToTop: (sessionId: string) => {
         const key = resolveTerminalKey(sessionId)
         if (key) tm.scrollToTop(key)
