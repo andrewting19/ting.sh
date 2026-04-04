@@ -158,6 +158,7 @@ Working:
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Terminal shortcut normalization now also intercepts `Alt+Left/Right` and macOS `Cmd+Left/Right` outside text inputs, forwarding shell-friendly cursor-movement sequences instead of leaking literal `;3D` / `;3C` CSI suffixes into the PTY
+- macOS browser reload is now explicitly preserved while the terminal is focused too — `Cmd+R` reloads the page instead of leaking a literal `r` into the PTY
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - Mobile sidebar scrolling hardening — touch scrolling now works reliably in single-host and multi-host grouped sidebars (touch rows no longer expose drag-reorder, scroll containers get explicit touch sizing, host sections no longer flex-shrink and clip rows)
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS

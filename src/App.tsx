@@ -1208,6 +1208,12 @@ export function App() {
       const activeHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
       const activeKey = currentKeyRef.current
       const isMacPlatform = /Mac|iPhone|iPad|iPod/i.test(navigator.platform) || /Mac OS|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyR') {
+        e.preventDefault()
+        e.stopPropagation()
+        location.reload()
+        return
+      }
       const sendShortcutInput = (data: string) => {
         if (!activeKey) return
         e.preventDefault()

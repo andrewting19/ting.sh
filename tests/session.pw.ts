@@ -327,6 +327,27 @@ test('reconnect — session survives page reload, content preserved', async ({ p
   expect(countAfter).toBe(countBefore)
 })
 
+test('Cmd+R reloads instead of typing into the terminal', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'browser shortcut semantics are only verified in Chromium here')
+
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const marker = `cmd_r_${Date.now()}`
+  await page.keyboard.type(`echo ${marker}`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, marker)
+
+  await page.keyboard.press('Meta+r')
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+  await switchToSession(page, id)
+  await waitForTerminal(page, id, marker)
+
+  const text = await getTerminalText(page, id)
+  expect(text).toContain(marker)
+  expect(text).not.toContain(`${marker}r`)
+})
+
 test('refresh preserves ANSI color attributes after snapshot reconnect', async ({ page }) => {
   const id = await newSession(page)
   await waitForPrompt(page, id)

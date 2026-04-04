@@ -110,6 +110,7 @@
 - [x] Versioned sidecar protocol + respawn recovery — `/api/sidecar` now reports expected-vs-running protocol compatibility and Bun integration tests cover sidecar death followed by on-demand `ptyd` respawn
 - [x] Peer hosts could get stuck on `reconnecting` after harmless host-state refreshes — fixed by keying the delayed background peer fan-out on a stable host connection plan instead of the changing `hosts` array identity
 - [x] `Alt+Left/Right` and macOS `Cmd+Left/Right` could leak literal `;3D`-style suffixes into shells — fixed by intercepting those modified arrow shortcuts globally and forwarding shell cursor-movement control sequences to the active PTY
+- [x] `Cmd+R` on macOS could type `r` into the terminal instead of reloading the page — fixed by explicitly preserving browser reload semantics in the global capture handler even when the terminal owns focus
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal
