@@ -32,6 +32,7 @@ fi
 
 RELEASE_FILES=(
   server.ts
+  ptyd.ts
   serverBuffer.ts
   src/
   package.json

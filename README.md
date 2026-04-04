@@ -125,6 +125,7 @@ Working:
 - Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions via xterm VT snapshots, and normal-buffer reconnect also reapplies the saved viewport position so reconnect does not snap back to live output when the user had been reading older scrollback
 - Ghostty refresh color regressions now have explicit Playwright coverage too, so snapshot reconnect is checked for ANSI style preservation under both xterm and Ghostty instead of only xterm
 - Peer WebSocket fan-out is now staged on page load — the local host and any currently active host connect immediately, while other `hosts.json` peers connect shortly afterward in the background so dead remote peers do not penalize local refresh/reconnect
+- Release packaging now includes `ptyd.ts`, fixing the broken sidecar startup path on deployed hosts where the earlier `v0.2.8` archive omitted the sidecar entrypoint entirely
 - Shared-session snapshot handoff is now covered in protocol tests for both renderers — an already attached writer stays live while a second client snapshot-attaches, acknowledges the snapshot, and then both clients continue receiving subsequent PTY output
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
