@@ -129,6 +129,14 @@ function shouldAutoFocusTerminalOnSessionSelect(): boolean {
   return !window.matchMedia('(max-width: 640px)').matches
 }
 
+function shouldIgnoreGlobalTerminalShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.closest('.terminal-pane')) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
 const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
 const TERMINAL_RESIZE_SETTLE_MS = 150
 const SNAPSHOT_ATTACH_ENABLED = import.meta.env.VITE_SNAPSHOT_ATTACH !== 'false'
@@ -916,11 +924,16 @@ export function App() {
     }
   }, [])
 
+  const peerConnectionPlanKey = useMemo(
+    () => hosts.map(host => `${host.id}|${host.url}|${host.local ? '1' : '0'}`).join(','),
+    [hosts],
+  )
+
   useEffect(() => {
     setBackgroundPeerConnectionsReady(false)
     const timerId = window.setTimeout(() => setBackgroundPeerConnectionsReady(true), 2000)
     return () => window.clearTimeout(timerId)
-  }, [hosts])
+  }, [peerConnectionPlanKey])
 
   useEffect(() => {
     const activeHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
@@ -1193,6 +1206,32 @@ export function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const activeHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
+      const activeKey = currentKeyRef.current
+      const isMacPlatform = /Mac|iPhone|iPad|iPod/i.test(navigator.platform) || /Mac OS|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      const sendShortcutInput = (data: string) => {
+        if (!activeKey) return
+        e.preventDefault()
+        e.stopPropagation()
+        sendToHost(parseKey(activeKey).hostId, { type: 'input', data })
+      }
+      if (!shouldIgnoreGlobalTerminalShortcutTarget(e.target)) {
+        if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') {
+          sendShortcutInput('\x1bb')
+          return
+        }
+        if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowRight') {
+          sendShortcutInput('\x1bf')
+          return
+        }
+        if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'ArrowLeft') {
+          sendShortcutInput('\x01')
+          return
+        }
+        if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'ArrowRight') {
+          sendShortcutInput('\x05')
+          return
+        }
+      }
       // Use e.code (physical key) not e.key — on macOS, Option remaps keys at
       // the OS level so e.key is '†'/'∑'/'¡' instead of 't'/'w'/'1'.
       if (e.altKey && e.code === 'KeyT') { e.preventDefault(); newSession() }

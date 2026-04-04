@@ -183,6 +183,26 @@ test('switch sessions — programmatic focus does not inject ^[[I', async ({ pag
   expect(text).not.toContain('^[[I')
 })
 
+test('modified arrow shortcuts send shell cursor movement sequences', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'shortcut semantics are only verified in Chromium here')
+
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  await page.keyboard.type('echo foo bar baz')
+  await page.keyboard.press('Alt+ArrowLeft')
+  await page.keyboard.type('X')
+  await page.keyboard.press('Meta+ArrowLeft')
+  await page.keyboard.type('Y')
+  await page.keyboard.press('Enter')
+
+  await waitForTerminal(page, id, 'Yecho foo bar Xbaz')
+  const text = await getTerminalText(page, id)
+  expect(text).toContain('Yecho foo bar Xbaz')
+  expect(text).not.toContain(';3D')
+  expect(text).not.toContain(';9D')
+})
+
 test('switch during noisy output — old session bytes do not leak', async ({ page }) => {
   const id1 = await newSession(page)
   await waitForPrompt(page, id1)

@@ -108,6 +108,8 @@
 - [x] xterm snapshot reconnect could render Claude Code in black and white until the next full redraw — fixed by recycling the WebGL addon around snapshot restore; Playwright now also verifies ANSI cell attributes survive refresh across snapshot reconnect
 - [x] Ghostty snapshot reconnect could render Claude Code in black and white after refresh — fixed by switching Ghostty normal-buffer reconnect from text-only rendered snapshots to style-preserving xterm VT snapshots while keeping viewport restoration
 - [x] Versioned sidecar protocol + respawn recovery — `/api/sidecar` now reports expected-vs-running protocol compatibility and Bun integration tests cover sidecar death followed by on-demand `ptyd` respawn
+- [x] Peer hosts could get stuck on `reconnecting` after harmless host-state refreshes — fixed by keying the delayed background peer fan-out on a stable host connection plan instead of the changing `hosts` array identity
+- [x] `Alt+Left/Right` and macOS `Cmd+Left/Right` could leak literal `;3D`-style suffixes into shells — fixed by intercepting those modified arrow shortcuts globally and forwarding shell cursor-movement control sequences to the active PTY
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal

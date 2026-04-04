@@ -125,6 +125,7 @@ Working:
 - Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions via xterm VT snapshots, and normal-buffer reconnect also reapplies the saved viewport position so reconnect does not snap back to live output when the user had been reading older scrollback
 - Ghostty refresh color regressions now have explicit Playwright coverage too, so snapshot reconnect is checked for ANSI style preservation under both xterm and Ghostty instead of only xterm
 - Peer WebSocket fan-out is now staged on page load — the local host and any currently active host connect immediately, while other `hosts.json` peers connect shortly afterward in the background so dead remote peers do not penalize local refresh/reconnect
+- Background peer staging is now keyed on a stable host connection plan instead of raw React array identity, so harmless host-state refreshes no longer bounce remote peers back into `reconnecting` mid-handshake
 - Release packaging now includes `ptyd.ts`, fixing the broken sidecar startup path on deployed hosts where the earlier `v0.2.8` archive omitted the sidecar entrypoint entirely
 - Sidecar snapshot runtime deps are now packaged correctly in production installs too — `@xterm/addon-serialize` and `@xterm/headless` moved to runtime dependencies after Windows exposed that `ptyd` needs them at startup, not just in tests/dev
 - Snapshot attach now size-syncs the PTY before requesting the snapshot cut, avoiding attach-time row drift where redraw-heavy TUIs like Claude Code could reconnect at stale dimensions and immediately paint footer/status updates into the wrong rows
@@ -156,6 +157,7 @@ Working:
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
+- Terminal shortcut normalization now also intercepts `Alt+Left/Right` and macOS `Cmd+Left/Right` outside text inputs, forwarding shell-friendly cursor-movement sequences instead of leaking literal `;3D` / `;3C` CSI suffixes into the PTY
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum
 - Mobile sidebar scrolling hardening — touch scrolling now works reliably in single-host and multi-host grouped sidebars (touch rows no longer expose drag-reorder, scroll containers get explicit touch sizing, host sections no longer flex-shrink and clip rows)
 - iOS Safari touch-start-on-text scroll bug fixed via canvas renderer path on iOS
