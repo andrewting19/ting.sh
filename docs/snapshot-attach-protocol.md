@@ -86,11 +86,11 @@ Current payload shapes:
 - `xterm-vt-snapshot-v1`
   - self-contained VT payload from headless xterm serialize
 - `rendered-text-snapshot-v1`
-  - Ghostty normal-buffer reconnect path today
+  - retained for diagnostics and feasibility comparison, not the primary production reconnect path today
 
 Ghostty currently restores:
 
-- normal-buffer sessions from `rendered-text-snapshot-v1`
+- normal-buffer sessions from `xterm-vt-snapshot-v1`, then reapplies the saved viewport line
 - alternate-screen sessions from `xterm-vt-snapshot-v1`
 
 The envelope can still be shared:
@@ -118,6 +118,8 @@ type SnapshotEnvelope = {
 ## Recommended First Production Rollout
 
 1. Keep snapshot attach as the production reconnect path for both renderers.
-2. Continue measuring real redraw-heavy TUI traces against both Ghostty snapshot payload shapes.
+2. Continue measuring real redraw-heavy TUI traces against the shipped VT snapshot path, while keeping rendered-text snapshots as a comparison/debug tool.
 3. Treat renderer-internal accounting differences carefully.
    Current evidence suggests Ghostty's remaining xterm-vs-Ghostty `baseY` mismatch is an internal model difference, not a user-visible reconnect correctness issue.
+4. Investigate concrete live-session redraw bugs separately from the attach protocol.
+   The remaining Claude/agent-TUI blank-tail corruption cases appear to be resize/redraw behavior in the running PTY stream, not a reason to return to raw replay attach.

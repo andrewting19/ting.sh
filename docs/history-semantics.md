@@ -139,10 +139,11 @@ Deep readable history is deferred for now.
 Rationale:
 
 - snapshot reconnect is now the default path and already preserves the immediate in-terminal history needed for correctness
-- recent real-session studies show the highest-value remaining work is renderer parity and live-session validation, not a new history store
+- recent real-session studies show the highest-value remaining work is live-session validation and targeted TUI redraw fixes, not a new history store
 - a separate readable-history system would add product surface area and retention semantics that are not yet required to make reconnect robust
 
 ## Open Follow-Up Work
 
-- improve Ghostty parity for preserved normal-buffer scrollback semantics
+- validate snapshot scrollback behavior on more real remote sessions
+- fix any remaining real-session TUI redraw corruption that shows up despite the snapshot architecture
 - revisit a separate readable-history store only if real usage shows the immediate snapshot scrollback is not enough

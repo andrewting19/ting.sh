@@ -111,6 +111,7 @@
 - [x] Peer hosts could get stuck on `reconnecting` after harmless host-state refreshes — fixed by keying the delayed background peer fan-out on a stable host connection plan instead of the changing `hosts` array identity
 - [x] `Alt+Left/Right` and macOS `Cmd+Left/Right` could leak literal `;3D`-style suffixes into shells — fixed by intercepting those modified arrow shortcuts globally and forwarding shell cursor-movement control sequences to the active PTY
 - [x] `Cmd+R` on macOS could type `r` into the terminal instead of reloading the page — fixed by explicitly preserving browser reload semantics in the global capture handler even when the terminal owns focus
+- [x] Snapshot architecture docs drifted behind the shipped Ghostty path — refreshed the long-form plan/protocol/history docs so they now describe VT-snapshot reconnect as the production path and focus remaining work on real-session validation + redraw bugs
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
 - [x] Custom kill confirmation modal
