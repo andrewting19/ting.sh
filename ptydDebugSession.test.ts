@@ -236,6 +236,7 @@ test("ptyd debug session trace events include explicit resizes", async () => {
     );
 
     client.sendJson({ type: "resize", cols: 100, rows: 30 });
+    client.sendJson({ type: "resize", cols: 100, rows: 30 });
     client.sendJson({ type: "input", data: "printf 'after-resize\\n'\r" });
     await client.nextBinaryContaining("after-resize");
 
@@ -255,7 +256,10 @@ test("ptyd debug session trace events include explicit resizes", async () => {
     expect(debug.initialRows).toBe(24);
     expect(debug.snapshot.cols).toBe(100);
     expect(debug.snapshot.rows).toBe(30);
-    expect(debug.traceEvents.some((event) => event.type === "resize" && event.cols === 100 && event.rows === 30)).toBe(true);
+    const matchingResizes = debug.traceEvents.filter(
+      (event) => event.type === "resize" && event.cols === 100 && event.rows === 30,
+    );
+    expect(matchingResizes).toHaveLength(1);
     expect(debug.snapshot.payload).toContain("after-resize");
   } finally {
     client?.close();

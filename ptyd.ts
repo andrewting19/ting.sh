@@ -30,6 +30,8 @@ interface Session {
   shell: string;
   initialCols: number;
   initialRows: number;
+  currentCols: number;
+  currentRows: number;
   buffer: Buffer;
   bufferTrimmed: boolean;
   outputSeq: number;
@@ -224,6 +226,9 @@ function scheduleCwdRefresh(session: Session) {
 }
 
 function applySessionResize(session: Session, cols: number, rows: number): void {
+  if (session.currentCols === cols && session.currentRows === rows) return;
+  session.currentCols = cols;
+  session.currentRows = rows;
   session.proc?.resize(cols, rows);
   session.snapshotTracker.resize(cols, rows);
   session.traceEvents.appendResize(cols, rows);
@@ -240,6 +245,8 @@ function createSession(name: string, cols: number, rows: number, cwd?: string): 
     shell,
     initialCols: cols,
     initialRows: rows,
+    currentCols: cols,
+    currentRows: rows,
     buffer: Buffer.alloc(0),
     bufferTrimmed: false,
     outputSeq: 0,

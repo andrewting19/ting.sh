@@ -224,6 +224,7 @@ Working:
 - Stale sidecar restart control — when `stale ptyd` is shown, the header also exposes a `restart` action that intentionally kills the old sidecar and respawns a fresh one after confirmation
 - Versioned sidecar protocol boundary — `/api/sidecar` now reports the expected protocol version, the running sidecar's protocol version, and whether they are compatible so Bun↔`ptyd` drift is explicit instead of implicit.
 - Sidecar respawn coverage — Bun now has integration coverage proving it can recreate a dead `ptyd` on demand and continue serving fresh sessions without a Bun restart.
+- Sidecar resize dedupe — `ptyd` now ignores resize requests when the requested cols/rows already match the session, which prevents no-op resize storms from retriggering redraw-heavy TUIs like Claude Code into duplicate normal-buffer paints
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes
