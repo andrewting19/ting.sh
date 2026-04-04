@@ -355,6 +355,30 @@ test('refresh preserves ANSI color attributes after snapshot reconnect', async (
   expect(after?.cells).toEqual(before?.cells)
 })
 
+test('refresh repaints rendered xterm rows after large snapshot reconnect', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const marker = `SNAPDOM_${Date.now()}`
+  await page.keyboard.type(`for i in {1..180}; do echo ${marker}_$i; done`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, `${marker}_180`)
+
+  await page.reload()
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+  await switchToSession(page, id)
+  await waitForTerminal(page, id, `${marker}_180`)
+
+  const renderedRows = await page.evaluate(() => {
+    return [...document.querySelectorAll('.xterm-rows > div')]
+      .map(el => el.textContent ?? '')
+      .filter(text => text.trim().length > 0)
+  })
+
+  expect(renderedRows.length).toBeGreaterThan(0)
+  expect(renderedRows.some(text => text.includes(`${marker}_180`))).toBe(true)
+})
+
 test('ghostty refresh preserves ANSI color attributes after snapshot reconnect', async ({ page }) => {
   await loadWithRenderer(page, 'ghostty')
 

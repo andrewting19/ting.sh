@@ -1103,7 +1103,7 @@ export function App() {
         sendToHost(host.id, { type: 'list' })
         const key = currentKeyRef.current
         if (key && parseKey(key).hostId === host.id) {
-          const dims = prepareTerminalForAttach(key)
+          const dims = syncSessionSize(key)
           tm.reset(key)
           if (dims) {
             sendAttachRequest(key, dims)
@@ -1144,7 +1144,8 @@ export function App() {
     const dims = prepareTerminalForAttach(currentKey)
     if (queuedAttachKeyRef.current === currentKey && dims) {
       queuedAttachKeyRef.current = null
-      sendAttachRequest(currentKey, dims)
+      const synced = syncSessionSize(currentKey)
+      if (synced) sendAttachRequest(currentKey, synced)
     } else if (attachedKeyRef.current === currentKey && dims) {
       flushPendingTerminalResize()
       sendTerminalResize(currentKey, dims.cols, dims.rows, true)
@@ -1538,7 +1539,7 @@ export function App() {
     if (currentHostId && currentHostId !== nextHostId) {
       sendToHost(currentHostId, { type: 'detach' })
     }
-    const dims = prepareTerminalForAttach(key)
+    const dims = syncSessionSize(key)
     // Clear existing content — server always replays the full scrollback buffer
     // on every attach, so we must reset first to avoid duplication.
     tm.reset(key)

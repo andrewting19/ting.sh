@@ -127,6 +127,8 @@ Working:
 - Peer WebSocket fan-out is now staged on page load — the local host and any currently active host connect immediately, while other `hosts.json` peers connect shortly afterward in the background so dead remote peers do not penalize local refresh/reconnect
 - Release packaging now includes `ptyd.ts`, fixing the broken sidecar startup path on deployed hosts where the earlier `v0.2.8` archive omitted the sidecar entrypoint entirely
 - Sidecar snapshot runtime deps are now packaged correctly in production installs too — `@xterm/addon-serialize` and `@xterm/headless` moved to runtime dependencies after Windows exposed that `ptyd` needs them at startup, not just in tests/dev
+- Snapshot attach now size-syncs the PTY before requesting the snapshot cut, avoiding attach-time row drift where redraw-heavy TUIs like Claude Code could reconnect at stale dimensions and immediately paint footer/status updates into the wrong rows
+- xterm snapshot reconnect now coalesces a full terminal refresh after open/fit/restore so the visible row DOM repaints immediately instead of waiting for later writes to touch those lines
 - Shared-session snapshot handoff is now covered in protocol tests for both renderers — an already attached writer stays live while a second client snapshot-attaches, acknowledges the snapshot, and then both clients continue receiving subsequent PTY output
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS

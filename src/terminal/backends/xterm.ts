@@ -169,6 +169,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private webglAddon: WebglAddon | null = null
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
+  private fullRefreshScheduled = false
   private opened = false
   private active = false
 
@@ -189,6 +190,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     if (this.opened) return
     this.term.open(container)
     this.fitAddon.fit()
+    this.scheduleFullRefresh()
     this.momentumCleanup = attachIOSScroll(container, this.term)
     this.resizeObserver = new ResizeObserver(() => {
       this.fit()
@@ -201,6 +203,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
 
   fit() {
     this.fitAddon.fit()
+    this.scheduleFullRefresh()
   }
 
   write(data: Uint8Array, onFlushed?: () => void) {
@@ -220,9 +223,20 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     }
     this.term.write(snapshot.payload, () => {
       if (shouldReloadWebgl) this.setActive(true)
+      this.scheduleFullRefresh()
       onFlushed?.()
     })
     return true
+  }
+
+  private scheduleFullRefresh() {
+    if (!this.opened || this.term.rows <= 0 || this.fullRefreshScheduled) return
+    this.fullRefreshScheduled = true
+    requestAnimationFrame(() => {
+      this.fullRefreshScheduled = false
+      if (!this.opened || this.term.rows <= 0) return
+      this.term.refresh(0, this.term.rows - 1)
+    })
   }
 
   reset() {
