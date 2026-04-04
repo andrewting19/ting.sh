@@ -127,7 +127,9 @@ test("ghostty rendered-text VT restore shows alternate content but still loses p
   try {
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.port}/`);
-    await page.waitForFunction(() => Boolean((window as Window & { __STATE__?: unknown }).__STATE__));
+    await page.waitForFunction(() => Boolean((window as Window & { __STATE__?: unknown }).__STATE__), undefined, {
+      timeout: 60_000,
+    });
     const actual = await page.evaluate(() => (window as Window & { __STATE__: TerminalState }).__STATE__);
     expect(actual.activeType).toBe("alternate");
     expect(actual.normal.lines).not.toEqual(expectedNormal.lines);

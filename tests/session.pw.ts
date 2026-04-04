@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { utimesSync } from 'node:fs'
 import path from 'node:path'
-import { getSessions, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
+import { getSessions, loadWithRenderer, newSession, getTerminalText, waitForTerminal, waitForPrompt, switchToSession, killAllSessions } from './helpers'
 
 /** Returns the data-session-id of the currently active session item. */
 async function getActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
@@ -308,6 +308,56 @@ test('reconnect — session survives page reload, content preserved', async ({ p
 })
 
 test('refresh preserves ANSI color attributes after snapshot reconnect', async ({ page }) => {
+  const id = await newSession(page)
+  await waitForPrompt(page, id)
+
+  const redMarker = `RED_${Date.now()}`
+  const greenMarker = `GREEN_${Date.now()}`
+  await page.keyboard.type(`printf '\\e[31m${redMarker}\\e[32m ${greenMarker}\\e[0m\\r\\n'`)
+  await page.keyboard.press('Enter')
+  await waitForTerminal(page, id, redMarker)
+  await waitForTerminal(page, id, greenMarker)
+
+  const before = await page.evaluate(([sessionId, redText, greenText]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const debug = (window as any).__wt_terminal_debug
+    const lines = String(debug?.getState?.(sessionId)?.text ?? '').split('\n')
+    const lineIndex = lines.findIndex((line) => line.includes(redText) && line.includes(greenText))
+    if (lineIndex === -1) return null
+    return {
+      lineIndex,
+      cells: debug?.getLineCells?.(sessionId, lineIndex) ?? null,
+    }
+  }, [id, redMarker, greenMarker] as [string, string, string])
+
+  expect(before).not.toBeNull()
+  expect(before?.cells).not.toBeNull()
+
+  await page.reload()
+  await page.waitForSelector('[data-session-id]', { timeout: 8000 })
+  await switchToSession(page, id)
+  await waitForTerminal(page, id, redMarker)
+  await waitForTerminal(page, id, greenMarker)
+
+  const after = await page.evaluate(([sessionId, redText, greenText]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const debug = (window as any).__wt_terminal_debug
+    const lines = String(debug?.getState?.(sessionId)?.text ?? '').split('\n')
+    const lineIndex = lines.findIndex((line) => line.includes(redText) && line.includes(greenText))
+    if (lineIndex === -1) return null
+    return {
+      lineIndex,
+      cells: debug?.getLineCells?.(sessionId, lineIndex) ?? null,
+    }
+  }, [id, redMarker, greenMarker] as [string, string, string])
+
+  expect(after).not.toBeNull()
+  expect(after?.cells).toEqual(before?.cells)
+})
+
+test('ghostty refresh preserves ANSI color attributes after snapshot reconnect', async ({ page }) => {
+  await loadWithRenderer(page, 'ghostty')
+
   const id = await newSession(page)
   await waitForPrompt(page, id)
 
