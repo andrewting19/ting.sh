@@ -233,6 +233,59 @@ test("sessions survive Bun server restart when ptyd stays alive", async () => {
   }
 }, 60_000);
 
+test("api/sidecar/restart restarts ptyd on demand", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+
+  try {
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`http://127.0.0.1:${ptydPort}/health`);
+
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/sidecar`);
+
+    const beforeRes = await fetch(`${serverBaseUrl}/api/sidecar`);
+    expect(beforeRes.ok).toBe(true);
+    const before = await beforeRes.json() as {
+      health: { pid: number | null; runtimeFingerprint: string; currentFingerprint: string; staleRuntime: boolean } | null;
+    };
+    expect(before.health?.pid).toBeTruthy();
+
+    const restartRes = await fetch(`${serverBaseUrl}/api/sidecar/restart`, { method: "POST" });
+    expect(restartRes.ok).toBe(true);
+    const restart = await restartRes.json() as {
+      ok: boolean;
+      protocolCompatible: boolean;
+      health: { pid: number | null; staleRuntime: boolean; runtimeFingerprint: string; currentFingerprint: string } | null;
+    };
+    expect(restart.ok).toBe(true);
+    expect(restart.protocolCompatible).toBe(true);
+    expect(restart.health?.pid).toBeTruthy();
+    expect(restart.health?.pid).not.toBe(before.health?.pid ?? null);
+    expect(restart.health?.staleRuntime).toBe(false);
+    expect(restart.health?.runtimeFingerprint).toBe(restart.health?.currentFingerprint);
+  } finally {
+    await terminateProcess(server);
+    await terminateProcess(ptyd);
+  }
+}, 60_000);
+
 test("server respawns ptyd after sidecar exit", async () => {
   const serverPort = await getFreePort();
   const ptydPort = await getFreePort();

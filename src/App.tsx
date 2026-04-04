@@ -148,6 +148,8 @@ export function App() {
   const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
   const [sidecarStatus, setSidecarStatus] = useState<SidecarStatus | null>(null)
   const [studyCopyState, setStudyCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [restartSidecarModalOpen, setRestartSidecarModalOpen] = useState(false)
+  const [restartingSidecar, setRestartingSidecar] = useState(false)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -1578,6 +1580,26 @@ export function App() {
     }
   }
 
+  async function restartSidecar() {
+    setRestartingSidecar(true)
+    try {
+      const res = await fetch('/api/sidecar/restart', { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to restart ptyd')
+      const json = await res.json() as SidecarStatus & { ok?: boolean }
+      setSidecarStatus({
+        baseUrl: json.baseUrl,
+        wsUrl: json.wsUrl,
+        port: json.port,
+        expectedProtocolVersion: json.expectedProtocolVersion,
+        protocolCompatible: json.protocolCompatible,
+        health: json.health,
+      })
+      setRestartSidecarModalOpen(false)
+    } finally {
+      setRestartingSidecar(false)
+    }
+  }
+
   function scrollToBottom() {
     const key = currentKeyRef.current
     if (!key) return
@@ -1628,16 +1650,28 @@ export function App() {
         <div className="header-spacer" />
         <div className="header-time">
           {showStaleSidecar && (
-            <div
-              className="header-runtime-warning"
-              title={
-                sidecarStatus?.protocolCompatible === false
-                  ? `Running ptyd protocol ${sidecarStatus?.health?.protocolVersion ?? 'unknown'} does not match expected ${sidecarStatus?.expectedProtocolVersion}`
-                  : `Running ptyd ${sidecarStatus?.health?.runtimeFingerprint} is older than disk ${sidecarStatus?.health?.currentFingerprint}`
-              }
-            >
-              stale ptyd
-            </div>
+            <>
+              <div
+                className="header-runtime-warning"
+                title={
+                  sidecarStatus?.protocolCompatible === false
+                    ? `Running ptyd protocol ${sidecarStatus?.health?.protocolVersion ?? 'unknown'} does not match expected ${sidecarStatus?.expectedProtocolVersion}`
+                    : `Running ptyd ${sidecarStatus?.health?.runtimeFingerprint} is older than disk ${sidecarStatus?.health?.currentFingerprint}`
+                }
+              >
+                stale ptyd
+              </div>
+              <button
+                type="button"
+                className="header-tool-btn header-toggle-btn"
+                onClick={() => setRestartSidecarModalOpen(true)}
+                disabled={restartingSidecar}
+                aria-label="Restart stale ptyd"
+                title="Restart stale ptyd"
+              >
+                {restartingSidecar ? '...' : 'restart'}
+              </button>
+            </>
           )}
           <div className="renderer-toggle" role="group" aria-label="Terminal renderer">
             <button
@@ -1697,6 +1731,17 @@ export function App() {
       </header>
 
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+
+      {restartSidecarModalOpen && (
+        <Modal
+          title="Restart ptyd?"
+          message="This will kill the current PTY sessions on this host and start a fresh sidecar. Use it only when stale ptyd needs to be cleared."
+          confirmLabel={restartingSidecar ? 'Restarting…' : 'Restart ptyd'}
+          danger
+          onConfirm={() => { void restartSidecar() }}
+          onCancel={() => { if (!restartingSidecar) setRestartSidecarModalOpen(false) }}
+        />
+      )}
 
       <Sidebar
         hosts={hosts}

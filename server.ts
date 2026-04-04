@@ -152,6 +152,25 @@ async function isPtydHealthy(): Promise<boolean> {
   }
 }
 
+async function fetchPtydHealth(): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${PTYD_HTTP_BASE_URL}/health`);
+    if (!res.ok) return null;
+    return await res.json() as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForPtydDown(timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isPtydHealthy())) return;
+    await Bun.sleep(50);
+  }
+  throw new Error(`ptyd did not stop within ${timeoutMs}ms`);
+}
+
 async function ensurePtyd(): Promise<void> {
   if (await isPtydHealthy()) return;
   if (!g.__wt_ptyd_ready) {
@@ -179,6 +198,20 @@ async function ensurePtyd(): Promise<void> {
     });
   }
   return g.__wt_ptyd_ready;
+}
+
+async function restartPtyd(): Promise<void> {
+  const health = await fetchPtydHealth();
+  const pid = typeof health?.pid === "number" && Number.isInteger(health.pid) ? health.pid : null;
+  if (pid !== null) {
+    try {
+      process.kill(pid);
+    } catch {
+      // already exited
+    }
+    await waitForPtydDown();
+  }
+  await ensurePtyd();
 }
 
 function connectBackendProxy(ws: ServerWebSocket<WSData>) {
@@ -239,8 +272,8 @@ const server = Bun.serve<WSData>({
     if (url.pathname === "/api/sidecar") {
       await ensurePtyd();
       try {
-        const res = await fetch(`${PTYD_HTTP_BASE_URL}/health`);
-        const health = await res.json() as Record<string, unknown>;
+        const health = await fetchPtydHealth();
+        if (!health) throw new Error("Sidecar unavailable");
         const protocolVersion = parsePtydProtocolVersion(health.protocolVersion);
         return Response.json({
           baseUrl: PTYD_HTTP_BASE_URL,
@@ -261,6 +294,28 @@ const server = Bun.serve<WSData>({
           expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
           protocolCompatible: false,
           health: null,
+        }, { status: 502 });
+      }
+    }
+    if (url.pathname === "/api/sidecar/restart") {
+      if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+      try {
+        await restartPtyd();
+        const health = await fetchPtydHealth();
+        const protocolVersion = parsePtydProtocolVersion(health?.protocolVersion);
+        return Response.json({
+          ok: true,
+          baseUrl: PTYD_HTTP_BASE_URL,
+          wsUrl: PTYD_WS_URL,
+          port: PTYD_PORT,
+          expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
+          protocolCompatible: isPtydProtocolCompatible(protocolVersion),
+          health: health ? { ...health, protocolVersion } : null,
+        });
+      } catch (err) {
+        return Response.json({
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
         }, { status: 502 });
       }
     }
