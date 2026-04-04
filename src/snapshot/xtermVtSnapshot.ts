@@ -6,6 +6,7 @@ export interface XtermVtSnapshot {
   cols: number;
   rows: number;
   payload: string;
+  normalViewportY: number;
   capturedAt: number;
 }
 
@@ -55,6 +56,7 @@ export class XtermVtSnapshotTracker {
       cols: this.term.cols,
       rows: this.term.rows,
       payload: this.serializeAddon.serialize(),
+      normalViewportY: this.term.buffer.normal.viewportY,
       capturedAt: Date.now(),
     };
   }

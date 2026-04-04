@@ -258,7 +258,10 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     }
 
     if (isXtermVt) {
-      this.term.write(snapshot.payload, onFlushed)
+      this.term.write(snapshot.payload, () => {
+        if (snapshot.normalViewportY > 0) this.term.scrollToLine(snapshot.normalViewportY)
+        onFlushed?.()
+      })
       return true
     }
 

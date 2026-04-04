@@ -128,7 +128,7 @@ async function terminateProcess(proc: Bun.Subprocess<"ignore", "pipe", "pipe"> |
   await proc.exited;
 }
 
-test("ghostty attach-snapshot returns rendered-text snapshot payload", async () => {
+test("ghostty attach-snapshot returns xterm VT snapshot payload for normal-buffer sessions", async () => {
   const serverPort = await getFreePort();
   const ptydPort = await getFreePort();
   const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
@@ -177,16 +177,16 @@ test("ghostty attach-snapshot returns rendered-text snapshot payload", async () 
       backend: string;
       snapshot: {
         format: string;
-        activeBuffer: string;
-        normalLines: Array<{ text: string; wrapped: boolean }>;
+        payload: string;
+        normalViewportY: number;
       };
       requestId?: string;
     }>((msg) => msg.type === "snapshot-ready" && msg.requestId === "snap-1");
 
-    expect(snapshotReady.backend).toBe("rendered-text-snapshot-v1");
-    expect(snapshotReady.snapshot.format).toBe("rendered-text-snapshot-v1");
-    expect(snapshotReady.snapshot.activeBuffer).toBe("normal");
-    expect(snapshotReady.snapshot.normalLines.some((line) => line.text.includes(marker))).toBe(true);
+    expect(snapshotReady.backend).toBe("xterm-vt-snapshot-v1");
+    expect(snapshotReady.snapshot.format).toBe("xterm-vt-snapshot-v1");
+    expect(snapshotReady.snapshot.payload).toContain(marker);
+    expect(snapshotReady.snapshot.normalViewportY).toBeGreaterThanOrEqual(0);
   } finally {
     writer?.close();
     reader?.close();

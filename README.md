@@ -121,9 +121,8 @@ Working:
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
 - Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
-- Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using rendered-text snapshots for normal-buffer sessions and xterm VT snapshots for alternate-screen sessions
-- Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions: rendered-text snapshots for normal buffer, xterm VT snapshots for alternate screen
-- Ghostty normal-buffer snapshot restore now also reapplies the saved scrolled viewport position from rendered-text snapshots, so reconnect no longer snaps back to live output when the user had been reading older scrollback
+- Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using xterm VT snapshots for both normal-buffer and alternate-screen sessions so ANSI styling survives refresh
+- Ghostty now uses snapshot attach for both normal-buffer and alternate-screen sessions via xterm VT snapshots, and normal-buffer reconnect also reapplies the saved viewport position so reconnect does not snap back to live output when the user had been reading older scrollback
 - Shared-session snapshot handoff is now covered in protocol tests for both renderers — an already attached writer stays live while a second client snapshot-attaches, acknowledges the snapshot, and then both clients continue receiving subsequent PTY output
 - WebSocket auto-reconnect with status indicator
 - WebGL renderer on active terminal only (desktop); Canvas renderer forced on iOS
@@ -181,7 +180,7 @@ Working:
 - Richer capture analysis summaries — `bun run scripts/analyze-session-capture.ts <capture-json>` now reports initial/final terminal size plus trace event counts and resize counts, so resize-heavy real sessions are easier to compare without hand-inspecting JSON
 - History semantics are now explicit in docs — reconnect state, immediate terminal scrollback, and optional deeper readable history are defined separately in [docs/history-semantics.md](./docs/history-semantics.md) so future work does not overload raw PTY replay
 - Deep readable history is intentionally deferred for now — reconnect correctness and immediate in-terminal scrollback now come from snapshot state, while a separate long-range history store stays out of scope until real usage proves it is needed
-- Snapshot attach protocol docs are current again — [docs/snapshot-attach-protocol.md](./docs/snapshot-attach-protocol.md) now reflects the real production split: xterm VT snapshots plus Ghostty rendered-text-or-xterm-VT restore, rather than the older raw-fallback plan
+- Snapshot attach protocol docs are current again — [docs/snapshot-attach-protocol.md](./docs/snapshot-attach-protocol.md) now reflects the real production path: xterm VT snapshots plus ordered tail handoff for both xterm and Ghostty reconnects
 - The main sidecar/snapshot plan doc is now current again — [docs/pty-sidecar-snapshot-plan.md](./docs/pty-sidecar-snapshot-plan.md) has been rewritten around remaining work rather than the already-completed early phases
 - Ghostty alternate-screen snapshot path — Ghostty no longer falls back to raw attach when the active buffer is alternate-screen; it now restores the visible alternate-screen state from an xterm VT snapshot while deeper parity work remains open
 - Ghostty reconnect parity is now effectively at the user-visible level: normal-buffer restores preserve visible content, semantic scrollback, and saved viewport position. The remaining xterm-vs-Ghostty difference is internal `baseY` accounting, which does not currently map cleanly across the two renderer models and is not treated as a reconnect correctness bug.
@@ -226,6 +225,7 @@ Working:
 - Sidecar respawn coverage — Bun now has integration coverage proving it can recreate a dead `ptyd` on demand and continue serving fresh sessions without a Bun restart.
 - Sidecar resize dedupe — `ptyd` now ignores resize requests when the requested cols/rows already match the session, which prevents no-op resize storms from retriggering redraw-heavy TUIs like Claude Code into duplicate normal-buffer paints
 - xterm snapshot color restore hardening — xterm now recycles the WebGL addon around snapshot restore so bulk VT snapshot writes repaint with the correct colors/styles immediately after refresh instead of staying visually monochrome until the next full TUI redraw
+- Ghostty normal-buffer color restore hardening — Ghostty normal reconnect now uses the style-preserving xterm VT snapshot path instead of the text-only rendered snapshot path, so Claude Code colors survive refresh there too
 - Attach replay viewport restore hardening — after attach/reconnect replay flush, xterm now re-jumps to latest output after fit/resize settles and refreshes scroll-overlay state during terminal fits/resizes
 - Programmatic focus-report suppression — app-driven `term.focus()` no longer injects literal `^[[I`/`^[[O` into shells when apps enabled xterm focus reporting (`?1004`)
 - Terminal resize storm hardening — terminal-originated resize sends are now trailing-debounced and deduped so animated browser/sidebar resizes do not spam shared PTYs with dozens of intermediate sizes

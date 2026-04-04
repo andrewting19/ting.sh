@@ -219,7 +219,7 @@ test("measure-session-reconnect script reports raw and snapshot attach metrics",
     expect(ghostty.sessionId).toBe(ready.id);
     expect(ghostty.renderer).toBe("ghostty");
     expect(ghostty.raw.replayBytesReceived).toBeGreaterThan(0);
-    expect(ghostty.snapshot.backend).toBe("rendered-text-snapshot-v1");
+    expect(ghostty.snapshot.backend).toBe("xterm-vt-snapshot-v1");
     expect(ghostty.snapshot.snapshotBytes).toBeGreaterThan(0);
     expect(ghostty.snapshot.durationMs).not.toBeNull();
   } finally {

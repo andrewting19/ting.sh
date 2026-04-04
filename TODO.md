@@ -61,7 +61,7 @@
 - [x] PTY sidecar foundation — Bun now proxies to local `ptyd`, and PTYs survive real Bun server restarts
 - [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
-- [x] Ghostty snapshot reconnect rollout — Ghostty reconnects now request snapshot attach too, using rendered-text restore for normal-buffer sessions and xterm VT restore for alternate-screen sessions
+- [x] Ghostty snapshot reconnect rollout — Ghostty reconnects now request snapshot attach too, using the xterm VT snapshot path for both normal-buffer and alternate-screen sessions
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
 - [x] Batch live-session trace export — the same script now supports `--all` to capture every live session in one pass
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
@@ -100,6 +100,7 @@
 - [x] Stale sidecar restart control — when `stale ptyd` is shown, the header now exposes a confirmed restart action and server endpoint to intentionally replace the sidecar
 - [x] Duplicate Claude Code redraws from no-op resize storms — fixed (`ptyd` now ignores identical cols/rows resize requests instead of retriggering redraw-heavy TUIs on every repeated resize)
 - [x] xterm snapshot reconnect could render Claude Code in black and white until the next full redraw — fixed by recycling the WebGL addon around snapshot restore; Playwright now also verifies ANSI cell attributes survive refresh across snapshot reconnect
+- [x] Ghostty snapshot reconnect could render Claude Code in black and white after refresh — fixed by switching Ghostty normal-buffer reconnect from text-only rendered snapshots to style-preserving xterm VT snapshots while keeping viewport restoration
 - [x] Versioned sidecar protocol + respawn recovery — `/api/sidecar` now reports expected-vs-running protocol compatibility and Bun integration tests cover sidecar death followed by on-demand `ptyd` respawn
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
