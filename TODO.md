@@ -65,6 +65,7 @@
 - [x] Ghostty snapshot color regression coverage — Playwright now checks that Ghostty preserves ANSI cell attributes across refresh/snapshot reconnect too, not just xterm
 - [x] Stage peer WebSocket startup — local refresh/reconnect no longer eagerly waits on every `hosts.json` peer to start connecting before the rest of the app can settle
 - [x] Include `ptyd.ts` in release archives — deployed hosts no longer miss the sidecar entrypoint needed for PTY startup
+- [x] Sidecar snapshot runtime dependencies — `@xterm/addon-serialize` and `@xterm/headless` now ship as runtime deps so `ptyd` can boot on fresh production installs instead of relying on dev-only packages being present
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
 - [x] Batch live-session trace export — the same script now supports `--all` to capture every live session in one pass
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access
