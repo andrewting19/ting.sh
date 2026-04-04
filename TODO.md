@@ -63,6 +63,7 @@
 - [x] xterm snapshot reconnect rollout — xterm renderer reload/reconnect flows now restore from a compact VT snapshot plus ordered tail instead of replaying the full raw attach buffer
 - [x] Ghostty snapshot reconnect rollout — Ghostty reconnects now request snapshot attach too, using the xterm VT snapshot path for both normal-buffer and alternate-screen sessions
 - [x] Ghostty snapshot color regression coverage — Playwright now checks that Ghostty preserves ANSI cell attributes across refresh/snapshot reconnect too, not just xterm
+- [x] Stage peer WebSocket startup — local refresh/reconnect no longer eagerly waits on every `hosts.json` peer to start connecting before the rest of the app can settle
 - [x] Local live-session trace export — `ptyd` debug endpoint plus `scripts/capture-session-trace.ts` can persist raw replay and serialized snapshots from a running session for offline analysis
 - [x] Batch live-session trace export — the same script now supports `--all` to capture every live session in one pass
 - [x] Server-routed trace capture — Bun now exposes `/api/sidecar` and `/api/debug/session`, and the capture script prefers the active server proxy before direct `ptyd` access

@@ -150,6 +150,7 @@ export function App() {
   const [studyCopyState, setStudyCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [restartSidecarModalOpen, setRestartSidecarModalOpen] = useState(false)
   const [restartingSidecar, setRestartingSidecar] = useState(false)
+  const [backgroundPeerConnectionsReady, setBackgroundPeerConnectionsReady] = useState(false)
   const [hosts, setHosts] = useState<Host[]>([{ id: LEGACY_LOCAL_HOST_ID, name: 'Local Host', url: location.origin, local: true }])
   const [hostSessions, setHostSessions] = useState<Map<string, Session[]>>(new Map())
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
@@ -906,12 +907,36 @@ export function App() {
     return next.toString()
   }, [])
 
-  useEffect(() => {
-    for (const host of hosts) connect(host.id, toWsUrl(host.local ? location.origin : host.url))
-    for (const hostId of hostStatuses.keys()) {
-      if (!hosts.some(host => host.id === hostId)) disconnect(hostId)
+  const shouldConnectHostImmediately = useCallback((host: Host) => {
+    if (host.local) return true
+    try {
+      return new URL(host.url).origin === location.origin
+    } catch {
+      return false
     }
-  }, [connect, disconnect, hostStatuses, hosts, toWsUrl])
+  }, [])
+
+  useEffect(() => {
+    setBackgroundPeerConnectionsReady(false)
+    const timerId = window.setTimeout(() => setBackgroundPeerConnectionsReady(true), 2000)
+    return () => window.clearTimeout(timerId)
+  }, [hosts])
+
+  useEffect(() => {
+    const activeHostId = currentKeyRef.current ? parseKey(currentKeyRef.current).hostId : localHostId
+    const desiredHostIds = new Set(
+      hosts
+        .filter(host => shouldConnectHostImmediately(host) || host.id === activeHostId || backgroundPeerConnectionsReady)
+        .map(host => host.id),
+    )
+    for (const host of hosts) {
+      if (!desiredHostIds.has(host.id)) continue
+      connect(host.id, toWsUrl(host.local ? location.origin : host.url))
+    }
+    for (const hostId of hostStatuses.keys()) {
+      if (!desiredHostIds.has(hostId)) disconnect(hostId)
+    }
+  }, [backgroundPeerConnectionsReady, connect, disconnect, hostStatuses, hosts, localHostId, shouldConnectHostImmediately, toWsUrl])
 
   useEffect(() => {
     let cancelled = false
