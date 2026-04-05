@@ -138,7 +138,7 @@ function shouldIgnoreGlobalTerminalShortcutTarget(target: EventTarget | null): b
 }
 
 const MOBILE_KEYBOARD_RESIZE_SETTLE_MS = 120
-const TERMINAL_RESIZE_SETTLE_MS = 150
+const TERMINAL_RESIZE_SETTLE_MS = 450
 const SNAPSHOT_ATTACH_ENABLED = import.meta.env.VITE_SNAPSHOT_ATTACH !== 'false'
 
 function decodeBase64Utf8(value: string): Uint8Array {
