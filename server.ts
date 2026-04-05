@@ -8,6 +8,7 @@ const PORT = parseInt(process.env.PORT ?? "7681", 10);
 const PTYD_PORT = resolvePtydPort(PORT);
 const PTYD_HTTP_BASE_URL = getPtydHttpBaseUrl(PORT);
 const PTYD_WS_URL = getPtydWsUrl(PORT);
+const PTYD_AUTOSPAWN = (process.env.PTYD_AUTOSPAWN ?? "true") !== "false";
 
 interface WSData {
   backend: WebSocket | null;
@@ -171,8 +172,9 @@ async function waitForPtydDown(timeoutMs = 10_000): Promise<void> {
   throw new Error(`ptyd did not stop within ${timeoutMs}ms`);
 }
 
-async function ensurePtyd(): Promise<void> {
+async function ensurePtyd(allowSpawn = PTYD_AUTOSPAWN): Promise<void> {
   if (await isPtydHealthy()) return;
+  if (!allowSpawn) throw new Error(`ptyd unavailable on port ${PTYD_PORT}`);
   if (!g.__wt_ptyd_ready) {
     g.__wt_ptyd_ready = (async () => {
       if (await isPtydHealthy()) return;
@@ -211,7 +213,7 @@ async function restartPtyd(): Promise<void> {
     }
     await waitForPtydDown();
   }
-  await ensurePtyd();
+  await ensurePtyd(true);
 }
 
 function connectBackendProxy(ws: ServerWebSocket<WSData>) {
@@ -250,7 +252,12 @@ function connectBackendProxy(ws: ServerWebSocket<WSData>) {
   };
 }
 
-await ensurePtyd();
+try {
+  await ensurePtyd();
+} catch (err) {
+  if (PTYD_AUTOSPAWN) throw err;
+  console.warn(`[ptyd] startup skipped: ${err instanceof Error ? err.message : String(err)}`);
+}
 
 const server = Bun.serve<WSData>({
   port: PORT,
@@ -260,7 +267,11 @@ const server = Bun.serve<WSData>({
 
     if (url.pathname === "/ws") {
       if (!isAllowedWsOrigin(req, TRUSTED_PEER_HOSTNAMES)) return new Response("Forbidden", { status: 403 });
-      await ensurePtyd();
+      try {
+        await ensurePtyd();
+      } catch {
+        return new Response("Sidecar unavailable", { status: 503 });
+      }
       if (server.upgrade(req, { data: { backend: null, queue: [], closed: false } })) return;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
@@ -270,8 +281,8 @@ const server = Bun.serve<WSData>({
       return Response.json({ self: HOST_CONFIG.self, peers: HOST_CONFIG.peers });
     }
     if (url.pathname === "/api/sidecar") {
-      await ensurePtyd();
       try {
+        await ensurePtyd();
         const health = await fetchPtydHealth();
         if (!health) throw new Error("Sidecar unavailable");
         const protocolVersion = parsePtydProtocolVersion(health.protocolVersion);
@@ -320,7 +331,11 @@ const server = Bun.serve<WSData>({
       }
     }
     if (url.pathname === "/api/debug/session") {
-      await ensurePtyd();
+      try {
+        await ensurePtyd();
+      } catch {
+        return Response.json({ error: "Sidecar unavailable" }, { status: 502 });
+      }
       const id = url.searchParams.get("id");
       if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
       const includeRaw = url.searchParams.get("includeRaw");

@@ -362,3 +362,49 @@ test("server respawns ptyd after sidecar exit", async () => {
     await terminatePid(ptydPid);
   }
 }, 60_000);
+
+test("server can run with sidecar autospawn disabled", async () => {
+  const serverPort = await getFreePort();
+  const ptydPort = await getFreePort();
+  const serverBaseUrl = `http://127.0.0.1:${serverPort}`;
+  let ptyd: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  let server: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+
+  try {
+    server = spawnBunScript("server.ts", {
+      PORT: String(serverPort),
+      PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`${serverBaseUrl}/api/host`);
+
+    const missingRes = await fetch(`${serverBaseUrl}/api/sidecar`);
+    expect(missingRes.status).toBe(502);
+
+    ptyd = spawnBunScript("ptyd.ts", {
+      PTYD_PORT: String(ptydPort),
+      PTYD_IDLE_EXIT_MS: "0",
+      HOSTS_FILE: "none",
+      AUTO_UPDATE: "false",
+      SHELL: "/bin/bash",
+    });
+    await waitForHttpOk(`http://127.0.0.1:${ptydPort}/health`);
+
+    const healthyRes = await fetch(`${serverBaseUrl}/api/sidecar`);
+    expect(healthyRes.ok).toBe(true);
+    const healthy = await healthyRes.json() as {
+      protocolCompatible: boolean;
+      health: { ok: boolean; pid: number | null };
+    };
+    expect(healthy.protocolCompatible).toBe(true);
+    expect(healthy.health.ok).toBe(true);
+    expect(healthy.health.pid).toBeTruthy();
+  } finally {
+    await terminateProcess(server);
+    await terminateProcess(ptyd);
+  }
+}, 60_000);

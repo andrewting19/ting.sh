@@ -29,7 +29,7 @@ Tmux session detection is supported as an optional future feature (for interop w
 - **Frontend**: React + TypeScript, bundled by Vite
 - **Terminal**: xterm.js 5.x with WebGL (desktop) + Canvas (iOS) + FitAddon
 
-Dev: `bun run dev` — Vite on :4321 with HMR, WS server on :7681, proxied transparently
+Dev: `bun run dev` — bootstraps a detached local `ptyd` on :7781, then starts Vite on :4321 with HMR plus the WS server on :7681
 Prod: `bun run build && bun run start` — single Bun server on :7681 serves everything
 
 ## Deployment
@@ -119,6 +119,7 @@ Working:
 - Create / attach / kill sessions with custom confirm modal
 - PTY sessions persist when browser tab closes — reconnect and resume
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
+- Explicit dev sidecar bootstrap — `bun run dev` now ensures a detached `ptyd` daemon is already running before the hot Bun server starts, so killing the terminal or process tree that launched dev no longer implicitly kills the sidecar-owned PTY sessions
 - Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
 - Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using xterm VT snapshots for both normal-buffer and alternate-screen sessions so ANSI styling survives refresh
@@ -156,7 +157,7 @@ Working:
 - Windows host support (validated on `mom`) — Git Bash is preferred over `cmd.exe` when available, CWD tracking works via a hidden Git Bash prompt hook, duplicate/create-with-CWD works on Windows hosts, and passwordless `LocalSystem` installs now default new shells to the intended user home instead of `systemprofile`
 - Windows installer/runtime hardening — `deploy/install.ps1` now bundles a portable Node runtime for the PTY worker, supports configurable `ServiceName` / `Port` / optional `ServiceUser`, and Windows auto-update reinstalls dependencies after extracting a new release
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
-- Dev fail-fast wiring: `bun run dev` now tears down both processes if either Vite or the WS server exits, so backend crashes cannot leave a misleading "connected UI, reconnecting WS" state
+- Dev fail-fast wiring: `bun run dev` still tears down Vite + the hot WS server if either exits, but the local `ptyd` is now bootstrapped separately first so dev-server churn does not implicitly wipe live PTY sessions
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
 - Terminal shortcut normalization now also intercepts `Alt+Left/Right` and macOS `Cmd+Left/Right` outside text inputs, forwarding shell-friendly cursor-movement sequences instead of leaking literal `;3D` / `;3C` CSI suffixes into the PTY
 - macOS browser reload is now explicitly preserved while the terminal is focused too — `Cmd+R` reloads the page instead of leaking a literal `r` into the PTY
@@ -268,7 +269,7 @@ Missing / in progress:
 
 ## Known limitations
 
-**Sessions still do not survive full process or machine restarts.** PTYs now survive Bun web-server restarts because `ptyd` owns them, but `ptyd` itself is still a normal process. If the sidecar or machine dies, the PTYs die too. True boot-persistent sessions would require a stronger detached runtime model.
+**Sessions still do not survive full process or machine restarts.** PTYs now survive Bun web-server restarts and normal `bun run dev` churn because `ptyd` owns them and dev bootstraps it separately, but if the sidecar itself or the whole machine dies, the PTYs still die. True boot-persistent sessions would require a stronger detached runtime model.
 
 **Some full-screen TUIs can intentionally wipe xterm scrollback during redraw (observed with Claude Code).** This can look like a random "flicker/scroll jump" bug where the viewport suddenly snaps and the `latest` button cannot stay at the bottom. In the observed case, the PTY stream included `CSI 2J` (clear screen), `CSI 3J` (clear scrollback), and `CSI H` (cursor home) in the **normal buffer** (not an attach/reconnect path, and not a client-side replay/reset bug). xterm.js is behaving correctly by collapsing scrollback and resetting the viewport after `CSI 3J`.
 

@@ -11,6 +11,7 @@
 - [x] Kill session uses native `confirm()` — replaced with custom Modal
 - [x] Session switch showed blank terminal — fixed
 - [x] Sessions died on Bun server restart — fixed (local `ptyd` sidecar now owns PTYs, with restart-survival integration coverage)
+- [x] Dev `ptyd` could still die with the terminal/process tree that launched `bun run dev` — fixed (`bun run dev` now bootstraps a detached sidecar first and runs the hot Bun server with sidecar autospawn disabled)
 - [x] Double cursor when switching — fixed (per-session terminals)
 - [x] New session blank until switch away/back — fixed (sessions before ready)
 - [x] Session name collisions after delete — fixed (champion name pool)

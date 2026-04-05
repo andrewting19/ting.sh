@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,vite -c cyan,magenta \"bun run dev:server\" \"bun run dev:client\"",
+    "dev": "bun run dev:ensure-ptyd && concurrently -k -n server,vite -c cyan,magenta \"PTYD_AUTOSPAWN=false bun run dev:server\" \"bun run dev:client\"",
+    "dev:ensure-ptyd": "AUTO_UPDATE=false PTYD_IDLE_EXIT_MS=0 bun run scripts/dev-ensure-ptyd.ts",
     "dev:server": "AUTO_UPDATE=false bun run --hot server.ts",
     "dev:client": "vite",
     "build": "vite build",
