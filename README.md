@@ -146,6 +146,7 @@ Working:
 - Ghostty mobile touch scrolling now matches xterm direction on iOS-style swipe gestures
 - Mobile keyboard dismissal now reclaims terminal height cleanly — the keyboard inset still animates the toolbar every frame, but the active terminal waits briefly for the iOS keyboard motion to settle before refitting, which avoids stale gaps and resize thrash
 - Core Playwright parity coverage now runs under both renderers for create/input/switch/reload/reconnect/focus-report flows
+- Playwright E2E isolation hardened — the test web server now pins its own `PTYD_PORT` and disables auto-update so test runs cannot accidentally inherit and talk to a live sidecar
 - Browser-use smoke coverage has also been exercised under both renderers for create/input/switch/reload flows against the live dev server
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)

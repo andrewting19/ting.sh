@@ -6,6 +6,7 @@ import { defineConfig } from '@playwright/test'
 // `playwright test` directly for one-off debugging (uses fixed ports).
 const vitePort = parseInt(process.env.TEST_VITE_PORT ?? '4322')
 const wsPort   = parseInt(process.env.TEST_WS_PORT   ?? '7682')
+const ptydPort = parseInt(process.env.TEST_PTYD_PORT ?? String(wsPort + 100))
 
 export default defineConfig({
   testDir: './tests',
@@ -30,7 +31,9 @@ export default defineConfig({
   webServer: {
     // SHELL=/bin/bash: tests must not depend on the user's interactive shell
     // config (.zshrc plugins, slow DNS lookups, etc.). Bash starts instantly.
-    command: `concurrently -n server,vite -c cyan,magenta "SHELL=/bin/bash PORT=${wsPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} WS_PORT=${wsPort} vite"`,
+    // PTYD_PORT is pinned explicitly so an inherited shell env cannot point
+    // the test server at a live sidecar. AUTO_UPDATE stays off in tests.
+    command: `concurrently -n server,vite -c cyan,magenta "AUTO_UPDATE=false SHELL=/bin/bash PORT=${wsPort} PTYD_PORT=${ptydPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} WS_PORT=${wsPort} vite"`,
     url: `http://localhost:${vitePort}`,
     reuseExistingServer: false,
     timeout: 20_000,

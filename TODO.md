@@ -58,6 +58,7 @@
 - [x] Mobile session switching no longer auto-focuses the terminal on narrow layouts — prevents iOS keyboard summon/zoom on session taps while preserving explicit toolbar keyboard focus
 - [x] Ghostty mobile touch scrolling direction matches xterm — swipe-up/down semantics are now consistent across both renderers
 - [x] Mobile keyboard dismissal reclaims terminal height cleanly — keyboard inset changes now settle briefly before forcing an active-session refit/resize, avoiding stale empty space and resize thrash after iOS closes the keyboard
+- [x] Playwright E2E sidecar isolation — test runs now pin `PTYD_PORT` and disable auto-update so they cannot inherit a live sidecar target
 - [x] Session persistence — survive tab close, scrollback replay on reconnect
 - [x] PTY sidecar foundation — Bun now proxies to local `ptyd`, and PTYs survive real Bun server restarts
 - [x] xterm snapshot reconnect groundwork — `ptyd` now maintains a shadow xterm snapshot tracker, monotonic output sequence numbers, bounded live tail buffering, and an integration-tested `snapshot-ready` / `snapshot-applied` / ordered `snapshot-tail` handshake
