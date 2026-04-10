@@ -714,8 +714,29 @@ export function App() {
     const copyJson = async (value: unknown) => {
       const text = JSON.stringify(value, null, 2)
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text)
+        try {
+          await navigator.clipboard.writeText(text)
+          return text
+        } catch {
+          // Fall through to execCommand fallback for iPad Safari.
+        }
       }
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', 'true')
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      ta.style.top = '0'
+      ta.style.width = '1px'
+      ta.style.height = '1px'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      ta.setSelectionRange(0, text.length)
+      const copied = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (!copied) throw new Error('copy failed')
       return text
     }
     ;(window as any).__wt_send = (obj: object) => sendToHost(localHostId, obj)

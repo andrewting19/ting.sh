@@ -56,6 +56,11 @@ function isIOSDevice(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
+function isIPad(): boolean {
+  if (/iPad/i.test(navigator.userAgent)) return true
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
 function shouldSuppressOpenAutoFocus(): boolean {
   if (typeof window === 'undefined') return false
   return isIOSDevice() || window.matchMedia('(max-width: 640px)').matches
@@ -195,11 +200,108 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
   }
 }
 
+function hasGhosttyMouseTracking(term: Terminal): boolean {
+  return term.getMode(1000, false) || term.getMode(1002, false) || term.getMode(1003, false)
+}
+
+/**
+ * iPad trackpad two-finger scroll fix for ghostty.
+ *
+ * ghostty-web sets contenteditable="true" on the container div for keyboard
+ * input.  On iPad Safari, trackpad two-finger scroll gestures on a focused
+ * contenteditable element may be consumed by the editing/compositor layer
+ * before wheel events reach JavaScript — so ghostty's built-in wheel handler
+ * on the container never fires.
+ *
+ * Fix: attach a wheel listener directly on the <canvas> child (which is NOT
+ * contenteditable).  Safari dispatches wheel events to the canvas normally,
+ * and we translate them into scrollLines() calls ourselves.  We also keep
+ * the customWheelEventHandler as a fallback for cases where wheel events DO
+ * reach the container (e.g. future Safari fixes or mouse-wheel input).
+ */
+function attachIPadTrackpadScroll(container: HTMLElement, term: Terminal): (() => void) | null {
+  if (!isIPad()) return null
+
+  let pixelRemainder = 0
+
+  const scrollWheel = (event: WheelEvent) => {
+    if (hasGhosttyMouseTracking(term) || term.getScrollbackLength() <= 0) return
+
+    const lineHeight = getTerminalLineHeight(container, term)
+    if (lineHeight <= 0) return
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    event.stopPropagation()
+
+    let deltaPixels = event.deltaY
+    if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+      deltaPixels *= lineHeight
+    } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+      deltaPixels *= lineHeight * term.rows
+    }
+
+    pixelRemainder += deltaPixels
+    const lines = Math.trunc(pixelRemainder / lineHeight)
+    if (lines !== 0) {
+      term.scrollLines(lines)
+      pixelRemainder -= lines * lineHeight
+    }
+  }
+
+  // Listen on the canvas (not the contenteditable container) so the event
+  // isn't swallowed by Safari's editing scroll path.  Capture phase ensures
+  // we fire before ghostty-web's own handler (also capture) which is on the
+  // container — a parent of the canvas.  Since we stopPropagation, the
+  // container handler won't double-process.
+  const options = { passive: false, capture: true } as const
+  const targets = new Set<EventTarget>()
+  targets.add(container)
+  const canvas = container.querySelector('canvas')
+  if (canvas) targets.add(canvas)
+  const textarea = container.querySelector('textarea[aria-label="Terminal input"]')
+  if (textarea) targets.add(textarea)
+
+  for (const target of targets) {
+    target.addEventListener('wheel', scrollWheel as EventListener, options)
+  }
+
+  return () => {
+    pixelRemainder = 0
+    for (const target of targets) {
+      target.removeEventListener('wheel', scrollWheel as EventListener, options)
+    }
+  }
+}
+
+function attachIPadPasteShortcut(term: Terminal, textarea: HTMLTextAreaElement | null): (() => void) | null {
+  if (!isIPad() || !textarea) return null
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    const isPasteShortcut = (event.metaKey || event.ctrlKey) && !event.altKey && event.code === 'KeyV'
+    if (!isPasteShortcut) return
+    event.preventDefault()
+    event.stopPropagation()
+    void navigator.clipboard?.readText()
+      .then(text => {
+        if (text) term.paste(text)
+      })
+      .catch(() => {})
+  }
+
+  textarea.addEventListener('keydown', onKeyDown, true)
+  return () => {
+    textarea.removeEventListener('keydown', onKeyDown, true)
+  }
+}
+
 class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
+  private trackpadCleanup: (() => void) | null = null
+  private pasteShortcutCleanup: (() => void) | null = null
   private opened = false
 
   constructor(
@@ -219,8 +321,16 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     if (this.opened) return
     const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null
     this.term.open(container)
+    if (isIPad()) {
+      const ta = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]')
+      if (ta) {
+        ta.readOnly = true
+        this.pasteShortcutCleanup = attachIPadPasteShortcut(this.term, ta)
+      }
+    }
     this.fitAddon.fit()
     this.momentumCleanup = attachIOSScroll(container, this.term)
+    this.trackpadCleanup = attachIPadTrackpadScroll(container, this.term)
     this.resizeObserver = new ResizeObserver(() => {
       this.fit()
       this.callbacks.onScroll(this.sessionKey)
@@ -303,6 +413,10 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     this.resizeObserver = null
     this.momentumCleanup?.()
     this.momentumCleanup = null
+    this.trackpadCleanup?.()
+    this.trackpadCleanup = null
+    this.pasteShortcutCleanup?.()
+    this.pasteShortcutCleanup = null
     this.term.dispose()
   }
 

@@ -50,6 +50,12 @@ function isIOSDevice(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
+/** iPad specifically (not iPhone/iPod) — modern iPads report a desktop macOS UA. */
+function isIPad(): boolean {
+  if (/iPad/i.test(navigator.userAgent)) return true
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
 function isMobileDevice(): boolean {
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
@@ -163,12 +169,85 @@ function attachIOSScroll(container: HTMLElement, term: Terminal): (() => void) |
   }
 }
 
+function attachIPadTrackpadScroll(container: HTMLElement, term: Terminal): (() => void) | null {
+  if (!isIPad()) return null
+
+  let pixelRemainder = 0
+
+  const onWheel = (event: WheelEvent) => {
+    if (term.modes.mouseTrackingMode !== 'none' || term.buffer.active.type === 'alternate') return
+
+    const lineHeight = (term.options.fontSize ?? 13) * (term.options.lineHeight ?? 1.2)
+    if (lineHeight <= 0) return
+
+    let deltaPixels = event.deltaY
+    if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+      deltaPixels *= lineHeight
+    } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+      deltaPixels *= lineHeight * term.rows
+    }
+
+    pixelRemainder += deltaPixels
+    const lines = Math.trunc(pixelRemainder / lineHeight)
+    if (lines !== 0) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      event.stopPropagation()
+      term.scrollLines(lines)
+      pixelRemainder -= lines * lineHeight
+    }
+  }
+
+  const options = { passive: false, capture: true } as const
+  const targets = new Set<EventTarget>()
+  targets.add(container)
+  const screen = container.querySelector('.xterm-screen')
+  if (screen) targets.add(screen)
+  const viewport = container.querySelector('.xterm-viewport')
+  if (viewport) targets.add(viewport)
+  if (term.textarea) targets.add(term.textarea)
+
+  for (const target of targets) {
+    target.addEventListener('wheel', onWheel as EventListener, options)
+  }
+
+  return () => {
+    pixelRemainder = 0
+    for (const target of targets) {
+      target.removeEventListener('wheel', onWheel as EventListener, options)
+    }
+  }
+}
+
+function attachIPadPasteShortcut(term: Terminal, textarea: HTMLTextAreaElement | null): (() => void) | null {
+  if (!isIPad() || !textarea) return null
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    const isPasteShortcut = (event.metaKey || event.ctrlKey) && !event.altKey && event.code === 'KeyV'
+    if (!isPasteShortcut) return
+    event.preventDefault()
+    event.stopPropagation()
+    void navigator.clipboard?.readText()
+      .then(text => {
+        if (text) term.paste(text)
+      })
+      .catch(() => {})
+  }
+
+  textarea.addEventListener('keydown', onKeyDown, true)
+  return () => {
+    textarea.removeEventListener('keydown', onKeyDown, true)
+  }
+}
+
 class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
   private webglAddon: WebglAddon | null = null
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
+  private trackpadCleanup: (() => void) | null = null
+  private pasteShortcutCleanup: (() => void) | null = null
   private fullRefreshScheduled = false
   private opened = false
   private active = false
@@ -189,9 +268,23 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   open(container: HTMLElement) {
     if (this.opened) return
     this.term.open(container)
+
+    // iPad + hardware keyboard: focusing xterm's hidden <textarea> makes Safari
+    // show a keyboard accessory bar, shrinking the visible viewport. Mark the
+    // helper textarea readonly so Safari stops treating it like a normal editable
+    // field, while xterm can still consume hardware keydown events from focus.
+    if (isIPad()) {
+      const ta = container.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
+      if (ta) {
+        ta.readOnly = true
+        this.pasteShortcutCleanup = attachIPadPasteShortcut(this.term, ta)
+      }
+    }
+
     this.fitAddon.fit()
     this.scheduleFullRefresh()
     this.momentumCleanup = attachIOSScroll(container, this.term)
+    this.trackpadCleanup = attachIPadTrackpadScroll(container, this.term)
     this.resizeObserver = new ResizeObserver(() => {
       this.fit()
       this.callbacks.onScroll(this.sessionKey)
@@ -282,6 +375,10 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.resizeObserver = null
     this.momentumCleanup?.()
     this.momentumCleanup = null
+    this.trackpadCleanup?.()
+    this.trackpadCleanup = null
+    this.pasteShortcutCleanup?.()
+    this.pasteShortcutCleanup = null
     this.setActive(false)
     this.term.dispose()
   }
