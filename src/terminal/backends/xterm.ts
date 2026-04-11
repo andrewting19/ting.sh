@@ -219,27 +219,6 @@ function attachIPadTrackpadScroll(container: HTMLElement, term: Terminal): (() =
   }
 }
 
-function attachIPadPasteShortcut(term: Terminal, textarea: HTMLTextAreaElement | null): (() => void) | null {
-  if (!isIPad() || !textarea) return null
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    const isPasteShortcut = (event.metaKey || event.ctrlKey) && !event.altKey && event.code === 'KeyV'
-    if (!isPasteShortcut) return
-    event.preventDefault()
-    event.stopPropagation()
-    void navigator.clipboard?.readText()
-      .then(text => {
-        if (text) term.paste(text)
-      })
-      .catch(() => {})
-  }
-
-  textarea.addEventListener('keydown', onKeyDown, true)
-  return () => {
-    textarea.removeEventListener('keydown', onKeyDown, true)
-  }
-}
-
 class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
@@ -247,7 +226,6 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
   private trackpadCleanup: (() => void) | null = null
-  private pasteShortcutCleanup: (() => void) | null = null
   private fullRefreshScheduled = false
   private opened = false
   private active = false
@@ -275,10 +253,7 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     // field, while xterm can still consume hardware keydown events from focus.
     if (isIPad()) {
       const ta = container.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
-      if (ta) {
-        ta.readOnly = true
-        this.pasteShortcutCleanup = attachIPadPasteShortcut(this.term, ta)
-      }
+      if (ta) ta.readOnly = true
     }
 
     this.fitAddon.fit()
@@ -377,8 +352,6 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     this.momentumCleanup = null
     this.trackpadCleanup?.()
     this.trackpadCleanup = null
-    this.pasteShortcutCleanup?.()
-    this.pasteShortcutCleanup = null
     this.setActive(false)
     this.term.dispose()
   }

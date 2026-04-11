@@ -274,34 +274,12 @@ function attachIPadTrackpadScroll(container: HTMLElement, term: Terminal): (() =
   }
 }
 
-function attachIPadPasteShortcut(term: Terminal, textarea: HTMLTextAreaElement | null): (() => void) | null {
-  if (!isIPad() || !textarea) return null
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    const isPasteShortcut = (event.metaKey || event.ctrlKey) && !event.altKey && event.code === 'KeyV'
-    if (!isPasteShortcut) return
-    event.preventDefault()
-    event.stopPropagation()
-    void navigator.clipboard?.readText()
-      .then(text => {
-        if (text) term.paste(text)
-      })
-      .catch(() => {})
-  }
-
-  textarea.addEventListener('keydown', onKeyDown, true)
-  return () => {
-    textarea.removeEventListener('keydown', onKeyDown, true)
-  }
-}
-
 class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
   private readonly term = new Terminal(TERMINAL_OPTIONS)
   private readonly fitAddon = new FitAddon()
   private resizeObserver: ResizeObserver | null = null
   private momentumCleanup: (() => void) | null = null
   private trackpadCleanup: (() => void) | null = null
-  private pasteShortcutCleanup: (() => void) | null = null
   private opened = false
 
   constructor(
@@ -323,10 +301,7 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     this.term.open(container)
     if (isIPad()) {
       const ta = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]')
-      if (ta) {
-        ta.readOnly = true
-        this.pasteShortcutCleanup = attachIPadPasteShortcut(this.term, ta)
-      }
+      if (ta) ta.readOnly = true
     }
     this.fitAddon.fit()
     this.momentumCleanup = attachIOSScroll(container, this.term)
@@ -415,8 +390,6 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     this.momentumCleanup = null
     this.trackpadCleanup?.()
     this.trackpadCleanup = null
-    this.pasteShortcutCleanup?.()
-    this.pasteShortcutCleanup = null
     this.term.dispose()
   }
 
