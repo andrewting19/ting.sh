@@ -1,12 +1,20 @@
 import { defineConfig } from '@playwright/test'
 
-// Ports are injected by tests/e2e.test.ts as TEST_VITE_PORT / TEST_WS_PORT.
-// Each bun test run allocates unique OS-assigned ports so concurrent runs
-// (e.g. two coding agents) never collide.  Fallbacks let you run
-// `playwright test` directly for one-off debugging (uses fixed ports).
-const vitePort = parseInt(process.env.TEST_VITE_PORT ?? '4322')
-const wsPort   = parseInt(process.env.TEST_WS_PORT   ?? '7682')
-const ptydPort = parseInt(process.env.TEST_PTYD_PORT ?? String(wsPort + 100))
+function requirePort(name: string): number {
+  const raw = process.env[name]?.trim()
+  if (!raw) throw new Error(`${name} is required for Playwright test isolation`)
+  const parsed = parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer, got: ${raw}`)
+  }
+  return parsed
+}
+
+// Ports are injected by tests/e2e.test.ts. Requiring them keeps Playwright
+// from silently falling back to a live/default ting.sh port during bun test.
+const vitePort = requirePort('TEST_VITE_PORT')
+const wsPort = requirePort('TEST_WS_PORT')
+const ptydPort = requirePort('TEST_PTYD_PORT')
 
 export default defineConfig({
   testDir: './tests',
@@ -33,7 +41,7 @@ export default defineConfig({
     // config (.zshrc plugins, slow DNS lookups, etc.). Bash starts instantly.
     // PTYD_PORT is pinned explicitly so an inherited shell env cannot point
     // the test server at a live sidecar. AUTO_UPDATE stays off in tests.
-    command: `concurrently -n server,vite -c cyan,magenta "AUTO_UPDATE=false SHELL=/bin/bash PORT=${wsPort} PTYD_PORT=${ptydPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} WS_PORT=${wsPort} vite"`,
+    command: `concurrently -n server,vite -c cyan,magenta "AUTO_UPDATE=false PTYD_AUTOSPAWN=true SHELL=/bin/bash TING_PORT=${wsPort} PTYD_PORT=${ptydPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} TING_WS_PORT=${wsPort} vite"`,
     url: `http://localhost:${vitePort}`,
     reuseExistingServer: false,
     timeout: 20_000,

@@ -29,7 +29,7 @@ Tmux session detection is supported as an optional future feature (for interop w
 - **Frontend**: React + TypeScript, bundled by Vite
 - **Terminal**: xterm.js 5.x with WebGL (desktop) + Canvas (iOS) + FitAddon
 
-Dev: `bun run dev` — bootstraps a detached local `ptyd` on :7781, then starts Vite on :4321 with HMR plus the WS server on :7681
+Dev: `bun run dev` — bootstraps a detached local `ptyd` on `TING_PORT+100`, then starts Vite on :4321 with HMR plus the WS server on `TING_PORT` (default: :7681)
 Prod: `bun run build && bun run start` — single Bun server on :7681 serves everything
 
 ## Deployment
@@ -80,13 +80,16 @@ Example `/opt/ting.sh/hosts.json` for a machine called `dev-server`:
 Every machine in the fleet needs its own `hosts.json` with the other machines as peers. After creating/editing: `systemctl restart ting-sh`.
 
 **Environment variables** (set in `/opt/ting.sh/.env` or systemd unit):
-- `PORT` — server port (default: 7681)
+- `TING_PORT` — server port (default: 7681)
+- `TING_WS_PORT` — Vite dev proxy target for `/ws` and `/api` (default: `TING_PORT`)
 - `SHELL` — shell to spawn (default: system shell)
 - `HOSTS_FILE` — path to hosts.json, or `none` to disable (default: `./hosts.json`)
 - `AUTO_UPDATE` — set to `false` to disable (default: enabled)
 - `AUTO_UPDATE_INTERVAL` — poll interval in ms (default: 300000 / 5min)
 - `AUTO_UPDATE_REPO` — GitHub repo to poll (default: `andrewting19/ting.sh`)
 - `TING_WINDOWS_SESSION_HOME` — Windows-only override for the shell home directory when the service itself runs as `LocalSystem`
+
+Changing `TING_PORT` for local dev does not require editing `hosts.json`. Peer URLs only need updates if you intentionally change a deployed machine's public ting.sh port.
 
 ### Renderer selection
 
@@ -120,6 +123,7 @@ Working:
 - PTY sessions persist when browser tab closes — reconnect and resume
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
 - Explicit dev sidecar bootstrap — `bun run dev` now ensures a detached `ptyd` daemon is already running before the hot Bun server starts, so killing the terminal or process tree that launched dev no longer implicitly kills the sidecar-owned PTY sessions
+- Port config is now namespaced to ting.sh — runtime and deploy use `TING_PORT`, and Vite dev proxying uses `TING_WS_PORT` or falls back to `TING_PORT`, so local dev no longer collides with unrelated tools that also claim `PORT`
 - Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer
 - Ghostty snapshot attach is now also wired end-to-end — reconnect now requests snapshot attach for Ghostty too, using xterm VT snapshots for both normal-buffer and alternate-screen sessions so ANSI styling survives refresh

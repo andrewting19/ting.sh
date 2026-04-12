@@ -147,8 +147,9 @@ test("ghostty attach-snapshot returns xterm VT snapshot payload for normal-buffe
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -214,8 +215,9 @@ test("ghostty attach-snapshot returns xterm VT snapshot for alternate-screen ses
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -282,8 +284,9 @@ test("ghostty snapshot attach keeps shared sessions live for existing and newly 
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",

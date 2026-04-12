@@ -1,4 +1,5 @@
 import { renderedTextSnapshotToVt, type RenderedTextSnapshot } from "../src/snapshot/renderedTextSnapshot";
+import { resolveServerPort } from "../src/serverPort";
 
 interface AttachMeasurement {
   mode: "raw" | "snapshot";
@@ -35,13 +36,13 @@ interface DebugSessionShape {
 
 function getServerWsUrl(): string {
   const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
-  const port = parseInt(process.env.SERVER_PORT?.trim() || process.env.PORT?.trim() || "7681", 10);
+  const port = parseInt(process.env.SERVER_PORT?.trim() || String(resolveServerPort()), 10);
   return `ws://${host}:${port}/ws`;
 }
 
 function getServerHttpUrl(): string {
   const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
-  const port = parseInt(process.env.SERVER_PORT?.trim() || process.env.PORT?.trim() || "7681", 10);
+  const port = parseInt(process.env.SERVER_PORT?.trim() || String(resolveServerPort()), 10);
   return `http://${host}:${port}`;
 }
 

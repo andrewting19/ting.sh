@@ -146,8 +146,9 @@ test("capture-session-trace script can capture all live sessions", async () => {
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",

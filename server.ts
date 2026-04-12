@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { hostname } from "os";
 import { join } from "path";
+import { resolveServerPort } from "./src/serverPort";
 import { getPtydHttpBaseUrl, getPtydWsUrl, resolvePtydPort } from "./src/sidecarConfig";
 import { PTYD_PROTOCOL_VERSION, isPtydProtocolCompatible, parsePtydProtocolVersion } from "./src/sidecarProtocol";
 
-const PORT = parseInt(process.env.PORT ?? "7681", 10);
+const PORT = resolveServerPort();
 const PTYD_PORT = resolvePtydPort(PORT);
 const PTYD_HTTP_BASE_URL = getPtydHttpBaseUrl(PORT);
 const PTYD_WS_URL = getPtydWsUrl(PORT);
@@ -182,7 +183,7 @@ async function ensurePtyd(allowSpawn = PTYD_AUTOSPAWN): Promise<void> {
         cwd: process.cwd(),
         env: {
           ...process.env,
-          PORT: String(PORT),
+          TING_PORT: String(PORT),
           PTYD_PORT: String(PTYD_PORT),
           PTYD_IDLE_EXIT_MS: process.env.PTYD_IDLE_EXIT_MS ?? "2000",
         },

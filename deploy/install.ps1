@@ -395,7 +395,7 @@ $logsDir = Join-Path $InstallDir "logs"
 $stdoutLog = Join-Path $logsDir "service-stdout.log"
 $stderrLog = Join-Path $logsDir "service-stderr.log"
 $managedServiceEnv = [ordered]@{
-  PORT = [string]$Port
+  TING_PORT = [string]$Port
   TING_WINDOWS_SESSION_HOME = $resolvedSessionHome
 }
 

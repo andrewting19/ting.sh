@@ -9,7 +9,7 @@ WorkingDirectory=/opt/ting.sh
 ExecStart=/usr/local/bin/bun run server.ts
 Restart=always
 RestartSec=2
-Environment=PORT=7681
+Environment=TING_PORT=7681
 Environment=SHELL=/bin/bash
 EnvironmentFile=-/opt/ting.sh/.env
 

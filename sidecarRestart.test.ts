@@ -172,8 +172,9 @@ test("sessions survive Bun server restart when ptyd stays alive", async () => {
     await waitForHttpOk(`${ptydBaseUrl}/health`);
 
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -199,8 +200,9 @@ test("sessions survive Bun server restart when ptyd stays alive", async () => {
     await waitForHttpDown(`${serverBaseUrl}/api/host`);
 
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -251,9 +253,10 @@ test("api/sidecar/restart restarts ptyd on demand", async () => {
     await waitForHttpOk(`http://127.0.0.1:${ptydPort}/health`);
 
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
       PTYD_IDLE_EXIT_MS: "0",
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -298,9 +301,10 @@ test("server respawns ptyd after sidecar exit", async () => {
 
   try {
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
       PTYD_IDLE_EXIT_MS: "0",
+      PTYD_AUTOSPAWN: "true",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -372,7 +376,7 @@ test("server can run with sidecar autospawn disabled", async () => {
 
   try {
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
       PTYD_AUTOSPAWN: "false",
       PTYD_IDLE_EXIT_MS: "0",

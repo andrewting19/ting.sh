@@ -56,7 +56,7 @@ if command -v systemctl &>/dev/null; then
   systemctl enable ting-sh
   systemctl restart ting-sh
   echo "==> Service started on port 7681"
-  echo "==> Configure: edit /opt/ting.sh/.env (PORT, SHELL, etc.)"
+  echo "==> Configure: edit /opt/ting.sh/.env (TING_PORT, SHELL, etc.)"
   echo "==> Logs: journalctl -u ting-sh -f"
 else
   echo "==> No systemd found. Start manually: cd $INSTALL_DIR && bun run server.ts"

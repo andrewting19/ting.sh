@@ -147,8 +147,9 @@ test("snapshot attach emits snapshot-ready then tail after client ack", async ()
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
@@ -248,8 +249,9 @@ test("xterm snapshot attach keeps shared sessions live for existing and newly at
       SHELL: "/bin/bash",
     });
     server = spawnBunScript("server.ts", {
-      PORT: String(serverPort),
+      TING_PORT: String(serverPort),
       PTYD_PORT: String(ptydPort),
+      PTYD_AUTOSPAWN: "false",
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",

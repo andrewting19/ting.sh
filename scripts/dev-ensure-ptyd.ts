@@ -2,8 +2,9 @@ import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getPtydHttpBaseUrl, resolvePtydPort } from "../src/sidecarConfig";
+import { resolveServerPort } from "../src/serverPort";
 
-const BASE_PORT = parseInt(process.env.PORT ?? "7681", 10);
+const BASE_PORT = resolveServerPort();
 const PTYD_PORT = resolvePtydPort(BASE_PORT);
 const PTYD_HTTP_BASE_URL = getPtydHttpBaseUrl(BASE_PORT);
 const LOG_DIR = join(tmpdir(), "ting-sh");
@@ -40,7 +41,7 @@ async function main(): Promise<void> {
   mkdirSync(LOG_DIR, { recursive: true });
 
   const envArgs = [
-    `PORT=${shellQuote(String(BASE_PORT))}`,
+    `TING_PORT=${shellQuote(String(BASE_PORT))}`,
     `PTYD_PORT=${shellQuote(String(PTYD_PORT))}`,
     `PTYD_IDLE_EXIT_MS=${shellQuote(process.env.PTYD_IDLE_EXIT_MS ?? "0")}`,
     `AUTO_UPDATE=${shellQuote(process.env.AUTO_UPDATE ?? "false")}`,

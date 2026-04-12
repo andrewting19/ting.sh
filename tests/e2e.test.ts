@@ -19,6 +19,7 @@ async function getFreePort(): Promise<number> {
 }
 const vitePort = await getFreePort()
 const wsPort   = await getFreePort()
+const ptydPort = await getFreePort()
 // Let the OS fully release the sockets before Playwright binds them.
 await Bun.sleep(50)
 
@@ -37,6 +38,7 @@ test('e2e suite', async () => {
         PATH: `${root}/node_modules/.bin:${process.env.PATH}`,
         TEST_VITE_PORT: String(vitePort),
         TEST_WS_PORT:   String(wsPort),
+        TEST_PTYD_PORT: String(ptydPort),
       },
     },
   )

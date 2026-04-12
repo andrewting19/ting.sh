@@ -17,8 +17,8 @@ bun test
             └─ tests/helpers.ts      (shared utilities)
 ```
 
-- `e2e.test.ts` allocates two free OS ports via `Bun.serve({ port: 0 })`, then spawns Playwright as a subprocess with `TEST_VITE_PORT` and `TEST_WS_PORT` env vars.
-- `playwright.config.ts` reads those env vars to start the Vite dev server and Bun WS backend on the dynamic ports. Fallback to 4322/7682 if env vars are missing (for direct `playwright test` debugging).
+- `e2e.test.ts` allocates three free OS ports via `Bun.serve({ port: 0 })`, then spawns Playwright as a subprocess with `TEST_VITE_PORT`, `TEST_WS_PORT`, and `TEST_PTYD_PORT`.
+- `playwright.config.ts` requires those env vars and starts the Vite dev server, Bun WS backend, and `ptyd` sidecar on those dynamic ports. There is intentionally no fallback to default ports, so test runs cannot drift onto a live ting.sh instance.
 - The test server uses `SHELL=/bin/bash` so tests don't depend on the user's `.zshrc` (interactive zsh can hang on slow plugins/DNS).
 - `.pw.ts` extension keeps Playwright tests invisible to Bun's test scanner.
 

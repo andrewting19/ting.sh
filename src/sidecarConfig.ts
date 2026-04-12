@@ -1,8 +1,10 @@
+import { resolveServerPort } from './serverPort'
+
 export function resolvePtydHost(): string {
   return process.env.PTYD_HOST?.trim() || '127.0.0.1'
 }
 
-export function resolvePtydPort(basePort = parseInt(process.env.PORT ?? '7681', 10)): number {
+export function resolvePtydPort(basePort = resolveServerPort()): number {
   const explicit = process.env.PTYD_PORT?.trim()
   if (explicit) {
     const parsed = parseInt(explicit, 10)
