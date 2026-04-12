@@ -50,5 +50,7 @@ export interface SidecarStatus {
   port: number
   expectedProtocolVersion: number
   protocolCompatible: boolean
+  restartEnabled: boolean
+  debugSessionEnabled: boolean
   health: SidecarHealth | null
 }

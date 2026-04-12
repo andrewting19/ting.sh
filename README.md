@@ -82,6 +82,9 @@ Every machine in the fleet needs its own `hosts.json` with the other machines as
 **Environment variables** (set in `/opt/ting.sh/.env` or systemd unit):
 - `TING_PORT` — server port (default: 7681)
 - `TING_WS_PORT` — Vite dev proxy target for `/ws` and `/api` (default: `TING_PORT`)
+- `TING_ENABLE_DEBUG_SESSION` — set to `1` to expose `GET /api/debug/session` on the running server
+- `TING_ENABLE_SIDECAR_RESTART` — set to `1` to enable `POST /api/sidecar/restart` on the running server
+- `TING_TEST_MODE` — test-only marker set by the Playwright harness for safety checks and test-specific behavior
 - `SHELL` — shell to spawn (default: system shell)
 - `HOSTS_FILE` — path to hosts.json, or `none` to disable (default: `./hosts.json`)
 - `AUTO_UPDATE` — set to `false` to disable (default: enabled)
@@ -151,7 +154,7 @@ Working:
 - Ghostty mobile touch scrolling now matches xterm direction on iOS-style swipe gestures
 - Mobile keyboard dismissal now reclaims terminal height cleanly — the keyboard inset still animates the toolbar every frame, but the active terminal waits briefly for the iOS keyboard motion to settle before refitting, which avoids stale gaps and resize thrash
 - Core Playwright parity coverage now runs under both renderers for create/input/switch/reload/reconnect/focus-report flows
-- Playwright E2E isolation hardened — the test web server now pins its own `PTYD_PORT` and disables auto-update so test runs cannot accidentally inherit and talk to a live sidecar
+- Playwright E2E isolation hardened — the test web server now pins its own `PTYD_PORT`, sets `TING_TEST_MODE=1`, and disables auto-update so test runs cannot accidentally inherit and talk to a live sidecar
 - Browser-use smoke coverage has also been exercised under both renderers for create/input/switch/reload flows against the live dev server
 - Session rename — double-click or right-click/long-press context menu, persisted server-side
 - Context menu — Rename, Duplicate, Kill (right-click on desktop; long-press on touch)
@@ -201,7 +204,7 @@ Working:
 - The main sidecar/snapshot plan doc is now current again — [docs/pty-sidecar-snapshot-plan.md](./docs/pty-sidecar-snapshot-plan.md) has been rewritten around remaining work rather than the already-completed early phases
 - Ghostty alternate-screen snapshot path — Ghostty no longer falls back to raw attach when the active buffer is alternate-screen; it now restores the visible alternate-screen state from an xterm VT snapshot while deeper parity work remains open
 - Ghostty reconnect parity is now effectively at the user-visible level: normal-buffer restores preserve visible content, semantic scrollback, and saved viewport position. The remaining xterm-vs-Ghostty difference is internal `baseY` accounting, which does not currently map cleanly across the two renderer models and is not treated as a reconnect correctness bug.
-- Trace capture now prefers the active Bun server as a debug proxy (`/api/debug/session`, `/api/sidecar`) before falling back to direct sidecar access, so tooling follows whichever `ptyd` instance that server is actually using
+- Trace capture now prefers the active Bun server as a debug proxy (`/api/debug/session`, `/api/sidecar`) before falling back to direct sidecar access, so tooling follows whichever `ptyd` instance that server is actually using. The debug-session proxy is gated in normal runtime and enabled automatically in test mode.
 - Capture analysis tooling — `bun run scripts/analyze-session-capture.ts <capture-json>` summarizes raw replay vs xterm snapshot vs rendered-text snapshot size ratios from a saved live-session capture
 - Reconnect measurement tooling — `bun run scripts/measure-session-reconnect.ts <session-id> [renderer]` compares raw attach versus snapshot attach against the active server and reports replay bytes, snapshot bytes, tail bytes, and end-to-end timings
 - Batch reconnect measurement — `bun run scripts/measure-session-reconnect.ts --all [renderer]` measures every live session on the active server in one pass, which is better suited to real agent-trace validation runs
@@ -237,7 +240,7 @@ Working:
 - Snapshot UTF-8 decoding fixed in code — the snapshot tracker now decodes PTY byte chunks with streaming UTF-8 instead of `latin1`, which preserves box-drawing glyphs and fixes the `â` / `Â` / `Ã` mojibake seen in agent-TUI snapshots. Existing live sessions will still show the old behavior until `ptyd` is restarted.
 - Live UTF-8 snapshot verification (April 2, 2026) — after restarting `ptyd`, a fresh `utf8check` session confirmed that both xterm VT snapshots and Ghostty rendered-text snapshots preserve real box-drawing glyphs (`╭│╰`) with no mojibake.
 - Stale sidecar detection — `ptyd` health now reports whether the running sidecar fingerprint differs from the files on disk, `/api/sidecar` exposes that state, and the dev header shows a `stale ptyd` badge when the running sidecar is older than the checked-out code.
-- Stale sidecar restart control — when `stale ptyd` is shown, the header also exposes a `restart` action that intentionally kills the old sidecar and respawns a fresh one after confirmation
+- Stale sidecar restart control — when `stale ptyd` is shown, the header also exposes a `restart` action that intentionally kills the old sidecar and respawns a fresh one after confirmation; the server endpoint now requires `TING_ENABLE_SIDECAR_RESTART=1`
 - Versioned sidecar protocol boundary — `/api/sidecar` now reports the expected protocol version, the running sidecar's protocol version, and whether they are compatible so Bun↔`ptyd` drift is explicit instead of implicit.
 - Sidecar respawn coverage — Bun now has integration coverage proving it can recreate a dead `ptyd` on demand and continue serving fresh sessions without a Bun restart.
 - Sidecar resize dedupe — `ptyd` now ignores resize requests when the requested cols/rows already match the session, which prevents no-op resize storms from retriggering redraw-heavy TUIs like Claude Code into duplicate normal-buffer paints

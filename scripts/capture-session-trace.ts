@@ -70,7 +70,7 @@ async function fetchCapture(sessionId: string): Promise<Response> {
   try {
     const serverRes = await fetch(serverUrl);
     if (serverRes.ok) return serverRes;
-    if (serverRes.status !== 404 && serverRes.status !== 502) return serverRes;
+    if (serverRes.status !== 404 && serverRes.status !== 502 && serverRes.status !== 403) return serverRes;
   } catch {
     // fall through to direct sidecar access
   }

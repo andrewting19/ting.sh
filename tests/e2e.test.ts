@@ -39,6 +39,7 @@ test('e2e suite', async () => {
         TEST_VITE_PORT: String(vitePort),
         TEST_WS_PORT:   String(wsPort),
         TEST_PTYD_PORT: String(ptydPort),
+        TING_TEST_MODE: '1',
       },
     },
   )

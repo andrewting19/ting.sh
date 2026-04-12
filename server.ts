@@ -5,11 +5,18 @@ import { resolveServerPort } from "./src/serverPort";
 import { getPtydHttpBaseUrl, getPtydWsUrl, resolvePtydPort } from "./src/sidecarConfig";
 import { PTYD_PROTOCOL_VERSION, isPtydProtocolCompatible, parsePtydProtocolVersion } from "./src/sidecarProtocol";
 
+function isEnabledEnvFlag(name: string): boolean {
+  return process.env[name] === "1";
+}
+
 const PORT = resolveServerPort();
 const PTYD_PORT = resolvePtydPort(PORT);
 const PTYD_HTTP_BASE_URL = getPtydHttpBaseUrl(PORT);
 const PTYD_WS_URL = getPtydWsUrl(PORT);
 const PTYD_AUTOSPAWN = (process.env.PTYD_AUTOSPAWN ?? "true") !== "false";
+const TING_TEST_MODE = isEnabledEnvFlag("TING_TEST_MODE");
+const SIDECAR_RESTART_ENABLED = isEnabledEnvFlag("TING_ENABLE_SIDECAR_RESTART");
+const DEBUG_SESSION_ENABLED = isEnabledEnvFlag("TING_ENABLE_DEBUG_SESSION") || TING_TEST_MODE;
 
 interface WSData {
   backend: WebSocket | null;
@@ -293,6 +300,8 @@ const server = Bun.serve<WSData>({
           port: PTYD_PORT,
           expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
           protocolCompatible: isPtydProtocolCompatible(protocolVersion),
+          restartEnabled: SIDECAR_RESTART_ENABLED,
+          debugSessionEnabled: DEBUG_SESSION_ENABLED,
           health: {
             ...health,
             protocolVersion,
@@ -305,12 +314,20 @@ const server = Bun.serve<WSData>({
           port: PTYD_PORT,
           expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
           protocolCompatible: false,
+          restartEnabled: SIDECAR_RESTART_ENABLED,
+          debugSessionEnabled: DEBUG_SESSION_ENABLED,
           health: null,
         }, { status: 502 });
       }
     }
     if (url.pathname === "/api/sidecar/restart") {
       if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+      if (!SIDECAR_RESTART_ENABLED) {
+        return Response.json({
+          ok: false,
+          error: "Sidecar restart disabled. Set TING_ENABLE_SIDECAR_RESTART=1 to enable.",
+        }, { status: 403 });
+      }
       try {
         await restartPtyd();
         const health = await fetchPtydHealth();
@@ -322,6 +339,8 @@ const server = Bun.serve<WSData>({
           port: PTYD_PORT,
           expectedProtocolVersion: PTYD_PROTOCOL_VERSION,
           protocolCompatible: isPtydProtocolCompatible(protocolVersion),
+          restartEnabled: SIDECAR_RESTART_ENABLED,
+          debugSessionEnabled: DEBUG_SESSION_ENABLED,
           health: health ? { ...health, protocolVersion } : null,
         });
       } catch (err) {
@@ -332,6 +351,11 @@ const server = Bun.serve<WSData>({
       }
     }
     if (url.pathname === "/api/debug/session") {
+      if (!DEBUG_SESSION_ENABLED) {
+        return Response.json({
+          error: "Debug session disabled. Set TING_ENABLE_DEBUG_SESSION=1 to enable.",
+        }, { status: 403 });
+      }
       try {
         await ensurePtyd();
       } catch {

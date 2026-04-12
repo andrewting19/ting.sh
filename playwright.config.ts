@@ -41,7 +41,7 @@ export default defineConfig({
     // config (.zshrc plugins, slow DNS lookups, etc.). Bash starts instantly.
     // PTYD_PORT is pinned explicitly so an inherited shell env cannot point
     // the test server at a live sidecar. AUTO_UPDATE stays off in tests.
-    command: `concurrently -n server,vite -c cyan,magenta "AUTO_UPDATE=false PTYD_AUTOSPAWN=true SHELL=/bin/bash TING_PORT=${wsPort} PTYD_PORT=${ptydPort} HOSTS_FILE=none bun run --hot server.ts" "VITE_PORT=${vitePort} TING_WS_PORT=${wsPort} vite"`,
+    command: `concurrently -n server,vite -c cyan,magenta "AUTO_UPDATE=false PTYD_AUTOSPAWN=true SHELL=/bin/bash TING_PORT=${wsPort} PTYD_PORT=${ptydPort} HOSTS_FILE=none TING_TEST_MODE=1 bun run --hot server.ts" "VITE_PORT=${vitePort} TING_WS_PORT=${wsPort} vite"`,
     url: `http://localhost:${vitePort}`,
     reuseExistingServer: false,
     timeout: 20_000,

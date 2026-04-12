@@ -1727,6 +1727,8 @@ export function App() {
         port: json.port,
         expectedProtocolVersion: json.expectedProtocolVersion,
         protocolCompatible: json.protocolCompatible,
+        restartEnabled: json.restartEnabled,
+        debugSessionEnabled: json.debugSessionEnabled,
         health: json.health,
       })
       setRestartSidecarModalOpen(false)
@@ -1774,6 +1776,7 @@ export function App() {
     return next
   }, [hosts, orderedHostSessions])
   const showStaleSidecar = sidecarStatus?.health?.staleRuntime === true || sidecarStatus?.protocolCompatible === false
+  const showRestartSidecar = showStaleSidecar && sidecarStatus?.restartEnabled === true
 
   return (
     <div className="app">
@@ -1796,16 +1799,18 @@ export function App() {
               >
                 stale ptyd
               </div>
-              <button
-                type="button"
-                className="header-tool-btn header-toggle-btn"
-                onClick={() => setRestartSidecarModalOpen(true)}
-                disabled={restartingSidecar}
-                aria-label="Restart stale ptyd"
-                title="Restart stale ptyd"
-              >
-                {restartingSidecar ? '...' : 'restart'}
-              </button>
+              {showRestartSidecar && (
+                <button
+                  type="button"
+                  className="header-tool-btn header-toggle-btn"
+                  onClick={() => setRestartSidecarModalOpen(true)}
+                  disabled={restartingSidecar}
+                  aria-label="Restart stale ptyd"
+                  title="Restart stale ptyd"
+                >
+                  {restartingSidecar ? '...' : 'restart'}
+                </button>
+              )}
             </>
           )}
           <div className="renderer-toggle" role="group" aria-label="Terminal renderer">
