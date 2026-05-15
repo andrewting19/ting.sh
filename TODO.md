@@ -83,7 +83,7 @@
 - [x] Browser-side reconnect helper ergonomics — `__wt_attach_metrics.sessions()` lists session IDs/names and `compareCurrent()` compares the active session directly, which makes remote-device validation less tedious
 - [x] Browser-side one-shot study helper — `__wt_attach_metrics.studyCurrent()` / `.studyAll()` now bundle raw-vs-snapshot comparisons with renderer, user agent, URL, and sidecar status for remote-device validation reports
 - [x] Browser-side clipboard study helper — `__wt_attach_metrics.copyStudyCurrent()` / `.copyStudyAll()` now also copy the JSON report to the clipboard for easier iPad/Tailscale reporting
-- [x] Dev header study button — dev builds now expose a `study` header button that copies the active-session report without opening the browser console
+- [x] Header terminal helper buttons — desktop/tablet header now exposes `copy` for native scrollback selection and `input` for the shared paste/dictation sheet where the dev-only `study` button used to live
 - [x] Batch reconnect measurement helper — the same script now supports `--all` to measure every live session in one pass, which is more useful for real agent-trace validation
 - [x] One-shot live study workflow — `scripts/study-live-sessions.ts` now captures, measures, and summarizes all live sessions in one run, including side-by-side xterm and Ghostty mode via `both`
 - [x] Safer reconnect measurement for live shared sessions — the measurement script now reuses the session’s current snapshot dimensions instead of forcing `80x24`

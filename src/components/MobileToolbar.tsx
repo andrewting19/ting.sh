@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowPad, getArrowSequence, type ArrowDirection } from './ArrowPad'
-import { PasteModal } from './PasteModal'
 
 // ── Hotkey data model ────────────────────────────────────────────────────────
 
@@ -169,16 +168,26 @@ interface MobileToolbarProps {
   sendInput: (data: string) => void
   sendArrowInput?: (direction: ArrowDirection) => void
   focusTerminal: () => void
+  pasteOpen: boolean
+  setPasteOpen: (open: boolean | ((open: boolean) => boolean)) => void
   openTextSelection: () => void
   textSelectionOpen?: boolean
 }
 
-export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTerminal, openTextSelection, textSelectionOpen = false }: MobileToolbarProps) {
+export function MobileToolbar({
+  currentId,
+  sendInput,
+  sendArrowInput,
+  focusTerminal,
+  pasteOpen,
+  setPasteOpen,
+  openTextSelection,
+  textSelectionOpen = false,
+}: MobileToolbarProps) {
   const [macroTrayOpen, setMacroTrayOpen] = useState(false)
   const [ctrlActive, setCtrlActive] = useState(false)
   const [shiftActive, setShiftActive] = useState(false)
   const [arrowPadOpen, setArrowPadOpen] = useState(false)
-  const [pasteOpen, setPasteOpen] = useState(false)
   const [hotkeys, setHotkeys] = useState<HotkeySlot[]>(loadHotkeys)
   const [editingSlot, setEditingSlot] = useState<HotkeySlot | null>(null)
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -410,13 +419,6 @@ export function MobileToolbar({ currentId, sendInput, sendArrowInput, focusTermi
             sendInput(getArrowSequence(direction))
           }}
           onClose={() => setArrowPadOpen(false)}
-        />
-      )}
-
-      {pasteOpen && (
-        <PasteModal
-          onSend={(text) => sendInput(text)}
-          onClose={() => setPasteOpen(false)}
         />
       )}
 

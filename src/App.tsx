@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Modal } from './components/Modal'
 import { MobileToolbar } from './components/MobileToolbar'
+import { PasteModal } from './components/PasteModal'
 import { SelectionModal } from './components/SelectionModal'
 import { getArrowSequence, type ArrowDirection } from './components/ArrowPad'
 import { useHostConnections } from './hooks/useHostConnections'
@@ -155,7 +156,6 @@ export function App() {
   const [switchingRenderer, setSwitchingRenderer] = useState<TerminalRenderer | null>(null)
   const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0)
   const [sidecarStatus, setSidecarStatus] = useState<SidecarStatus | null>(null)
-  const [studyCopyState, setStudyCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [restartSidecarModalOpen, setRestartSidecarModalOpen] = useState(false)
   const [restartingSidecar, setRestartingSidecar] = useState(false)
   const [backgroundPeerConnectionsReady, setBackgroundPeerConnectionsReady] = useState(false)
@@ -164,6 +164,7 @@ export function App() {
   const [currentKey, setCurrentKey] = useState<SessionKey | null>(null)
   const [killTargetKey, setKillTargetKey] = useState<SessionKey | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
   const localHostId = hosts.find(h => h.local)?.id ?? LEGACY_LOCAL_HOST_ID
   const currentHostId = currentKey ? parseKey(currentKey).hostId : localHostId
   const sessions = hostSessions.get(currentHostId) ?? []
@@ -1702,19 +1703,6 @@ export function App() {
     }, 100)
   }
 
-  async function copyCurrentStudy() {
-    const metrics = (window as any).__wt_attach_metrics
-    if (!metrics?.copyStudyCurrent) return
-    try {
-      await metrics.copyStudyCurrent()
-      setStudyCopyState('copied')
-      window.setTimeout(() => setStudyCopyState('idle'), 2000)
-    } catch {
-      setStudyCopyState('error')
-      window.setTimeout(() => setStudyCopyState('idle'), 2500)
-    }
-  }
-
   async function restartSidecar() {
     setRestartingSidecar(true)
     try {
@@ -1847,24 +1835,26 @@ export function App() {
           >
             ↻
           </button>
-          {import.meta.env.DEV && (
-            <button
-              type="button"
-              className={`header-tool-btn header-toggle-btn${studyCopyState !== 'idle' ? ' active' : ''}`}
-              onClick={copyCurrentStudy}
-              disabled={!currentKey}
-              aria-label="Copy remote study report"
-              title={
-                studyCopyState === 'copied'
-                  ? 'Study report copied'
-                  : studyCopyState === 'error'
-                    ? 'Failed to copy study report'
-                    : 'Copy remote study report'
-              }
-            >
-              {studyCopyState === 'copied' ? 'copied' : studyCopyState === 'error' ? 'error' : 'study'}
-            </button>
-          )}
+          <button
+            type="button"
+            className={`header-tool-btn header-toggle-btn${textSelectionOpen ? ' active' : ''}`}
+            onClick={openTextSelection}
+            disabled={!currentKey}
+            aria-label="Copy terminal output"
+            title="Copy terminal output"
+          >
+            copy
+          </button>
+          <button
+            type="button"
+            className={`header-tool-btn header-toggle-btn${pasteOpen ? ' active' : ''}`}
+            onClick={() => setPasteOpen(true)}
+            disabled={!currentKey}
+            aria-label="Open text input"
+            title="Open text input"
+          >
+            input
+          </button>
           <div className="sky-indicator" ref={skyRef} />
           <div className="header-clock" ref={clockRef} />
         </div>
@@ -1941,9 +1931,18 @@ export function App() {
         sendInput={sendInput}
         sendArrowInput={sendArrowInput}
         focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
+        pasteOpen={pasteOpen}
+        setPasteOpen={setPasteOpen}
         openTextSelection={openTextSelection}
         textSelectionOpen={textSelectionOpen}
       />
+
+      {pasteOpen && (
+        <PasteModal
+          onSend={(text) => sendInput(text)}
+          onClose={() => setPasteOpen(false)}
+        />
+      )}
 
       {textSelectionOpen && (
         <SelectionModal
