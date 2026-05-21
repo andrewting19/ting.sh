@@ -1,6 +1,7 @@
 # TODO
 
 ## Bugs (lower priority)
+- [x] Mobile copy sheet snapshotted the entire scrollback and felt clunky to use (small buttons, `wrap="off"` horizontal scroll, no one-tap copy) — fixed (snapshot now defaults to the visible viewport with a `full scrollback` toggle, `getBufferText` accepts a scope, modal redesigned as a bottom sheet matching the paste sheet with a one-tap `Copy` via Clipboard API, `Select all`, refresh icon, soft-wrap textarea, and a line/char meta line)
 - [ ] Optional TUI compatibility mode: ignore ANSI clear-scrollback (`CSI 3J` / `ESC[3J`) for apps like Claude Code that sometimes emit full redraw frames in the normal buffer (`2J` + `3J` + `H`), which collapses xterm scrollback and looks like a flickering scroll-jump bug; prefer xterm parser hook (`parser.registerCsiHandler` for `CSI J` param `3`) and keep it opt-in because `clear`/`reset` semantics change
 - [ ] Optimize large attach replay path for remote clients — current diagnostics show session attach time scales primarily with replay bytes (often the full ~10MB cap) rather than the control-plane handshake; likely options are chunked replay, a lower warm-attach cap, or a staged "recent viewport first, deep scrollback later" strategy
 - [ ] Validate snapshot reconnect against real redraw-heavy agent traces (Claude Code / Codex / resize-heavy TUI captures) and measure payload sizes versus current raw replay

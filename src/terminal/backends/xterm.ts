@@ -381,13 +381,17 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     return this.term.modes.applicationCursorKeysMode ?? false
   }
 
-  getBufferText() {
+  getBufferText(scope: 'visible' | 'all' = 'all') {
     const buffer = this.term.buffer.active
+    const start = scope === 'visible' ? buffer.viewportY : 0
+    const end = scope === 'visible'
+      ? Math.min(buffer.length, buffer.viewportY + this.term.rows)
+      : buffer.length
     let out = ''
-    for (let i = 0; i < buffer.length; i++) {
+    for (let i = start; i < end; i++) {
       const line = buffer.getLine(i)
       if (!line) continue
-      if (i > 0 && !line.isWrapped) out += '\n'
+      if (i > start && !line.isWrapped) out += '\n'
       out += line.translateToString(true)
     }
     return out

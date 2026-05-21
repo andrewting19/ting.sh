@@ -291,10 +291,10 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
     return entriesRef.current.get(sessionKey)?.terminal?.getApplicationCursorKeysMode() ?? false
   }, [])
 
-  const getBufferText = useCallback((sessionKey: SessionKey) => {
+  const getBufferText = useCallback((sessionKey: SessionKey, scope?: 'visible' | 'all') => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry?.terminal) return ''
-    return entry.terminal.getBufferText()
+    return entry.terminal.getBufferText(scope)
   }, [])
 
   const getDebugTerm = useCallback((sessionKey: SessionKey) => {

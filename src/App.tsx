@@ -220,7 +220,7 @@ export function App() {
   sessionOrderByHostRef.current = sessionOrderByHost
   const [showScrollToBottomByKey, setShowScrollToBottomByKey] = useState<Record<string, boolean>>({})
   const [textSelectionOpen, setTextSelectionOpen] = useState(false)
-  const [textSelectionSnapshot, setTextSelectionSnapshot] = useState('')
+  const [textSelectionSnapshot, setTextSelectionSnapshot] = useState<{ visible: string; all: string }>({ visible: '', all: '' })
 
   useEffect(() => {
     for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
@@ -1734,10 +1734,13 @@ export function App() {
   function refreshTextSelectionSnapshot() {
     const key = currentKeyRef.current
     if (!key) {
-      setTextSelectionSnapshot('')
+      setTextSelectionSnapshot({ visible: '', all: '' })
       return
     }
-    setTextSelectionSnapshot(tm.getBufferText(key))
+    setTextSelectionSnapshot({
+      visible: tm.getBufferText(key, 'visible'),
+      all: tm.getBufferText(key, 'all'),
+    })
   }
 
   function openTextSelection() {
@@ -1946,7 +1949,8 @@ export function App() {
 
       {textSelectionOpen && (
         <SelectionModal
-          text={textSelectionSnapshot}
+          visibleText={textSelectionSnapshot.visible}
+          fullText={textSelectionSnapshot.all}
           onRefresh={refreshTextSelectionSnapshot}
           onClose={() => setTextSelectionOpen(false)}
         />

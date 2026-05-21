@@ -1085,116 +1085,136 @@ html, body, #root {
   background: var(--bg2);
 }
 
-/* ── Paste modal ─────────────────────────────────────────────────────────── */
+/* ── Selection (copy text) modal — bottom sheet ─────────────────────────── */
 .selection-modal-backdrop {
   position: fixed;
   inset: 0;
-  padding: 8px 8px calc(var(--toolbar, 0px) + var(--mobile-keyboard-inset, 0px) + 8px);
-  background: rgba(0,0,0,.72);
+  padding-bottom: var(--mobile-keyboard-inset, 0px);
+  background: rgba(0,0,0,.65);
   backdrop-filter: blur(3px);
   z-index: 85;
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   animation: fade-in .12s ease;
 }
 
 .selection-modal {
   width: 100%;
+  max-height: 82dvh;
   background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0,0,0,.55);
-  padding: 10px;
+  border-top: 1px solid var(--border2);
+  border-radius: 14px 14px 0 0;
+  padding: 0 14px max(14px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
+  overflow: hidden;
+  box-shadow: 0 -8px 40px rgba(0,0,0,.5);
+  animation: slide-up .18s cubic-bezier(.25,.46,.45,.94);
+}
+
+/* drag handle */
+.selection-modal::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  margin: 8px auto 0;
+  flex-shrink: 0;
 }
 
 .selection-modal-header {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.selection-modal-header-text {
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .selection-modal-title {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--fg3);
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: var(--fg2);
-}
-
-.selection-modal-subtitle {
-  margin-top: 3px;
-  font-size: 10px;
-  color: var(--fg3);
 }
 
 .selection-modal-close {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid var(--border2);
   background: var(--bg3);
   color: var(--fg3);
-  font-size: 11px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
-.selection-modal-actions {
+.selection-modal-scope {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 
-.selection-modal-action {
+.selection-scope-btn {
+  flex: 1;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--fg3);
+  border-radius: 8px;
+  padding: 10px 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.selection-scope-btn.active {
+  background: rgba(122, 162, 247, .14);
+  border-color: rgba(122, 162, 247, .5);
+  color: var(--blue);
+}
+
+.selection-refresh-btn {
+  flex-shrink: 0;
+  width: 42px;
   border: 1px solid var(--border2);
   background: var(--bg3);
   color: var(--fg2);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-family: var(--font);
-  font-size: 11px;
+  border-radius: 8px;
+  font-size: 16px;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-}
-
-.selection-modal-action.primary {
-  border-color: rgba(122, 162, 247, .45);
-  color: var(--blue);
-  background: rgba(122, 162, 247, .08);
-}
-
-.selection-modal-tip {
-  font-size: 10px;
-  line-height: 1.35;
-  color: var(--fg3);
 }
 
 .selection-textarea {
   width: 100%;
   flex: 1;
-  min-height: 0;
+  min-height: 140px;
   background: var(--bg0);
   border: 1px solid var(--border2);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--fg);
   font-family: var(--font);
   font-size: 13px;
-  line-height: 1.35;
-  padding: 10px;
+  line-height: 1.4;
+  padding: 12px;
   resize: none;
   outline: none;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   overflow: auto;
   overscroll-behavior: contain;
   user-select: text;
@@ -1204,6 +1224,59 @@ html, body, #root {
 .selection-textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(122,162,247,.12);
+}
+
+.selection-modal-meta {
+  font-size: 11px;
+  color: var(--fg3);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.selection-modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.selection-action-btn {
+  flex: 1;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--fg);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.selection-action-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.selection-action-btn.primary {
+  flex: 1.4;
+  border-color: rgba(122, 162, 247, .55);
+  color: var(--blue);
+  background: rgba(122, 162, 247, .15);
+}
+
+.selection-action-btn.primary.copied {
+  border-color: rgba(158, 206, 106, .55);
+  color: var(--green);
+  background: rgba(158, 206, 106, .15);
+}
+
+.selection-action-btn.primary.manual {
+  border-color: rgba(224, 175, 104, .55);
+  color: var(--yellow);
+  background: rgba(224, 175, 104, .12);
 }
 
 .paste-modal-backdrop {
