@@ -220,7 +220,7 @@ export function App() {
   sessionOrderByHostRef.current = sessionOrderByHost
   const [showScrollToBottomByKey, setShowScrollToBottomByKey] = useState<Record<string, boolean>>({})
   const [textSelectionOpen, setTextSelectionOpen] = useState(false)
-  const [textSelectionSnapshot, setTextSelectionSnapshot] = useState<{ visible: string; all: string }>({ visible: '', all: '' })
+  const [textSelectionVisible, setTextSelectionVisible] = useState('')
 
   useEffect(() => {
     for (const [hostId, order] of Object.entries(sessionOrderByHost)) {
@@ -1733,14 +1733,12 @@ export function App() {
 
   function refreshTextSelectionSnapshot() {
     const key = currentKeyRef.current
-    if (!key) {
-      setTextSelectionSnapshot({ visible: '', all: '' })
-      return
-    }
-    setTextSelectionSnapshot({
-      visible: tm.getBufferText(key, 'visible'),
-      all: tm.getBufferText(key, 'all'),
-    })
+    setTextSelectionVisible(key ? tm.getBufferText(key, 'visible') : '')
+  }
+
+  function requestFullScrollbackSnapshot(): string {
+    const key = currentKeyRef.current
+    return key ? tm.getBufferText(key, 'all') : ''
   }
 
   function openTextSelection() {
@@ -1949,8 +1947,8 @@ export function App() {
 
       {textSelectionOpen && (
         <SelectionModal
-          visibleText={textSelectionSnapshot.visible}
-          fullText={textSelectionSnapshot.all}
+          visibleText={textSelectionVisible}
+          requestFullText={requestFullScrollbackSnapshot}
           onRefresh={refreshTextSelectionSnapshot}
           onClose={() => setTextSelectionOpen(false)}
         />

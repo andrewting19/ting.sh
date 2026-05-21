@@ -1,33 +1,48 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export type SelectionScope = 'visible' | 'all'
 
 interface SelectionModalProps {
   visibleText: string
-  fullText: string
+  requestFullText: () => string
   onRefresh: () => void
   onClose: () => void
 }
 
 type CopyState = 'idle' | 'copied' | 'manual'
 
-export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: SelectionModalProps) {
+function countLines(s: string): number {
+  if (!s) return 0
+  let count = 1
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) === 10) count++
+  }
+  return count
+}
+
+export function SelectionModal({ visibleText, requestFullText, onRefresh, onClose }: SelectionModalProps) {
   const [scope, setScope] = useState<SelectionScope>('visible')
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [fullTextLoaded, setFullTextLoaded] = useState<string | null>(null)
+  const preRef = useRef<HTMLPreElement>(null)
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const text = scope === 'visible' ? visibleText : fullText
-  const lineCount = text ? text.split('\n').length : 0
-  const charCount = text.length
+  const text = scope === 'visible' ? visibleText : (fullTextLoaded ?? '')
 
-  // Always show the latest output first — pin the textarea to the bottom on
-  // open, on scope toggle, and on refresh (matches what the user just saw in
-  // the terminal, which is normally scrolled to bottom).
+  // Only recompute line/char counts when the underlying text changes —
+  // counting newlines in a 10MB string takes ~10ms and we don't want that on
+  // every render.
+  const { lineCount, charCount } = useMemo(
+    () => ({ lineCount: countLines(text), charCount: text.length }),
+    [text],
+  )
+
+  // Always show the latest output first — pin the scroller to the bottom on
+  // open, on scope toggle, and on refresh.
   useLayoutEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    textarea.scrollTop = textarea.scrollHeight
+    const pre = preRef.current
+    if (!pre) return
+    pre.scrollTop = pre.scrollHeight
   }, [text])
 
   function flashCopyState(next: Exclude<CopyState, 'idle'>) {
@@ -37,10 +52,14 @@ export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: Se
   }
 
   function selectAll() {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    textarea.focus({ preventScroll: true })
-    textarea.setSelectionRange(0, textarea.value.length)
+    const pre = preRef.current
+    if (!pre) return
+    const range = document.createRange()
+    range.selectNodeContents(pre)
+    const sel = window.getSelection()
+    if (!sel) return
+    sel.removeAllRanges()
+    sel.addRange(range)
   }
 
   async function copyToClipboard() {
@@ -65,6 +84,7 @@ export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: Se
 
   function handleRefresh() {
     onRefresh()
+    setFullTextLoaded(null)
     setCopyState('idle')
   }
 
@@ -72,6 +92,12 @@ export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: Se
     if (next === scope) return
     setScope(next)
     setCopyState('idle')
+    if (next === 'all' && fullTextLoaded === null) {
+      // Lazy compute the full-scrollback snapshot only when the user asks
+      // for it. Costs ~5-15ms for a 10k-line buffer.
+      const computed = requestFullText()
+      setFullTextLoaded(computed)
+    }
   }
 
   const copyLabel =
@@ -123,16 +149,12 @@ export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: Se
           </button>
         </div>
 
-        <textarea
-          ref={textareaRef}
-          className="selection-textarea"
-          readOnly
-          value={text}
-          wrap="soft"
+        <pre
+          ref={preRef}
+          className="selection-text"
           spellCheck={false}
-          autoCorrect="off"
-          autoCapitalize="none"
-        />
+          tabIndex={0}
+        >{text}</pre>
 
         <div className="selection-modal-meta">
           {lineCount.toLocaleString()} line{lineCount === 1 ? '' : 's'} · {charCount.toLocaleString()} char{charCount === 1 ? '' : 's'}

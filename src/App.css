@@ -938,7 +938,6 @@ html, body, #root {
      Include xterm's hidden helper textarea so the toolbar keyboard button
      doesn't zoom the whole page when it focuses the terminal. */
   .paste-modal .paste-textarea,
-  .selection-modal .selection-textarea,
   .hotkey-editor .hk-key-select,
   .hotkey-editor .hk-key-input,
   .hotkey-editor .hk-label-input,
@@ -1199,7 +1198,7 @@ html, body, #root {
   -webkit-tap-highlight-color: transparent;
 }
 
-.selection-textarea {
+.selection-text {
   width: 100%;
   flex: 1;
   min-height: 140px;
@@ -1211,17 +1210,24 @@ html, body, #root {
   font-size: 13px;
   line-height: 1.4;
   padding: 12px;
-  resize: none;
+  margin: 0;
   outline: none;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  cursor: text;
+  /* Hard wrap — terminal output respects its own line breaks, and soft-wrap
+     (white-space: pre-wrap + overflow-wrap: anywhere) makes the browser
+     compute wrap points for every char in the string. On a 10k-line
+     scrollback that turns the modal into a ~500ms layout-blocking jank. */
+  white-space: pre;
+  word-wrap: normal;
   overflow: auto;
   overscroll-behavior: contain;
   user-select: text;
   -webkit-user-select: text;
+  /* Force iOS Safari to show the long-press callout for copy. */
+  -webkit-touch-callout: default;
 }
 
-.selection-textarea:focus {
+.selection-text:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(122,162,247,.12);
 }
@@ -1314,7 +1320,7 @@ html, body, #root {
 
   .selection-refresh-btn { width: 46px; font-size: 17px; }
 
-  .selection-textarea {
+  .selection-text {
     min-height: 360px;
     font-size: 14px;
     line-height: 1.45;

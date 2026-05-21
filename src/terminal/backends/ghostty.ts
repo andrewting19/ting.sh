@@ -425,14 +425,14 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     const end = scope === 'visible'
       ? Math.min(buffer.length, buffer.viewportY + this.term.rows)
       : buffer.length
-    let out = ''
+    const parts: string[] = []
     for (let i = start; i < end; i++) {
       const line = buffer.getLine(i)
       if (!line) continue
-      if (i > start && !line.isWrapped) out += '\n'
-      out += line.translateToString(true)
+      if (i > start && !line.isWrapped) parts.push('\n')
+      parts.push(line.translateToString(true))
     }
-    return out
+    return parts.join('')
   }
 
   getDebugInfo() {
