@@ -421,17 +421,10 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
 
   getBufferText(scope: 'visible' | 'all' = 'all') {
     const buffer = this.term.buffer.active
-    let start: number
-    let end: number
-    if (scope === 'visible') {
-      const rows = this.term.rows
-      const extraScreensAbove = 4
-      start = Math.max(0, buffer.viewportY - rows * extraScreensAbove)
-      end = Math.min(buffer.length, buffer.viewportY + rows)
-    } else {
-      start = 0
-      end = buffer.length
-    }
+    const start = scope === 'visible' ? buffer.viewportY : 0
+    const end = scope === 'visible'
+      ? Math.min(buffer.length, buffer.viewportY + this.term.rows)
+      : buffer.length
     let out = ''
     for (let i = start; i < end; i++) {
       const line = buffer.getLine(i)

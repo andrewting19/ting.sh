@@ -383,20 +383,10 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
 
   getBufferText(scope: 'visible' | 'all' = 'all') {
     const buffer = this.term.buffer.active
-    let start: number
-    let end: number
-    if (scope === 'visible') {
-      // Anchor on the current viewport but include several screens of
-      // scrollback above so users can copy text that scrolled just off-screen
-      // without falling back to the (much larger) full-scrollback dump.
-      const rows = this.term.rows
-      const extraScreensAbove = 4
-      start = Math.max(0, buffer.viewportY - rows * extraScreensAbove)
-      end = Math.min(buffer.length, buffer.viewportY + rows)
-    } else {
-      start = 0
-      end = buffer.length
-    }
+    const start = scope === 'visible' ? buffer.viewportY : 0
+    const end = scope === 'visible'
+      ? Math.min(buffer.length, buffer.viewportY + this.term.rows)
+      : buffer.length
     let out = ''
     for (let i = start; i < end; i++) {
       const line = buffer.getLine(i)

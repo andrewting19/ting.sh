@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 export type SelectionScope = 'visible' | 'all'
 
@@ -20,6 +20,15 @@ export function SelectionModal({ visibleText, fullText, onRefresh, onClose }: Se
   const text = scope === 'visible' ? visibleText : fullText
   const lineCount = text ? text.split('\n').length : 0
   const charCount = text.length
+
+  // Always show the latest output first — pin the textarea to the bottom on
+  // open, on scope toggle, and on refresh (matches what the user just saw in
+  // the terminal, which is normally scrolled to bottom).
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.scrollTop = textarea.scrollHeight
+  }, [text])
 
   function flashCopyState(next: Exclude<CopyState, 'idle'>) {
     setCopyState(next)
