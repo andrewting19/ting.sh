@@ -1279,6 +1279,53 @@ html, body, #root {
   background: rgba(224, 175, 104, .12);
 }
 
+/* Desktop / tablet: centered floating dialog instead of bottom sheet, so the
+   textarea actually has room to breathe (bottom-sheet layout collapses to
+   content height on wide viewports). */
+@media (min-width: 641px) {
+  .selection-modal-backdrop {
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    padding-bottom: 32px;
+  }
+
+  .selection-modal {
+    width: 100%;
+    max-width: 760px;
+    height: min(720px, 86dvh);
+    max-height: 86dvh;
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 6px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.6);
+    animation: slide-up .15s ease;
+  }
+
+  .selection-modal::before { display: none; }
+
+  .selection-modal-header { padding-top: 14px; }
+
+  .selection-modal-title { font-size: 12px; }
+
+  .selection-modal-close { width: 30px; height: 30px; font-size: 13px; }
+
+  .selection-scope-btn { font-size: 13px; padding: 11px 12px; }
+
+  .selection-refresh-btn { width: 46px; font-size: 17px; }
+
+  .selection-textarea {
+    min-height: 360px;
+    font-size: 14px;
+    line-height: 1.45;
+    padding: 14px;
+  }
+
+  .selection-modal-meta { font-size: 12px; }
+
+  .selection-action-btn { font-size: 14px; padding: 12px 16px; }
+}
+
 .paste-modal-backdrop {
   position: fixed;
   inset: 0;
