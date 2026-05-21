@@ -1736,6 +1736,15 @@ export function App() {
     setTextSelectionVisible(key ? tm.getBufferText(key, 'visible') : '')
   }
 
+  // Modals (paste, copy, kill, hotkey editor, arrow pad, …) steal focus when
+  // they open, and on close the active element falls back to `<body>`. On
+  // mobile xterm's iOS scroll handler `preventDefault`s `touchstart`, so the
+  // user can't tap the terminal to refocus it — we have to do it for them.
+  const focusCurrentTerminal = useCallback(() => {
+    const key = currentKeyRef.current
+    if (key) tm.focus(key)
+  }, [tm])
+
   function requestFullScrollbackSnapshot(): string {
     const key = currentKeyRef.current
     return key ? tm.getBufferText(key, 'all') : ''
@@ -1931,7 +1940,7 @@ export function App() {
         currentId={currentKey ? parseKey(currentKey).sessionId : null}
         sendInput={sendInput}
         sendArrowInput={sendArrowInput}
-        focusTerminal={() => { if (currentKey) tm.focus(currentKey) }}
+        focusTerminal={focusCurrentTerminal}
         pasteOpen={pasteOpen}
         setPasteOpen={setPasteOpen}
         openTextSelection={openTextSelection}
@@ -1941,7 +1950,7 @@ export function App() {
       {pasteOpen && (
         <PasteModal
           onSend={(text) => sendInput(text)}
-          onClose={() => setPasteOpen(false)}
+          onClose={() => { setPasteOpen(false); focusCurrentTerminal() }}
         />
       )}
 
@@ -1950,7 +1959,7 @@ export function App() {
           visibleText={textSelectionVisible}
           requestFullText={requestFullScrollbackSnapshot}
           onRefresh={refreshTextSelectionSnapshot}
-          onClose={() => setTextSelectionOpen(false)}
+          onClose={() => { setTextSelectionOpen(false); focusCurrentTerminal() }}
         />
       )}
 
@@ -1959,8 +1968,8 @@ export function App() {
           title="Kill session"
           message={`Kill "${killTarget.name}"?`}
           confirmLabel="Kill"
-          onConfirm={() => { if (killTargetKey) killSession(killTargetKey) }}
-          onCancel={() => setKillTargetKey(null)}
+          onConfirm={() => { if (killTargetKey) killSession(killTargetKey); focusCurrentTerminal() }}
+          onCancel={() => { setKillTargetKey(null); focusCurrentTerminal() }}
         />
       )}
     </div>

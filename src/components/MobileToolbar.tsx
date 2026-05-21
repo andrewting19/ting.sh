@@ -418,7 +418,7 @@ export function MobileToolbar({
             }
             sendInput(getArrowSequence(direction))
           }}
-          onClose={() => setArrowPadOpen(false)}
+          onClose={() => { setArrowPadOpen(false); focusTerminal() }}
         />
       )}
 
@@ -427,7 +427,7 @@ export function MobileToolbar({
           slot={editingSlot}
           onSave={updateSlot}
           onDelete={() => deleteSlot(editingSlot.id)}
-          onClose={() => setEditingSlot(null)}
+          onClose={() => { setEditingSlot(null); focusTerminal() }}
         />
       )}
     </>
