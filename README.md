@@ -126,6 +126,7 @@ Working:
 - PTY sessions persist when browser tab closes — reconnect and resume
 - PTY sidecar foundation — Bun now proxies session traffic to a local-only `ptyd` process, so PTYs survive real Bun server restarts instead of depending on in-process hot-reload state
 - Explicit dev sidecar bootstrap — `bun run dev` now ensures a detached `ptyd` daemon is already running before the hot Bun server starts, so killing the terminal or process tree that launched dev no longer implicitly kills the sidecar-owned PTY sessions
+- macOS `ptyd` runs as a launchd user agent — detached spawns now bootstrap through `launchctl` so the daemon is its own TCC "responsible process" (a one-time Documents grant to `bun` survives terminal-app updates); `/health` also no longer 500s if fingerprint reads fail (it reports `fingerprintError` instead), and `bun run dev` diagnoses an unhealthy daemon holding the port instead of timing out with a misleading spawn failure
 - Port config is now namespaced to ting.sh — runtime and deploy use `TING_PORT`, and Vite dev proxying uses `TING_WS_PORT` or falls back to `TING_PORT`, so local dev no longer collides with unrelated tools that also claim `PORT`
 - Raw replay buffer retained (10MB cap per session) for legacy/fallback attach paths and diagnostics
 - xterm snapshot attach is now wired end-to-end for xterm renderer sessions — reconnect restores a compact headless-xterm VT snapshot plus ordered live tail instead of replaying the full raw buffer

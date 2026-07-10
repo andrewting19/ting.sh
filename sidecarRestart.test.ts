@@ -309,6 +309,8 @@ test("server respawns ptyd after sidecar exit", async () => {
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
+      // keep autospawned ptyd a plain child — never a launchd agent — in tests
+      TING_TEST_MODE: "1",
     });
     await waitForHttpOk(`${serverBaseUrl}/api/host`);
 

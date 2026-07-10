@@ -3,7 +3,7 @@ import { readlinkSync } from "fs";
 import { getReplayBufferStats } from "./serverBuffer";
 import { resolvePtydPort } from "./src/sidecarConfig";
 import { PTYD_PROTOCOL_VERSION } from "./src/sidecarProtocol";
-import { computeSidecarRuntimeInfo } from "./src/sidecarRuntime";
+import { tryComputeSidecarRuntimeInfo } from "./src/sidecarRuntime";
 import { defaultCwd, defaultShell, prepareEnvForShell, spawnPty, type PtyProcess } from "./src/pty";
 import { pickUniqueSessionName } from "./src/sessionNames";
 import { captureCanonicalTerminalSnapshot } from "./src/snapshot/canonicalSnapshot";
@@ -20,7 +20,7 @@ const MAX_BUFFER = parseInt(process.env.MAX_BUFFER_BYTES ?? String(10 * 1024 * 1
 const LIVE_TAIL_BUFFER_BYTES = parseInt(process.env.LIVE_TAIL_BUFFER_BYTES ?? String(512 * 1024), 10);
 const TRACE_EVENT_BUFFER_BYTES = parseInt(process.env.TRACE_EVENT_BUFFER_BYTES ?? String(2 * 1024 * 1024), 10);
 const IDLE_EXIT_MS = parseInt(process.env.PTYD_IDLE_EXIT_MS ?? "0", 10);
-const runtimeInfo = computeSidecarRuntimeInfo();
+const runtimeStatus = tryComputeSidecarRuntimeInfo();
 const startedAt = Date.now();
 
 interface Session {
@@ -360,16 +360,21 @@ const server = Bun.serve<WSData>({
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
     if (url.pathname === "/health") {
-      const currentRuntimeInfo = computeSidecarRuntimeInfo();
+      const currentStatus = tryComputeSidecarRuntimeInfo();
+      const runtimeFingerprint = runtimeStatus.info?.fingerprint ?? null;
+      const currentFingerprint = currentStatus.info?.fingerprint ?? null;
+      const fingerprintError = currentStatus.error ?? runtimeStatus.error;
       return Response.json({
         ok: true,
         sessions: sessions.size,
         pid: process.pid,
         startedAt,
         protocolVersion: PTYD_PROTOCOL_VERSION,
-        runtimeFingerprint: runtimeInfo.fingerprint,
-        currentFingerprint: currentRuntimeInfo.fingerprint,
-        staleRuntime: runtimeInfo.fingerprint !== currentRuntimeInfo.fingerprint,
+        runtimeFingerprint,
+        currentFingerprint,
+        staleRuntime: runtimeFingerprint !== null && currentFingerprint !== null
+          && runtimeFingerprint !== currentFingerprint,
+        ...(fingerprintError ? { fingerprintError } : {}),
       });
     }
     if (url.pathname === "/debug/session") {

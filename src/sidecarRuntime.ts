@@ -21,6 +21,26 @@ export interface SidecarRuntimeInfo {
   fileCount: number;
 }
 
+export interface SidecarRuntimeStatus {
+  info: SidecarRuntimeInfo | null;
+  error: string | null;
+}
+
+// Fingerprint reads can fail at runtime even when the files exist — e.g. macOS
+// TCC revoking the daemon's ~/Documents access mid-flight (EPERM). Callers that
+// must not crash on that use this variant and surface the error instead.
+export function tryComputeSidecarRuntimeInfo(cwd = process.cwd()): SidecarRuntimeStatus {
+  try {
+    const info = computeSidecarRuntimeInfo(cwd);
+    if (info.fileCount === 0) {
+      return { info: null, error: `no sidecar runtime files readable under ${cwd}` };
+    }
+    return { info, error: null };
+  } catch (err) {
+    return { info: null, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export function computeSidecarRuntimeInfo(cwd = process.cwd()): SidecarRuntimeInfo {
   const hash = createHash("sha256");
   let fileCount = 0;

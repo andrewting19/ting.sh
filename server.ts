@@ -3,6 +3,7 @@ import { hostname } from "os";
 import { join } from "path";
 import { resolveServerPort } from "./src/serverPort";
 import { getPtydHttpBaseUrl, getPtydWsUrl, resolvePtydPort } from "./src/sidecarConfig";
+import { ptydLogPath, spawnPtydDetached } from "./src/ptydSpawn";
 import { PTYD_PROTOCOL_VERSION, isPtydProtocolCompatible, parsePtydProtocolVersion } from "./src/sidecarProtocol";
 
 function isEnabledEnvFlag(name: string): boolean {
@@ -186,17 +187,15 @@ async function ensurePtyd(allowSpawn = PTYD_AUTOSPAWN): Promise<void> {
   if (!g.__wt_ptyd_ready) {
     g.__wt_ptyd_ready = (async () => {
       if (await isPtydHealthy()) return;
-      Bun.spawn([process.execPath, "run", "ptyd.ts"], {
+      await spawnPtydDetached({
         cwd: process.cwd(),
+        ptydPort: PTYD_PORT,
+        logPath: ptydLogPath(PTYD_PORT),
         env: {
-          ...process.env,
           TING_PORT: String(PORT),
           PTYD_PORT: String(PTYD_PORT),
           PTYD_IDLE_EXIT_MS: process.env.PTYD_IDLE_EXIT_MS ?? "2000",
         },
-        stdout: "ignore",
-        stderr: "ignore",
-        detached: true,
       });
       for (let attempt = 0; attempt < 100; attempt += 1) {
         if (await isPtydHealthy()) return;
