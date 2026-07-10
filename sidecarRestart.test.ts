@@ -260,6 +260,7 @@ test("api/sidecar/restart restarts ptyd on demand", async () => {
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
+      TING_ENABLE_SIDECAR_RESTART: "1",
     });
     await waitForHttpOk(`${serverBaseUrl}/api/sidecar`);
 

@@ -152,6 +152,7 @@ test("capture-session-trace script can capture all live sessions", async () => {
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
+      TING_TEST_MODE: "1",
     });
     await waitForHttpOk(`${serverBaseUrl}/api/host`);
 

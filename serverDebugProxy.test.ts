@@ -152,6 +152,7 @@ test("server debug proxy forwards to the active sidecar", async () => {
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
+      TING_TEST_MODE: "1",
     });
     await waitForHttpOk(`${serverBaseUrl}/api/host`);
 

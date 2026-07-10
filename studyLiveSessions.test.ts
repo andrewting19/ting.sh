@@ -152,6 +152,7 @@ test("study-live-sessions script captures and measures all live sessions for bot
       HOSTS_FILE: "none",
       AUTO_UPDATE: "false",
       SHELL: "/bin/bash",
+      TING_TEST_MODE: "1",
     });
     await waitForHttpOk(`${serverBaseUrl}/api/host`);
 
