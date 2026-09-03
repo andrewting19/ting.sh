@@ -811,6 +811,9 @@ test('shared session — desktop reclaims width after mobile resize', async ({ p
 
     // Simulate returning to desktop and re-selecting the same session.
     await page.bringToFront()
+    // Headless Chromium does not always emit focus when bringToFront() moves
+    // between browser contexts. Emit the event that triggers size reclaim.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await page.click(`[data-session-id="${id}"]`)
     let desktopAfter = await getSttySize(page, id)
     for (let attempt = 0; attempt < 5 && desktopAfter.cols <= mobileSize.cols; attempt += 1) {

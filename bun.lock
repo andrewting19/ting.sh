@@ -5,7 +5,7 @@
     "": {
       "name": "web-terminal",
       "dependencies": {
-        "@andrewting19/ghostty-web": "0.5.6",
+        "@andrewting19/ghostty-web": "0.5.7",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/addon-serialize": "^0.14.0",
         "@xterm/addon-webgl": "^0.19.0",
@@ -28,7 +28,7 @@
     },
   },
   "packages": {
-    "@andrewting19/ghostty-web": ["@andrewting19/ghostty-web@0.5.6", "", {}, "sha512-T1nTi/LwFRfEsZ5yMHda6gZ9xVobNOMLK44VkFVWwSR67U3OvRCAofcy5w5fiedjoqdSDBgd0wHby6izviiXXg=="],
+    "@andrewting19/ghostty-web": ["@andrewting19/ghostty-web@0.5.7", "", {}, "sha512-aIYcnlpP8Uumd8WuA4s1nCu4wAPLtC+wpUVbfXj6yGfYQOgn60HRRUQJ/C7UiU0TZEFq4XoiqZEdwGQinc5rFg=="],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
