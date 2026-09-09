@@ -1242,6 +1242,14 @@ export function App() {
         e.stopPropagation()
         sendToHost(parseKey(activeKey).hostId, { type: 'input', data })
       }
+      // Preserve Shift+Enter for multiline TUI editors. Both renderers otherwise
+      // collapse it to CR, which submits the prompt. Leave other inputs and IME
+      // composition alone, and stop propagation to avoid a second renderer event.
+      if (e.key === 'Enter' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey &&
+          !e.isComposing && e.target instanceof HTMLElement && e.target.closest('.terminal-pane')) {
+        sendShortcutInput('\x1b[13;2u')
+        return
+      }
       if (!shouldIgnoreGlobalTerminalShortcutTarget(e.target)) {
         if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') {
           sendShortcutInput('\x1bb')

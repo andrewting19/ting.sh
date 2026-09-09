@@ -169,6 +169,7 @@ Working:
 - Dev server accessible over Tailscale / LAN (Vite bound to `0.0.0.0`, `allowedHosts: true`)
 - Dev fail-fast wiring: `bun run dev` still tears down Vite + the hot WS server if either exits, but the local `ptyd` is now bootstrapped separately first so dev-server churn does not implicitly wipe live PTY sessions
 - Keyboard shortcuts: `Alt+T` new session, `Alt+W` kill current, `Alt+1-9` switch on the active host
+- `Shift+Enter` sends CSI-u modified Enter in both terminal renderers, so Pi can insert a new line without submitting the prompt. Plain `Enter` and `Alt+Enter` are unchanged. Text inputs outside the terminal and IME composition are not intercepted.
 - Terminal shortcut normalization now also intercepts `Alt+Left/Right` and macOS `Cmd+Left/Right` outside text inputs, forwarding shell-friendly cursor-movement sequences instead of leaking literal `;3D` / `;3C` CSI suffixes into the PTY
 - macOS browser reload is now explicitly preserved while the terminal is focused too — `Cmd+R` reloads the page instead of leaking a literal `r` into the PTY
 - Mobile support: hamburger sidebar, touch-friendly session switching, iOS scroll momentum

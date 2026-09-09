@@ -125,6 +125,7 @@
 - [x] Browser sidebar/extension width animations could still forward transient PTY resizes that push Claude Code into blank-line redraw corruption — mitigated by increasing the resize-settle window so only the final settled dimensions are usually sent to the PTY
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
+- [x] Preserve `Shift+Enter` in xterm and Ghostty for multiline Pi prompts; cover exact PTY bytes and leave plain/Alt Enter unchanged.
 - [x] Custom kill confirmation modal
 - [x] Session rename — double-click or right-click → context menu, persisted server-side
 - [x] Right-click context menu — Rename / Duplicate / Kill

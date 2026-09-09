@@ -28,6 +28,35 @@ for (const renderer of CORE_RENDERERS) {
       expect(text).toContain(`${renderer}_matrix_output`)
     })
 
+    test('Shift+Enter preserves its modifier without submitting Enter', async ({ page }) => {
+      const id = await newSession(page)
+      await waitForPrompt(page, id, 12000)
+      await page.keyboard.type(`python3 -u '${process.cwd()}/tests/fixtures/modified-enter.py'`)
+      await page.keyboard.press('Enter')
+      await waitForTerminal(page, id, 'KEY_PROBE_READY', 5000)
+
+      // A non-terminal text input must retain native multiline behavior and
+      // must not send its Shift+Enter to the active PTY.
+      await page.evaluate(() => {
+        const textarea = document.createElement('textarea')
+        textarea.id = 'modified-enter-outside-terminal'
+        document.body.append(textarea)
+        textarea.focus()
+      })
+      await page.keyboard.press('Shift+Enter')
+      await expect(page.locator('#modified-enter-outside-terminal')).toHaveValue('\n')
+      await page.evaluate(() => document.getElementById('modified-enter-outside-terminal')?.remove())
+      await switchToSession(page, id)
+
+      await page.keyboard.press('Shift+Enter')
+      await page.keyboard.press('Enter')
+      await page.keyboard.press('Alt+Enter')
+      await page.keyboard.type('Z')
+      await waitForTerminal(page, id, 'KEY_PROBE_HEX=', 5000)
+      // CSI-u Shift+Enter, then unchanged plain Enter and legacy Alt+Enter.
+      expect(await getTerminalText(page, id)).toContain('KEY_PROBE_HEX=1b5b31333b32750d1b0d')
+    })
+
     test('switch sessions without duplicating scrollback', async ({ page }) => {
       const id1 = await newSession(page)
       await waitForPrompt(page, id1, 12000)
