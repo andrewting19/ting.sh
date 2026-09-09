@@ -291,6 +291,10 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
     return entriesRef.current.get(sessionKey)?.terminal?.getApplicationCursorKeysMode() ?? false
   }, [])
 
+  const getBracketedPasteMode = useCallback((sessionKey: SessionKey) => {
+    return entriesRef.current.get(sessionKey)?.terminal?.getBracketedPasteMode() ?? false
+  }, [])
+
   const getBufferText = useCallback((sessionKey: SessionKey, scope?: 'visible' | 'all') => {
     const entry = entriesRef.current.get(sessionKey)
     if (!entry?.terminal) return ''
@@ -315,7 +319,7 @@ export function useTerminalManager(callbacks: Callbacks, options?: Options) {
   // this memo never re-computes. Without this, effects in App.tsx that list
   // `tm` as a dep would re-fire on every render and send spurious WS messages.
   return useMemo(
-    () => ({ primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, getDebugTerm, destroy }),
-    [primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBufferText, getDebugTerm, destroy]
+    () => ({ primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBracketedPasteMode, getBufferText, getDebugTerm, destroy }),
+    [primeTerminal, ensureTerminal, setActive, write, restoreSnapshot, reset, scrollToTop, scrollToBottom, focus, getDimensions, getMeasuredDimensions, getScrollState, isOpened, getApplicationCursorKeysMode, getBracketedPasteMode, getBufferText, getDebugTerm, destroy]
   )
 }

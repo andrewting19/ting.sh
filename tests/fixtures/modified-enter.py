@@ -9,6 +9,7 @@ fd = sys.stdin.fileno()
 saved = termios.tcgetattr(fd)
 try:
     tty.setraw(fd)
+    print("\x1b[?2004h" if "--paste" in sys.argv else "\x1b[?2004l", end="", flush=True)
     print("KEY_PROBE_READY", flush=True)
     received = bytearray()
     while True:
@@ -18,4 +19,5 @@ try:
         received.extend(value)
     print("\r\nKEY_PROBE_HEX=" + received.hex(), flush=True)
 finally:
+    print("\x1b[?2004l", end="", flush=True)
     termios.tcsetattr(fd, termios.TCSADRAIN, saved)

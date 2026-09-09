@@ -381,6 +381,10 @@ class XtermTerminalInstance implements DebuggableTerminalBackendInstance {
     return this.term.modes.applicationCursorKeysMode ?? false
   }
 
+  getBracketedPasteMode() {
+    return this.term.modes.bracketedPasteMode ?? false
+  }
+
   getBufferText(scope: 'visible' | 'all' = 'all') {
     const buffer = this.term.buffer.active
     const start = scope === 'visible' ? buffer.viewportY : 0

@@ -125,7 +125,7 @@
 - [x] Browser sidebar/extension width animations could still forward transient PTY resizes that push Claude Code into blank-line redraw corruption — mitigated by increasing the resize-settle window so only the final settled dimensions are usually sent to the PTY
 - [x] WebSocket auto-reconnect with status indicator
 - [x] Keyboard shortcuts: Alt+T new, Alt+W kill, Alt+1-9 switch on active host
-- [x] Preserve `Shift+Enter` in xterm and Ghostty for multiline Pi prompts; cover exact PTY bytes and leave plain/Alt Enter unchanged.
+- [x] Replace unconditional CSI-u `Shift+Enter` with mode-aware bracketed newline insertion for Pi and zsh. Test both renderers, exact PTY bytes, no early shell execution, disabled paste mode, session switching, and snapshot reload. Unsupported programs receive a notice rather than stray codes or an accidental submit.
 - [x] Custom kill confirmation modal
 - [x] Session rename — double-click or right-click → context menu, persisted server-side
 - [x] Right-click context menu — Rename / Duplicate / Kill

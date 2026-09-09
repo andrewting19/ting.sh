@@ -165,6 +165,7 @@ export function App() {
   const [killTargetKey, setKillTargetKey] = useState<SessionKey | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
+  const [newlineNoticeKey, setNewlineNoticeKey] = useState<SessionKey | null>(null)
   const localHostId = hosts.find(h => h.local)?.id ?? LEGACY_LOCAL_HOST_ID
   const currentHostId = currentKey ? parseKey(currentKey).hostId : localHostId
   const sessions = hostSessions.get(currentHostId) ?? []
@@ -763,6 +764,7 @@ export function App() {
         if (!key) return null
         return {
           opened: tm.isOpened(key),
+          bracketedPaste: tm.getBracketedPasteMode(key),
           scroll: tm.getScrollState(key),
           text: tm.getBufferText(key),
         }
@@ -1242,14 +1244,23 @@ export function App() {
         e.stopPropagation()
         sendToHost(parseKey(activeKey).hostId, { type: 'input', data })
       }
-      // Preserve Shift+Enter for multiline TUI editors. Both renderers otherwise
-      // collapse it to CR, which submits the prompt. Leave other inputs and IME
-      // composition alone, and stop propagation to avoid a second renderer event.
+      // Insert text, not a Pi-specific CSI-u key or an unquoted Enter. Only
+      // applications that enabled bracketed paste can safely receive this.
+      // The renderer tracks mode 2004, including snapshot restore and app exit.
       if (e.key === 'Enter' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey &&
           !e.isComposing && e.target instanceof HTMLElement && e.target.closest('.terminal-pane')) {
-        sendShortcutInput('\x1b[13;2u')
+        e.preventDefault()
+        e.stopPropagation()
+        if (activeKey && activeKey === attachedKeyRef.current && tm.getBracketedPasteMode(activeKey)) {
+          sendShortcutInput('\x1b[200~\n\x1b[201~')
+          setNewlineNoticeKey(null)
+        } else {
+          // Do not silently submit or inject escape codes into unknown apps.
+          setNewlineNoticeKey(activeKey)
+        }
         return
       }
+      if (e.key !== 'Shift') setNewlineNoticeKey(null)
       if (!shouldIgnoreGlobalTerminalShortcutTarget(e.target)) {
         if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') {
           sendShortcutInput('\x1bb')
@@ -1292,7 +1303,7 @@ export function App() {
     // certain Alt combos (e.g. Alt+W = readline cut-word) and stops propagation.
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [localHostId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [localHostId, tm]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleMessage(hostId: string, msg: unknown) {
     const m = msg as Record<string, unknown>
@@ -1907,6 +1918,11 @@ export function App() {
       />
 
       <main className="main">
+        {currentKey && newlineNoticeKey === currentKey && (
+          <div className="terminal-input-notice" role="status">
+            This program has not enabled safe paste. Shift+Enter sent no input.
+          </div>
+        )}
         {!currentKey && (
           <div className="no-session">
             <div className="no-session-prompt">no active session</div>

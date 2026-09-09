@@ -647,6 +647,20 @@ html, body, #root {
 /* Each session pane stacked on top of each other.
    visibility:hidden (not display:none) so FitAddon can measure dimensions
    even before the session is activated. */
+.terminal-input-notice {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  left: 12px;
+  z-index: 5;
+  padding: 8px 12px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--bg2);
+  color: var(--yellow);
+  pointer-events: none;
+}
+
 .terminal-pane {
   position: absolute;
   inset: 0;

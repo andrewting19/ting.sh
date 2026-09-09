@@ -419,6 +419,10 @@ class GhosttyTerminalInstance implements DebuggableTerminalBackendInstance {
     return this.term.getMode(1, false)
   }
 
+  getBracketedPasteMode() {
+    return this.term.getMode(2004, false)
+  }
+
   getBufferText(scope: 'visible' | 'all' = 'all') {
     const buffer = this.term.buffer.active
     const start = scope === 'visible' ? buffer.viewportY : 0

@@ -33,6 +33,7 @@ export interface TerminalBackendInstance {
   getMeasuredDimensions: () => TerminalDimensions | null
   getScrollState: () => TerminalScrollState
   getApplicationCursorKeysMode: () => boolean
+  getBracketedPasteMode: () => boolean
   getBufferText: (scope?: 'visible' | 'all') => string
 }
 
